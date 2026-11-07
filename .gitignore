@@ -1,0 +1,9 @@
+# secrets and live data – never commit these
+.env
+.env.*
+!.env.example
+bugs.db*
+data/
+venv/
+__pycache__/
+VERSION

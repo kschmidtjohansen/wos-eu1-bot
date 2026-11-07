@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WOS EU1 – Bot install guide (free cloud server)</title><style>
+:root{--bg:#0b1220;--card:#121b2b;--card2:#192639;--text:#eef3fb;--muted:#9fb0c8;--border:#2a3b55;--accent:#4f86d6;--ok:#4fd1a1;--warn:#f4b73a;--code:#0a111d}
+*{box-sizing:border-box}html{scroll-padding-top:84px}
+body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#1b2d4a 0,var(--bg) 60%) fixed;color:var(--text);font:16px/1.6 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:#8cb8f2;overflow-wrap:anywhere}
+.top{position:sticky;top:0;z-index:5;background:rgba(11,18,32,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.top-in{max-width:880px;margin:0 auto;padding:10px 18px;display:flex;align-items:center;gap:14px}
+.top b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.bar{height:4px;background:var(--card2)}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .3s}
+.count{font-size:13px;color:var(--muted);white-space:nowrap}
+.reset{background:none;border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer}
+main{max-width:880px;margin:0 auto;padding:28px 18px 80px}
+h1{font-size:32px;line-height:1.2;letter-spacing:-.02em;margin:8px 0 14px}
+h2{font-size:22px;letter-spacing:-.01em;margin:34px 0 10px}
+h3{font-size:17px;margin:20px 0 6px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px}
+.toc a{display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--text);background:var(--card);border:1px solid var(--border);padding:6px 12px;border-radius:999px;font-size:13.5px}
+.toc a.done{border-color:color-mix(in srgb,var(--ok) 60%,transparent);color:var(--ok)}
+.toc a.done::before{content:"✓"}
+.step{background:linear-gradient(180deg,#14203a,#111a2c);border:1px solid #22334f;border-radius:20px;padding:6px 24px 20px;margin:22px 0;box-shadow:0 8px 30px rgba(0,0,0,.28);transition:border-color .2s,opacity .2s}
+.step.done{border-color:color-mix(in srgb,var(--ok) 55%,#22334f)}
+.step.done .body{display:none}
+.step h2{display:flex;align-items:center;gap:12px;margin:16px 0 10px}
+.num{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:#1d3453;color:#8cb8f2;font-size:16px}
+.step.done .num{background:#133a33;color:var(--ok)}
+.step h2 span.t{flex:1}
+.donebtn{flex:none;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--card2);color:var(--text);padding:7px 14px;border-radius:12px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.step.done .donebtn{background:#133a33;color:var(--ok);border-color:transparent}
+.next{display:block;margin-top:16px;text-align:right}
+.next button{background:linear-gradient(180deg,#5b93e6,#3f6fb8);color:#fff;border:0;border-radius:12px;padding:10px 18px;font:inherit;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(79,134,214,.35)}
+pre{position:relative;background:var(--code);border:1px solid var(--border);border-radius:12px;padding:14px 16px;overflow-x:auto;font-size:14px;line-height:1.5}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}
+:not(pre)>code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
+.copy{position:absolute;top:8px;right:8px;background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.copy.ok{color:var(--ok)}
+pre code{display:block;padding-right:60px}
+blockquote{margin:14px 0;padding:12px 16px;border-radius:12px;background:var(--card2);border:1px solid var(--border)}
+blockquote p{margin:4px 0}
+blockquote.ok{background:#133a33;border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+blockquote.warn{background:#3b3012;border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+blockquote.tip{background:#1d3453;border-color:#2c4f7c}
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin:12px 0;display:block;overflow-x:auto}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+li{margin:4px 0}
+ul.check{list-style:none;padding-left:4px}ul.check li{display:flex;gap:10px;align-items:flex-start}
+ul.check input{width:18px;height:18px;margin-top:4px;accent-color:var(--ok);flex:none}
+.done-all{display:none;text-align:center;font-size:18px;font-weight:600;color:var(--ok);margin:30px 0}
+@media (max-width:600px){h1{font-size:26px}.step{padding:4px 16px 16px;border-radius:16px}.step h2{font-size:18px;flex-wrap:wrap}.donebtn{margin-left:46px}}
+@media print{.top,.copy,.donebtn,.next,.toc{display:none}.step{box-shadow:none;break-inside:avoid}.step.done .body{display:block}body{background:#fff;color:#000}}
+</style></head>
+<body data-key="wos-guide-bot">
+<div class="top"><div class="top-in"><b>WOS EU1 – Bot install guide (free cloud server)</b><span class="count"></span><button class="reset" type="button">Start over</button></div><div class="bar"><i></i></div></div>
+<main><h1>WOS EU1 – Bot install guide (free cloud server)</h1>
+<p>This guide puts the bot on a <strong>free server in the cloud</strong> that is on 24/7. You only copy, paste and answer
+a few questions – an installer script does the technical work. Take it one step at a time and tick each step when it's done.</p>
+<p><strong>Time:</strong> about 45 minutes. <strong>Cost:</strong> free. <strong>Best on:</strong> a PC or laptop (a phone works, but copying is easier on a PC).</p>
+<blockquote class="">
+<p>When the bot runs, continue with the <strong>website guide</strong> (<code>INSTALL-WEBSITE.html</code>) to put the report pages and the staff dashboard on your website.</p>
+</blockquote>
+<nav class="toc"><a href="#step1">1. Create the bot in Discord</a><a href="#step2">2. Invite the bot to your server</a><a href="#step3">3. Prepare roles and channels in Discord</a><a href="#step4">4. Create your free Google Cloud account</a><a href="#step5">5. Create the free server</a><a href="#step6">6. Open the server's terminal</a><a href="#step7">7. Upload the bot</a><a href="#step8">8. Run the installer</a><a href="#step9">9. Test it in Discord</a></nav><h2>Before you start</h2>
+<p>You need:
+- the file <strong><code>bugbot.zip</code></strong> (on the device you use for this guide),
+- a <strong>Discord server</strong> where you are the owner or an admin,
+- a <strong>Google account</strong> and a <strong>payment card</strong>. Google only uses the card to check that you are a real person. The server in this guide is in Google's <em>Always Free</em> tier, so you are not charged as long as you follow the settings exactly (step 5). Step 4 adds an alarm that emails you if anything ever costs money.</p>
+<blockquote class="tip">
+<p>💡 <strong>Why Google Cloud?</strong> It's the only big cloud with a server that is free forever <em>and</em> is never switched off for being "too quiet" (a bot uses very little power). It also gives you a terminal in the browser, so you don't need any extra programs. The server is in the USA – that is fine for a Discord bot (Discord's own servers are mostly in the USA too). Want the bot in Europe instead? See <em>Alternative: Oracle Cloud</em> at the end.</p>
+</blockquote>
+<section class="step" id="step1"><h2><span class="num">1</span><span class="t">Create the bot in Discord</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<ol>
+<li>Open <a href="https://discord.com/developers/applications">https://discord.com/developers/applications</a> and log in.</li>
+<li>Click <strong>New Application</strong>, name it <strong>WOS EU1</strong>, accept the terms, click <strong>Create</strong>.</li>
+<li>In the left menu click <strong>Bot</strong>.</li>
+<li>Scroll down to <strong>Privileged Gateway Intents</strong> and switch <strong>ON</strong> both:</li>
+<li><strong>Server Members Intent</strong></li>
+<li><strong>Message Content Intent</strong></li>
+</ol>
+<p>Click <strong>Save Changes</strong>.
+5. Scroll up and click <strong>Reset Token</strong> → <strong>Yes, do it!</strong> → <strong>Copy</strong>. Paste the token somewhere safe for a moment (for example a note on your PC). It is the bot's password – never share it or post it in Discord.
+6. In the left menu click <strong>General Information</strong> and copy the <strong>Application ID</strong> (a long number). You need it in step 2.</p>
+<blockquote class="ok">
+<p>✅ You have: a <strong>token</strong> (long text with dots) and an <strong>Application ID</strong> (a long number).</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step2"><h2><span class="num">2</span><span class="t">Invite the bot to your server</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<ol>
+<li>Copy this link into your browser and replace <code>APPLICATION_ID</code> with the number from step 1:</li>
+</ol>
+<p><code>https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&amp;scope=bot+applications.commands&amp;permissions=360777509952</code>
+2. Choose your server → <strong>Continue</strong> → <strong>Authorize</strong>.
+3. In Discord: <strong>Server Settings → Roles</strong>. Drag the <strong>WOS EU1</strong> role <strong>above</strong> your Moderator and Admin roles.</p>
+<blockquote class="ok">
+<p>✅ The bot is listed in your server's member list (still offline – that's normal).</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step3"><h2><span class="num">3</span><span class="t">Prepare roles and channels in Discord</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<p>Make two roles if you don't have them: <strong>Moderator</strong> and <strong>Admin</strong>, and give them to the right people.
+Then create these channels (the names are up to you):</p>
+<table>
+<thead>
+<tr>
+<th>Channel</th>
+<th>Who can see it</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#report-a-bug</code></td>
+<td>everyone</td>
+<td>Players need <em>Add Reactions</em>, <em>Read Message History</em>, <em>Send Messages in Threads</em>. <strong>Deny</strong> <em>Send Messages</em> and <em>Create Threads</em>.</td>
+</tr>
+<tr>
+<td><code>#mod-bugs</code></td>
+<td>Moderators only</td>
+<td>Mods need <em>Add Reactions</em>, <em>Read Message History</em>, <em>Send Messages in Threads</em>.</td>
+</tr>
+<tr>
+<td><code>#admin-bugs</code></td>
+<td>Admins only</td>
+<td></td>
+</tr>
+<tr>
+<td><code>#suggestions</code></td>
+<td>everyone (read-only)</td>
+<td>Accepted suggestions are shown here.</td>
+</tr>
+<tr>
+<td><code>#welcome</code>, <code>#patch-notes</code>, <code>#top-bug-hunters</code></td>
+<td>everyone (read-only)</td>
+<td>Optional.</td>
+</tr>
+<tr>
+<td><code>#weekly-digest</code>, <code>#bot-backups</code></td>
+<td><strong>Admins only</strong></td>
+<td>Optional. Backups contain player data – keep them private.</td>
+</tr>
+</tbody>
+</table>
+<p>In every channel, also give the <strong>WOS EU1</strong> role: <em>View Channel, Send Messages, Send Messages in Threads, Create Private Threads, Manage Threads, Embed Links, Attach Files, Read Message History, Add Reactions, Manage Messages</em>.</p>
+<blockquote class="ok">
+<p>✅ Roles and channels exist. You choose which channel is which later, on the dashboard – no IDs needed.</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step4"><h2><span class="num">4</span><span class="t">Create your free Google Cloud account</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<ol>
+<li>Open <a href="https://cloud.google.com/free">https://cloud.google.com/free</a> → <strong>Get started for free</strong> and log in with your Google account.</li>
+<li>Choose your country, accept the terms, choose <strong>Individual</strong> as account type, and enter your card.
+   (New accounts also get a free trial credit. You don't need it – the server we make is free after the trial too.)</li>
+<li>When the console opens, a project called <strong>My First Project</strong> exists. That's fine – use it.</li>
+<li><strong>Set a cost alarm</strong> (recommended): in the search bar at the top type <strong>Budgets</strong> → <strong>Budgets &amp; alerts</strong> → <strong>Create budget</strong> → name <code>alarm</code>, amount <strong>1</strong> (in your currency) → <strong>Finish</strong>. Google now emails you if anything ever starts costing money.</li>
+</ol>
+<blockquote class="ok">
+<p>✅ You see the Google Cloud console with <em>My First Project</em> selected at the top.</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step5"><h2><span class="num">5</span><span class="t">Create the free server</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<ol>
+<li>In the search bar type <strong>VM instances</strong> and open it. If asked, click <strong>Enable</strong> (Compute Engine API) and wait a minute.</li>
+<li>Click <strong>Create instance</strong> and set <strong>exactly</strong> this (anything else may cost money):</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Choose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td><code>wos-bot</code></td>
+</tr>
+<tr>
+<td>Region</td>
+<td><strong>us-central1 (Iowa)</strong> – or us-west1 / us-east1. <em>Only these three are free.</em></td>
+</tr>
+<tr>
+<td>Zone</td>
+<td>any</td>
+</tr>
+<tr>
+<td>Machine configuration</td>
+<td>Series <strong>E2</strong> → Machine type <strong>e2-micro</strong></td>
+</tr>
+<tr>
+<td>OS and storage → <strong>Change</strong></td>
+<td>Operating system <strong>Ubuntu</strong>, version <strong>Ubuntu 24.04 LTS</strong> (x86/64), Boot disk type <strong>Standard persistent disk</strong>, Size <strong>30</strong> GB → <strong>Select</strong></td>
+</tr>
+<tr>
+<td>Networking / Firewall</td>
+<td>leave everything <strong>off</strong> (the bot needs no open web ports)</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>Click <strong>Create</strong> and wait until a green tick appears next to <code>wos-bot</code>.</li>
+<li>Write down the <strong>External IP</strong> shown in the list (for example <code>34.123.45.67</code>). The website guide needs it.</li>
+</ol>
+<blockquote class="warn">
+<p>⚠️ The price box on the right may show about $7/month. That is the normal price <em>before</em> the free tier – the free e2-micro is subtracted on the bill. As long as you chose <strong>e2-micro</strong>, one of the <strong>three US regions</strong> and a <strong>Standard</strong> disk of max <strong>30 GB</strong>, it is free.</p>
+<p>✅ <code>wos-bot</code> has a green tick and an External IP.</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step6"><h2><span class="num">6</span><span class="t">Open the server's terminal</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<ol>
+<li>In the VM list, click <strong>SSH</strong> in the <code>wos-bot</code> row. A new browser window opens.</li>
+<li>Click <strong>Authorize</strong> if asked. After a few seconds you see a black window ending with something like <code>you@wos-bot:~$</code>.</li>
+</ol>
+<p>This is the server's terminal. You type (or paste) commands here and press <strong>Enter</strong>.
+To paste: <strong>Ctrl+V</strong> (Windows), <strong>Cmd+V</strong> (Mac), or right-click → Paste.</p>
+<blockquote class="ok">
+<p>✅ You see a prompt ending with <code>$</code>.</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step7"><h2><span class="num">7</span><span class="t">Upload the bot</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<ol>
+<li>In the SSH window click <strong>UPLOAD FILE</strong> (at the top, or under the ⚙ / ⋮ menu) and choose <strong><code>bugbot.zip</code></strong>. Wait for "Transferred 1 file".</li>
+<li>Paste this command and press Enter – it unpacks the zip:</li>
+</ol>
+<p><code>bash
+   python3 -m zipfile -e bugbot.zip . &amp;&amp; ls bugbot</code></p>
+<blockquote class="ok">
+<p>✅ You see a list of files including <code>bot.py</code>, <code>dashboard.html</code> and <code>deploy</code>.</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step8"><h2><span class="num">8</span><span class="t">Run the installer</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<p>Paste this and press Enter:</p>
+<pre><code class="language-bash">sudo bash bugbot/deploy/install.sh
+</code></pre>
+<p>The installer works through 6 steps and asks you only these things:</p>
+<ol>
+<li><strong>Bot token</strong> – paste the token from step 1 and press Enter. <em>Nothing appears on the screen while you paste – that is normal.</em>
+   The installer checks it with Discord straight away and tells you if it is wrong.</li>
+<li>If you forgot the two switches from step 1.4, it tells you which one – switch it on, save, press Enter.</li>
+<li><strong>Which server</strong> – only asked if the bot is in more than one.</li>
+<li><strong>Moderator role</strong> and <strong>Admin role</strong> – type the number in front of the right role.</li>
+</ol>
+<p>Then it starts the bot and shows <strong>your dashboard key</strong>: a long random text. <strong>Copy it and keep it safe</strong> –
+you log in to the dashboard with it (website guide). You can always show it again with:</p>
+<pre><code class="language-bash">sudo grep DASHBOARD_API_KEY /opt/wosbot/.env
+</code></pre>
+<blockquote class="ok">
+<p>✅ The installer ends with <strong>"The bot is installed and running."</strong> and in Discord the bot is now <strong>online</strong> (green dot).</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step9"><h2><span class="num">9</span><span class="t">Test it in Discord</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<p>In any channel type <code>/members</code> and press Enter. The bot answers with your member count.</p>
+<blockquote class="ok">
+<p>✅ The bot answers. The bot part is done! It restarts by itself after a crash or when Google restarts the server.
+You can close the SSH window – the bot keeps running.</p>
+</blockquote>
+<p><strong>Next:</strong> open <strong><code>INSTALL-WEBSITE.html</code></strong> and connect your website. Keep the <strong>External IP</strong> (step 5) and the <strong>dashboard key</strong> (step 8) at hand.</p>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><h2>Updates without uploading (one-time setup)</h2>
+<p>After this one-time setup you never upload a zip again. New versions come from your private GitHub repository
+(<code>kschmidtjohansen/wos-eu1-bot</code>), and <strong>nothing changes until you say so</strong>.</p>
+<ol>
+<li>In the SSH window run:
+   <code>bash
+   sudo bash bugbot/deploy/setup-updates.sh</code></li>
+<li>It shows a key and a link. Open the link (GitHub → <em>Deploy keys → Add deploy key</em>), title <strong>wos-bot</strong>, paste the key,
+   leave <strong>Allow write access</strong> unticked, click <strong>Add key</strong>, and press Enter in the SSH window.
+   (Or paste the key to Claude in the chat – Claude can add it for you.)</li>
+</ol>
+<p>From then on:
+- Claude saves changes to GitHub, but your server keeps running the current version.
+- When you write <strong>Update bugbot</strong> to Claude, the new version is released and the server installs it <strong>within 5 minutes</strong>.
+- To install a released version right away, type in the SSH window: <code>Update bugbot</code>
+- If a new version doesn't start, the server <strong>puts the previous version back by itself</strong>. Ask Claude to fix it.
+- See what happened: <code>cat /var/log/wos-update.log</code> (the dashboard's Activity log also shows "Bot started – version …").</p>
+<h2>Everyday tasks</h2>
+<p>Open the SSH window (step 6) first.</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Is the bot running?</td>
+<td><code>sudo bash /opt/wosbot/deploy/install.sh status</code></td>
+</tr>
+<tr>
+<td>Watch the live log</td>
+<td><code>sudo journalctl -u wosbot -f</code> (Ctrl+C to stop watching)</td>
+</tr>
+<tr>
+<td>Restart the bot</td>
+<td><code>sudo systemctl restart wosbot</code></td>
+</tr>
+<tr>
+<td>Change the token or roles</td>
+<td><code>sudo bash bugbot/deploy/install.sh</code> → answer <strong>n</strong> to "Keep them?"</td>
+</tr>
+<tr>
+<td><strong>Update to a new version</strong></td>
+<td>Write <strong>Update bugbot</strong> to Claude, or type <code>Update bugbot</code> in the SSH window (after the one-time setup above). Your database, files and settings are kept.</td>
+</tr>
+<tr>
+<td>Make a backup</td>
+<td>Dashboard → <strong>Data</strong> → <strong>Back up now</strong> (and download it). The bot also makes one every day.</td>
+</tr>
+</tbody>
+</table>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Discord didn't accept that token"</td>
+<td>Developer Portal → Bot → <strong>Reset Token</strong> → copy the new one and paste it again.</td>
+</tr>
+<tr>
+<td>"The bot isn't in any server yet"</td>
+<td>Do step 2 (the installer also shows the right invite link), then press Enter.</td>
+</tr>
+<tr>
+<td>"I couldn't read the server's roles"</td>
+<td>Create the Moderator and Admin roles (step 3) and run the installer again.</td>
+</tr>
+<tr>
+<td>Bot is offline after a while</td>
+<td><code>sudo bash /opt/wosbot/deploy/install.sh status</code> shows the last log lines. Send them to whoever helps you.</td>
+</tr>
+<tr>
+<td>Slash commands don't show</td>
+<td>Wait a minute and press Ctrl+R in Discord. Still missing? Invite again with the link from step 2 (it includes <code>applications.commands</code>).</td>
+</tr>
+<tr>
+<td>The bot can't open tickets</td>
+<td>It is missing permissions in <code>#report-a-bug</code> – the dashboard's <strong>Overview</strong> checklist says exactly which.</td>
+</tr>
+<tr>
+<td>The External IP changed</td>
+<td>Only happens if you <strong>Stop</strong> the server in Google Cloud (restarts keep it). Run the website guide's step 4 again with the new IP.</td>
+</tr>
+<tr>
+<td>Google sent a budget email</td>
+<td>Check <em>Billing → Reports</em>. Usually a wrong region, machine type or disk type (step 5).</td>
+</tr>
+</tbody>
+</table>
+<h2>Alternative: Oracle Cloud (server in Europe)</h2>
+<p>Oracle's <em>Always Free</em> tier also gives you a free server, and you can pick a European location (Frankfurt, Amsterdam, Stockholm …).
+Two things to know:
+- Oracle may <strong>reclaim "idle" free servers</strong> (very low use for 7 days – a small bot can count as idle).
+  You avoid that by upgrading the account to <strong>Pay As You Go</strong>. Always-free servers stay free after the upgrade, but set a budget alarm, as in step 4.
+- Free servers are sometimes "out of capacity" – just try again later or in another availability domain.</p>
+<p>Only steps 4–7 change; the installer (step 8) is the same:
+1. Sign up at <a href="https://www.oracle.com/cloud/free/">https://www.oracle.com/cloud/free/</a> and choose a <strong>home region in Europe</strong> (you can't change it later).
+2. <strong>Compute → Instances → Create instance</strong>: image <strong>Canonical Ubuntu 24.04</strong>, shape <strong>VM.Standard.E2.1.Micro</strong> (Always Free) or <strong>Ampere A1</strong> with 1 OCPU / 6 GB.
+   Under <em>Add SSH keys</em> choose <strong>Generate a key pair</strong> and <strong>download both keys</strong>. Create.
+3. Open <strong>Cloud Shell</strong> (the <code>&gt;_</code> icon at the top), upload your private key and <code>bugbot.zip</code> with the ⚙ menu → <strong>Upload</strong>, then:
+   <code>bash
+   chmod 600 ssh-key-*.key
+   scp -i ssh-key-*.key bugbot.zip ubuntu@PUBLIC_IP:~
+   ssh -i ssh-key-*.key ubuntu@PUBLIC_IP</code>
+4. Continue with <strong>step 7.2</strong> (unzip) and <strong>step 8</strong> (installer). Use the instance's <strong>Public IP</strong> wherever this guide says External IP.</p>
+<h2>Alternative: run the bot on your website server</h2>
+<p>If your website runs on your own Linux server (VPS), you can also install the bot there: do steps 1–3, upload the zip
+to that server, and run step 8 there. In the website guide, type <code>127.0.0.1</code> as the bot server address.</p>
+<div class="done-all">🎉 All steps done! Next: open <a href="INSTALL-WEBSITE.html">the website guide</a>.</div></main>
+<script>
+(function(){
+var KEY=document.body.dataset.key, st={};
+try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+var steps=[].slice.call(document.querySelectorAll('.step'));
+function paint(){
+  var n=0;steps.forEach(function(s){var d=!!st[s.id];s.classList.toggle('done',d);if(d)n++;
+    s.querySelector('.donebtn').innerHTML=d?'✓ Done':'Mark as done';
+    var t=document.querySelector('.toc a[href="#'+s.id+'"]');if(t)t.classList.toggle('done',d)});
+  document.querySelector('.bar i').style.width=(steps.length?n/steps.length*100:0)+'%';
+  document.querySelector('.count').textContent=n+' of '+steps.length+' steps done';
+  document.querySelector('.done-all').style.display=n===steps.length?'block':'none';
+}
+steps.forEach(function(s,i){
+  s.querySelector('.donebtn').onclick=function(){st[s.id]=!st[s.id];save();paint()};
+  var b=s.querySelector('.next button');if(b)b.onclick=function(){st[s.id]=true;save();paint();
+    var nx=steps[i+1];if(nx)nx.scrollIntoView({behavior:'smooth'});else document.querySelector('.done-all').scrollIntoView({behavior:'smooth'})};
+});
+document.querySelector('.reset').onclick=function(){st={};save();paint();window.scrollTo(0,0)};
+document.querySelectorAll('ul.check input').forEach(function(c,i){c.checked=!!st['c'+i];c.onchange=function(){st['c'+i]=c.checked;save()}});
+document.querySelectorAll('pre').forEach(function(p){var b=document.createElement('button');b.className='copy';b.type='button';b.textContent='Copy';
+  b.onclick=function(){var t=p.querySelector('code').innerText.replace(/\n$/,'');
+    var done=function(){b.textContent='Copied ✓';b.classList.add('ok');setTimeout(function(){b.textContent='Copy';b.classList.remove('ok')},1600)};
+    if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,fallback);else fallback();
+    function fallback(){var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy');done()}catch(e){}a.remove()}};
+  p.appendChild(b)});
+var first=steps.filter(function(s){return!st[s.id]})[0];
+if(first&&location.hash===''&&Object.keys(st).length)setTimeout(function(){first.scrollIntoView()},50);
+paint();
+})();
+</script></body></html>

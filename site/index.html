@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WOS EU1 – Help us fix it</title><link rel="stylesheet" href="style.css"></head><body>
+<main>
+  <section class="hero">
+    <span class="badge" id="ver"></span>
+    <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
+    <div class="btns"><a class="btn pri" href="report.html" data-i="cta1"></a><a class="btn" href="known-issues.html" id="cta2" data-i="cta2"></a></div>
+  </section>
+  <section class="grid g3 stats" id="stats" hidden>
+    <div class="card stat"><b id="s-open">–</b><span data-i="sOpen"></span></div>
+    <div class="card stat"><b id="s-fixed">–</b><span data-i="sFixed"></span></div>
+    <div class="card stat"><b id="s-last">–</b><span data-i="sLast"></span></div>
+  </section>
+  <section class="sec"><h2 data-i="how"></h2>
+    <div class="grid g3" style="margin-top:14px">
+      <div class="card step"><div class="n">1</div><h3 data-i="st1h"></h3><p data-i="st1"></p></div>
+      <div class="card step"><div class="n">2</div><h3 data-i="st2h"></h3><p data-i="st2"></p></div>
+      <div class="card step"><div class="n">3</div><h3 data-i="st3h"></h3><p data-i="st3"></p></div>
+    </div></section>
+  <section class="sec grid g2">
+    <div class="card"><h3 data-i="tipsH"></h3><ul class="tips"><li data-i="tip1"></li><li data-i="tip2"></li><li data-i="tip3"></li><li data-i="tip4"></li></ul></div>
+    <div class="card" id="latest"><div class="sec-h" style="margin-bottom:6px"><h3 data-i="latestH"></h3><a href="changelog.html" data-i="all"></a></div><div id="latest-l"></div></div>
+  </section>
+  <section class="sec card" id="dc" hidden style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+    <div><h3 data-i="dcH"></h3><span class="muted" data-i="dcT"></span></div><a class="btn" id="dc-a" data-i="dcB"></a></section>
+</main>
+<script src="config.js"></script><script src="app.js"></script>
+<script>
+const S = {
+ en: { h1: 'Help us fix it.', lead: 'Found something that is not working in the game? Tell us – every report is read by our moderators and passed on to the team.', cta1: 'Report a bug', cta2: 'See known issues',
+  sOpen: 'Known issues being worked on', sFixed: 'Fixed recently', sLast: 'Last update', how: 'How it works',
+  st1h: 'You report', st1: 'Fill in a short form here or open a ticket on Discord. Screenshots and videos help a lot.', st2h: 'We check', st2: 'Moderators read every report, merge duplicates and pass real bugs on to the admins.',
+  st3h: 'We fix and tell you', st3: 'Fixed bugs are announced in the changelog, with the game version they were fixed in.',
+  tipsH: 'Before you report', tip1: 'Look at the known issues list first – it may already be reported.', tip2: 'Say what you did, what you expected and what happened instead.', tip3: 'Add your chief name and player UID so we can find your account.', tip4: 'One problem per report, please.',
+  latestH: 'Latest fixes', all: 'See all', none: 'Nothing published yet.', dcH: 'Chat with the community', dcT: 'Questions, suggestions and updates live on our Discord.', dcB: 'Join our Discord', in: 'Fixed in' },
+ pl: { h1: 'Pomóż nam to naprawić.', lead: 'Coś w grze nie działa? Daj nam znać – każde zgłoszenie czytają moderatorzy i przekazują zespołowi.', cta1: 'Zgłoś błąd', cta2: 'Znane problemy',
+  sOpen: 'Znane problemy w trakcie prac', sFixed: 'Ostatnio naprawione', sLast: 'Ostatnia aktualizacja', how: 'Jak to działa',
+  st1h: 'Ty zgłaszasz', st1: 'Wypełnij krótki formularz tutaj lub otwórz ticket na Discordzie. Zrzuty ekranu i wideo bardzo pomagają.', st2h: 'My sprawdzamy', st2: 'Moderatorzy czytają każde zgłoszenie, łączą duplikaty i przekazują prawdziwe błędy adminom.',
+  st3h: 'Naprawiamy i informujemy', st3: 'Naprawione błędy ogłaszamy w dzienniku zmian, razem z wersją gry, w której je naprawiono.',
+  tipsH: 'Zanim zgłosisz', tip1: 'Zajrzyj najpierw do znanych problemów – ktoś mógł już to zgłosić.', tip2: 'Napisz, co zrobiłeś, czego się spodziewałeś i co się stało.', tip3: 'Podaj imię wodza i UID gracza, abyśmy mogli znaleźć Twoje konto.', tip4: 'Jeden problem na zgłoszenie, proszę.',
+  latestH: 'Ostatnie poprawki', all: 'Zobacz wszystkie', none: 'Nic jeszcze nie opublikowano.', dcH: 'Rozmawiaj ze społecznością', dcT: 'Pytania, pomysły i nowości znajdziesz na naszym Discordzie.', dcB: 'Dołącz do Discorda', in: 'Naprawiono w' } };
+WOS.init(S).then(async cfg => {
+  const C = window.WOS_CONFIG;
+  if (cfg.version) { const v = document.getElementById('ver'); v.textContent = cfg.version; }
+  else document.getElementById('ver').hidden = true;
+  if (C.DISCORD_URL) { const a = document.getElementById('dc-a'); a.href = C.DISCORD_URL; document.getElementById('dc').hidden = false; }
+  let changes = [], known = [];
+  if (cfg.known_issues) { try { known = (await WOS.api('/public/known-issues')).items; } catch (e) {} }
+  if (cfg.changelog) { try { changes = (await WOS.api('/public/changelog')).items; } catch (e) {} }
+  else document.getElementById('latest').hidden = true;
+  if (!cfg.known_issues) document.getElementById('cta2').hidden = true;
+  if (cfg.known_issues || cfg.changelog) {
+    document.getElementById('stats').hidden = false;
+    document.getElementById('s-open').textContent = known.filter(i => i.status !== 'fixed').length;
+    document.getElementById('s-fixed').textContent = known.filter(i => i.status === 'fixed').length || changes.reduce((n, c) => n + c.items.length, 0);
+    document.getElementById('s-last').textContent = changes.length ? WOS.date(changes[0].ts) : '–';
+  }
+  const draw = () => {
+    const box = document.getElementById('latest-l'); box.replaceChildren();
+    const items = changes.flatMap(c => c.items.map(i => ({ ...i, v: c.title }))).slice(0, 5);
+    if (!items.length) return box.append(WOS.el('div', { class: 'muted' }, WOS.t('none')));
+    items.forEach(i => box.append(WOS.el('div', { class: 'item', style: 'margin:8px 0 0;padding:10px 14px' }, WOS.el('div', {}, WOS.el('b', {}, i.title), WOS.el('span', { class: 'm' }, [i.area, i.v].filter(Boolean).join(' · '))), WOS.el('span', { class: 'st fixed' }, '✓'))));
+  };
+  WOS.onLang.push(draw); draw();
+});
+</script></body></html>

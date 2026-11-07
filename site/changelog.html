@@ -1,0 +1,32 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What's fixed – WOS EU1</title><link rel="stylesheet" href="style.css"></head><body>
+<main class="narrow">
+  <div class="crumb"><a href="index.html" data-i="nav_home"></a> › <span data-i="nav_fixed"></span></div>
+  <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
+  <div id="list" aria-live="polite"><div class="skel"></div><div class="skel"></div></div>
+  <div class="btns" style="margin-top:14px"><button class="btn" id="more" type="button" hidden data-i="more"></button></div>
+</main>
+<script src="config.js"></script><script src="app.js"></script>
+<script>
+const S = {
+ en: { h1: "What's fixed", lead: 'Every update, with the bugs we fixed in it. Thank you to everyone who reported them!', none: 'Nothing has been published yet.', off: 'The changelog is not public right now.', err: 'Could not load the changelog.', more: 'Show older updates', fixes: 'fixes', all: 'Other' },
+ pl: { h1: 'Co naprawiono', lead: 'Każda aktualizacja wraz z naprawionymi błędami. Dziękujemy wszystkim, którzy je zgłosili!', none: 'Nic jeszcze nie opublikowano.', off: 'Dziennik zmian jest teraz niepubliczny.', err: 'Nie udało się wczytać dziennika zmian.', more: 'Pokaż starsze aktualizacje', fixes: 'poprawek', all: 'Inne' } };
+let items = null, error = null, shown = 5;
+function draw() {
+  const box = document.getElementById('list'); box.replaceChildren();
+  if (error) return box.append(WOS.el('div', { class: 'empty' }, WOS.t(error)));
+  if (!items) return;
+  if (!items.length) return box.append(WOS.el('div', { class: 'empty' }, WOS.t('none')));
+  items.slice(0, shown).forEach(c => {
+    const groups = {}; c.items.forEach(i => (groups[i.area || WOS.t('all')] = groups[i.area || WOS.t('all')] || []).push(i.title));
+    box.append(WOS.el('article', { class: 'card rel' },
+      WOS.el('div', { class: 'rel-h' }, WOS.el('h2', { style: 'margin:0' }, c.title), WOS.el('span', { class: 'muted' }, WOS.date(c.ts) + ' · ' + c.items.length + ' ' + WOS.t('fixes'))),
+      ...Object.entries(groups).map(([g, list]) => WOS.el('div', { style: 'margin-top:10px' }, WOS.el('span', { class: 'tag' }, g), WOS.el('ul', {}, ...list.map(t => WOS.el('li', {}, WOS.el('span', { style: 'color:var(--ok)' }, '✓'), WOS.el('span', {}, t))))))));
+  });
+  document.getElementById('more').hidden = items.length <= shown;
+}
+WOS.init(S).then(async () => {
+  try { items = (await WOS.api('/public/changelog')).items; } catch (e) { error = e.status === 404 ? 'off' : 'err'; }
+  WOS.onLang.push(draw); draw(); document.getElementById('more').onclick = () => { shown += 5; draw(); };
+});
+</script></body></html>

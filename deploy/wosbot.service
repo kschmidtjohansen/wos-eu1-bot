@@ -1,0 +1,22 @@
+# Keeps the bot running and restarts it after a crash or a reboot.
+# Install:  sudo cp wosbot.service /etc/systemd/system/ && sudo systemctl enable --now wosbot
+[Unit]
+Description=WOS EU1 Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=wosbot
+WorkingDirectory=/opt/wosbot
+ExecStart=/opt/wosbot/venv/bin/python bot.py
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+# The bot only needs its own folder
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/wosbot
+
+[Install]
+WantedBy=multi-user.target

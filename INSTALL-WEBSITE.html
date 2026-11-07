@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WOS EU1 – Website & dashboard install guide</title><style>
+:root{--bg:#0b1220;--card:#121b2b;--card2:#192639;--text:#eef3fb;--muted:#9fb0c8;--border:#2a3b55;--accent:#4f86d6;--ok:#4fd1a1;--warn:#f4b73a;--code:#0a111d}
+*{box-sizing:border-box}html{scroll-padding-top:84px}
+body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#1b2d4a 0,var(--bg) 60%) fixed;color:var(--text);font:16px/1.6 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:#8cb8f2;overflow-wrap:anywhere}
+.top{position:sticky;top:0;z-index:5;background:rgba(11,18,32,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.top-in{max-width:880px;margin:0 auto;padding:10px 18px;display:flex;align-items:center;gap:14px}
+.top b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.bar{height:4px;background:var(--card2)}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .3s}
+.count{font-size:13px;color:var(--muted);white-space:nowrap}
+.reset{background:none;border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer}
+main{max-width:880px;margin:0 auto;padding:28px 18px 80px}
+h1{font-size:32px;line-height:1.2;letter-spacing:-.02em;margin:8px 0 14px}
+h2{font-size:22px;letter-spacing:-.01em;margin:34px 0 10px}
+h3{font-size:17px;margin:20px 0 6px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px}
+.toc a{display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--text);background:var(--card);border:1px solid var(--border);padding:6px 12px;border-radius:999px;font-size:13.5px}
+.toc a.done{border-color:color-mix(in srgb,var(--ok) 60%,transparent);color:var(--ok)}
+.toc a.done::before{content:"✓"}
+.step{background:linear-gradient(180deg,#14203a,#111a2c);border:1px solid #22334f;border-radius:20px;padding:6px 24px 20px;margin:22px 0;box-shadow:0 8px 30px rgba(0,0,0,.28);transition:border-color .2s,opacity .2s}
+.step.done{border-color:color-mix(in srgb,var(--ok) 55%,#22334f)}
+.step.done .body{display:none}
+.step h2{display:flex;align-items:center;gap:12px;margin:16px 0 10px}
+.num{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:#1d3453;color:#8cb8f2;font-size:16px}
+.step.done .num{background:#133a33;color:var(--ok)}
+.step h2 span.t{flex:1}
+.donebtn{flex:none;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--card2);color:var(--text);padding:7px 14px;border-radius:12px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.step.done .donebtn{background:#133a33;color:var(--ok);border-color:transparent}
+.next{display:block;margin-top:16px;text-align:right}
+.next button{background:linear-gradient(180deg,#5b93e6,#3f6fb8);color:#fff;border:0;border-radius:12px;padding:10px 18px;font:inherit;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(79,134,214,.35)}
+pre{position:relative;background:var(--code);border:1px solid var(--border);border-radius:12px;padding:14px 16px;overflow-x:auto;font-size:14px;line-height:1.5}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}
+:not(pre)>code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
+.copy{position:absolute;top:8px;right:8px;background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.copy.ok{color:var(--ok)}
+pre code{display:block;padding-right:60px}
+blockquote{margin:14px 0;padding:12px 16px;border-radius:12px;background:var(--card2);border:1px solid var(--border)}
+blockquote p{margin:4px 0}
+blockquote.ok{background:#133a33;border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+blockquote.warn{background:#3b3012;border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+blockquote.tip{background:#1d3453;border-color:#2c4f7c}
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin:12px 0;display:block;overflow-x:auto}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+li{margin:4px 0}
+ul.check{list-style:none;padding-left:4px}ul.check li{display:flex;gap:10px;align-items:flex-start}
+ul.check input{width:18px;height:18px;margin-top:4px;accent-color:var(--ok);flex:none}
+.done-all{display:none;text-align:center;font-size:18px;font-weight:600;color:var(--ok);margin:30px 0}
+@media (max-width:600px){h1{font-size:26px}.step{padding:4px 16px 16px;border-radius:16px}.step h2{font-size:18px;flex-wrap:wrap}.donebtn{margin-left:46px}}
+@media print{.top,.copy,.donebtn,.next,.toc{display:none}.step{box-shadow:none;break-inside:avoid}.step.done .body{display:block}body{background:#fff;color:#000}}
+</style></head>
+<body data-key="wos-guide-web">
+<div class="top"><div class="top-in"><b>WOS EU1 – Website &amp; dashboard install guide</b><span class="count"></span><button class="reset" type="button">Start over</button></div><div class="bar"><i></i></div></div>
+<main><h1>WOS EU1 – Website &amp; dashboard install guide</h1>
+<p>This guide puts three things on your existing website (for example <code>http://167.233.219.217</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Address</th>
+<th>What it is</th>
+<th>Who uses it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/bugs/</code></td>
+<td>public pages: home, <strong>report form</strong>, known issues, changelog</td>
+<td>players</td>
+</tr>
+<tr>
+<td><code>/staff/</code></td>
+<td>the <strong>dashboard</strong> (settings, bugs, insights …)</td>
+<td>you, admins, moderators</td>
+</tr>
+<tr>
+<td><code>/public/…</code> and <code>/api/…</code></td>
+<td>the hidden "phone line" from the website to the bot</td>
+<td>the pages themselves</td>
+</tr>
+</tbody>
+</table>
+<p>A script does the work on your website server and asks before every change. If your web server can't accept a change,
+it puts everything back exactly as it was.</p>
+<p><strong>Time:</strong> about 30 minutes.</p>
+<nav class="toc"><a href="#step1">1. Open a terminal on your website server</a><a href="#step2">2. Upload the zip to the website server</a><a href="#step3">3. Start the website script</a><a href="#step4">4. Give the website a key to the bot</a><a href="#step5">5. Answer the last questions</a><a href="#step6">6. Check it in your browser</a><a href="#step7">7. Switch everything on (on the dashboard)</a><a href="#step8">8. Link the new pages from your site</a><a href="#step9">9. Go-live test</a></nav><h2>Before you start</h2>
+<p>You need:
+- the <strong>bot running</strong> – finish <code>INSTALL-BOT.html</code> first,
+- the bot server's <strong>External IP</strong> (bot guide, step 5) and your <strong>dashboard key</strong> (bot guide, step 8),
+- the <strong>bot server's SSH window</strong> (bot guide, step 6) – you paste one line there in step 4,
+- a login to your <strong>website server</strong> with admin rights (<code>root</code>, or a user that may use <code>sudo</code>), and <code>bugbot.zip</code>.</p>
+<blockquote class="tip">
+<p>💡 The script works with <strong>nginx</strong> and <strong>Apache</strong> on Ubuntu/Debian – the most common setups. If your site is on shared hosting
+without a terminal, see <em>No terminal on your website host?</em> at the end.</p>
+</blockquote>
+<section class="step" id="step1"><h2><span class="num">1</span><span class="t">Open a terminal on your website server</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<p><strong>On Windows:</strong> press Start, type <strong>Terminal</strong> (or <em>PowerShell</em>), open it, and type:</p>
+<pre><code class="language-bash">ssh root@167.233.219.217
+</code></pre>
+<p><strong>On Mac:</strong> open the <strong>Terminal</strong> app and type the same.
+<strong>On a phone:</strong> install <strong>Termius</strong> (free), add a host with the server's address, user and password, and connect.</p>
+<p>Type <code>yes</code> if it asks about a fingerprint, then your password (it isn't shown while you type).
+If you log in with another user than <code>root</code>, that's fine – the script asks for your password when it needs admin rights.</p>
+<blockquote class="ok">
+<p>✅ You see a prompt such as <code>root@yourserver:~#</code>.</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step2"><h2><span class="num">2</span><span class="t">Upload the zip to the website server</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<p>Open a <strong>second</strong> terminal <strong>on your PC</strong> (not logged in to the server) in the folder where <code>bugbot.zip</code> is
+(usually <em>Downloads</em>), and send the file:</p>
+<pre><code class="language-bash">cd Downloads
+scp bugbot.zip root@167.233.219.217:~
+</code></pre>
+<blockquote class="tip">
+<p>💡 Prefer clicking? Use <strong>WinSCP</strong> (Windows) or <strong>FileZilla</strong> (any PC): connect with <em>SFTP</em> to the same address, user and password,
+and drag <code>bugbot.zip</code> into the right-hand window.</p>
+</blockquote>
+<p>Back in the <strong>server</strong> terminal, unpack it:</p>
+<pre><code class="language-bash">python3 -m zipfile -e bugbot.zip . &amp;&amp; ls bugbot
+</code></pre>
+<blockquote class="ok">
+<p>✅ You see <code>bot.py</code>, <code>dashboard.html</code>, <code>deploy</code>, <code>site</code> …</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step3"><h2><span class="num">3</span><span class="t">Start the website script</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<pre><code class="language-bash">sudo bash bugbot/deploy/connect-website.sh
+</code></pre>
+<p>It first checks which web server you use and says, for example, <strong>"Your website runs on nginx"</strong>.
+Then it asks for the <strong>bot server address</strong> – type the <strong>External IP</strong> from the bot guide and press Enter.</p>
+<blockquote class="ok">
+<p>✅ The script shows a long line that starts with <code>sudo bash /opt/wosbot/deploy/install.sh add-website</code>.</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step4"><h2><span class="num">4</span><span class="t">Give the website a key to the bot</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<p>The website needs permission to talk to the bot. The script has made a key for it, and the bot server has to accept that key:</p>
+<ol>
+<li>Select and copy the <strong>whole</strong> line the script shows – from <code>sudo</code> to the last <code>'</code>.</li>
+<li>Go to the <strong>bot server's SSH window</strong> (Google Cloud → VM instances → <strong>SSH</strong>), paste the line and press Enter.
+   It answers <strong>"Done. The website server may now connect"</strong>.</li>
+<li>Go back to the website terminal and press <strong>Enter</strong>.</li>
+</ol>
+<blockquote class="ok">
+<p>✅ The script says <strong>"Link works – the bot answered"</strong>.</p>
+</blockquote>
+<p>The key can only reach the bot – it cannot open a terminal or see any files on the bot server. The link is encrypted and
+starts again by itself after a reboot.</p>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step5"><h2><span class="num">5</span><span class="t">Answer the last questions</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<p>The script now copies the pages and asks:</p>
+<ol>
+<li><strong>Your Discord invite link</strong> – e.g. <code>https://discord.gg/abc123</code> (shown as a "Join Discord" button). Enter = skip.</li>
+<li><strong>Link to your Server status page</strong> – Enter = skip.</li>
+<li><strong>Extra username + password in front of /staff/?</strong> – answer <strong>y</strong> (recommended). Choose a username and a password of at least 8 characters.
+   Give these to your staff along with the dashboard key.</li>
+</ol>
+<p>Then it adds the bot settings to your web server, tests them and reloads the web server. Your existing pages are not changed.</p>
+<blockquote class="ok">
+<p>✅ The script ends with <strong>"Finished."</strong> and a list of addresses.</p>
+</blockquote>
+<p><strong>If it said "Please add the bot settings by hand"</strong> – your site already uses one of the addresses <code>/api/</code>, <code>/public/</code>, <code>/bugs/</code> or <code>/staff/</code>,
+or it couldn't find your site's settings. Nothing was changed. Open the file it names (<code>…/wos-bot.conf</code>), and ask whoever set up your
+website to add it to the site:
+- <strong>nginx:</strong> add <code>include /etc/nginx/snippets/wos-bot.conf;</code> inside your site's <code>server { … }</code> block, then <code>sudo nginx -t &amp;&amp; sudo systemctl reload nginx</code>.
+- <strong>Apache:</strong> add <code>Include /etc/apache2/conf-available/wos-bot.conf</code> inside your site's <code>&lt;VirtualHost …&gt;</code>, then <code>sudo apache2ctl configtest &amp;&amp; sudo systemctl reload apache2</code>.
+- If the clash is <code>/api/</code>, the lines must go on a separate (sub)domain instead – or rename your own <code>/api/</code>.</p>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step6"><h2><span class="num">6</span><span class="t">Check it in your browser</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<p>Open these (use your own address):</p>
+<ol>
+<li><code>http://167.233.219.217/public/config</code> → text starting with <code>{"enabled"</code> means the website reaches the bot.</li>
+<li><code>http://167.233.219.217/bugs/</code> → the new public pages.</li>
+<li><code>http://167.233.219.217/staff/</code> → the staff password (if you chose one), then the dashboard login.
+   Paste your <strong>dashboard key</strong> and click <strong>Connect</strong>.</li>
+</ol>
+<blockquote class="ok">
+<p>✅ The dashboard opens and shows <strong>Overview</strong> with your bot's name and server.</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step7"><h2><span class="num">7</span><span class="t">Switch everything on (on the dashboard)</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<ol>
+<li><strong>Channels</strong> → choose the bug report, mod, suggestions and admin channels (plus any optional ones you made) → <strong>Save</strong>.
+   <strong>Overview</strong> shows a checklist – fix anything red or yellow (it says exactly what is missing).</li>
+<li><strong>Panel message</strong> → write the text players see → <strong>Publish panel</strong>. The bot adds 🐛 and 💡 to it.</li>
+<li><strong>Features</strong> →</li>
+<li>set the <strong>current game version</strong> (e.g. <code>V5 · 1.33.9</code>) and check the <strong>Areas</strong> list,</li>
+<li>turn on <strong>Accept bug reports from the website</strong>,</li>
+<li>turn on <strong>Public known-issues list</strong> and <strong>Public changelog</strong> when you're ready,</li>
+<li>set your <strong>time zone</strong> (<code>Europe/Copenhagen</code>) for the weekly digest, and the points for bug hunters.</li>
+<li><strong>Welcome</strong> → write a welcome message (optional).</li>
+</ol>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step8"><h2><span class="num">8</span><span class="t">Link the new pages from your site</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<p>On your existing site, point the <strong>Report a bug</strong> button to <code>/bugs/report.html</code>, and add links to <code>/bugs/</code> (home),
+<code>/bugs/known-issues.html</code> and <code>/bugs/changelog.html</code>. The new pages have their own menu (and an English/Polish switch), so a single link to <code>/bugs/</code> also works.</p>
+<blockquote class="tip">
+<p>💡 Want the colours to match your site exactly? They are at the top of <code>/var/www/wos/bugs/style.css</code> (<code>--bg</code>, <code>--card</code>, <code>--accent</code> …).</p>
+</blockquote>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step9"><h2><span class="num">9</span><span class="t">Go-live test</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
+<ul class="check"><li><input type="checkbox"><span>React 🐛 in the report channel → a private ticket opens → fill it in → <strong>Submit</strong> → the bug appears in <code>#mod-bugs</code>.</span></li>
+<li><input type="checkbox"><span>A moderator presses ✅ → it appears in <code>#admin-bugs</code>; an admin presses ✅ <strong>Fixed</strong>.</span></li>
+<li><input type="checkbox"><span>Open <code>/bugs/report.html</code>, send a test report with a screenshot → it appears in <code>#mod-bugs</code> marked "website".</span></li>
+<li><input type="checkbox"><span>On the dashboard open that bug → the screenshot shows. Tick <strong>Show on the public known-issues list</strong> → it appears on <code>/bugs/known-issues.html</code> (within a minute).</span></li>
+<li><input type="checkbox"><span>Dashboard → <strong>Data</strong> → <strong>Back up now</strong> works.</span></li>
+<li><input type="checkbox"><span>Reject your test reports, then check <strong>Moderation → Paused website senders</strong> is empty.</span></li>
+</ul>
+<p>All ticked? You're live. 🎉</p>
+<div class="next"><button type="button">Done – next step ↓</button></div></div></section><h2>HTTPS (the padlock)</h2>
+<p>If your site opens with <code>http://</code> (no padlock), the dashboard key and staff password travel unencrypted. Fix it once you have a
+domain name pointing to the server (e.g. <code>wos-europa.com</code>; certificates can't be issued for a bare IP address):</p>
+<pre><code class="language-bash">sudo apt install -y certbot python3-certbot-nginx      # Apache: python3-certbot-apache
+sudo certbot --nginx -d yourdomain.com                  # Apache: --apache
+</code></pre>
+<p>Then run the website script again (step 3) – it notices the padlock and uses <code>https://</code> in its checks.</p>
+<h2>Everyday tasks</h2>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Update the pages/dashboard to a new version</td>
+<td>If the website is on the bot server, it's updated together with the bot (<strong>Update bugbot</strong> – see the bot guide). Otherwise upload and unpack the new zip (step 2) and run <code>sudo bash bugbot/deploy/connect-website.sh</code> again. Your <code>config.js</code> and staff password are kept.</td>
+</tr>
+<tr>
+<td>Bot server got a new IP</td>
+<td>Run the script again and type the new address.</td>
+</tr>
+<tr>
+<td>Is the link up?</td>
+<td><code>systemctl status wos-tunnel</code> (should say <em>active (running)</em>)</td>
+</tr>
+<tr>
+<td>Change the staff password</td>
+<td><code>sudo rm /etc/wos-staff.htpasswd</code> and run the script again.</td>
+</tr>
+<tr>
+<td>New dashboard key</td>
+<td>On the bot server: edit <code>DASHBOARD_API_KEY</code> in <code>/opt/wosbot/.env</code> (<code>sudo nano /opt/wosbot/.env</code>), then <code>sudo systemctl restart wosbot</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Not yet (Permission denied)" in step 4</td>
+<td>The line wasn't run on the bot server, or was cut off. Copy the whole line again (from <code>sudo</code> to the last <code>'</code>).</td>
+</tr>
+<tr>
+<td>"Not yet (timed out / No route)"</td>
+<td>Wrong address, or the bot server is stopped. Check the External IP in Google Cloud.</td>
+</tr>
+<tr>
+<td><code>/public/config</code> shows your normal site or "404"</td>
+<td>The web-server lines weren't added – see <em>"add the bot settings by hand"</em> in step 5.</td>
+</tr>
+<tr>
+<td><code>/public/config</code> shows <strong>502 Bad Gateway</strong></td>
+<td>The link or the bot is down: <code>systemctl status wos-tunnel</code> here, and <code>sudo bash /opt/wosbot/deploy/install.sh status</code> on the bot server.</td>
+</tr>
+<tr>
+<td>Dashboard: "can't connect"</td>
+<td>Check the key (copy it again from the bot server).</td>
+</tr>
+<tr>
+<td>Report form says "closed"</td>
+<td>Dashboard → Features → <em>Accept bug reports from the website</em> is off, or no mod channel is chosen.</td>
+</tr>
+<tr>
+<td>Everyone seems to be "one visitor" (spam pauses hit the wrong people)</td>
+<td>Your site is behind Cloudflare: on the bot server set <code>CLIENT_IP_HEADER=CF-Connecting-IP</code> in <code>/opt/wosbot/.env</code>, and make nginx pass that header. Ask for help with this one.</td>
+</tr>
+</tbody>
+</table>
+<h2>No terminal on your website host?</h2>
+<p>If your website is on simple web hosting (only a file manager/FTP, no terminal), the website can't open the secure link itself.
+Use a free <strong>Cloudflare Tunnel</strong> on the bot server instead:
+1. Put your domain on Cloudflare (free). In <em>Zero Trust → Networks → Tunnels</em> create a tunnel that sends <code>bot.yourdomain.com</code> to <code>http://localhost:8080</code>, and run the install command it shows <strong>in the bot server's SSH window</strong>.
+2. On the bot server set <code>CLIENT_IP_HEADER=CF-Connecting-IP</code> and <code>DASHBOARD_ORIGINS=https://yourdomain.com</code> in <code>/opt/wosbot/.env</code>, then <code>sudo systemctl restart wosbot</code>.
+3. In <code>site/config.js</code> set <code>API_BASE: 'https://bot.yourdomain.com'</code>, in <code>dashboard.html</code> set <code>apiBase: "https://bot.yourdomain.com"</code>, and upload the <code>site</code> folder (as <code>bugs</code>) and <code>dashboard.html</code> (as <code>staff/index.html</code>) with your host's file manager.</p>
+<h2>Try the dashboard without anything installed</h2>
+<p>Open <code>dashboard.html</code> from the zip in your browser and add <code>?demo</code> to the end of the address. It shows made-up data, so you can look around safely.</p>
+<div class="done-all">🎉 All steps done! Your bug system is live.</div></main>
+<script>
+(function(){
+var KEY=document.body.dataset.key, st={};
+try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+var steps=[].slice.call(document.querySelectorAll('.step'));
+function paint(){
+  var n=0;steps.forEach(function(s){var d=!!st[s.id];s.classList.toggle('done',d);if(d)n++;
+    s.querySelector('.donebtn').innerHTML=d?'✓ Done':'Mark as done';
+    var t=document.querySelector('.toc a[href="#'+s.id+'"]');if(t)t.classList.toggle('done',d)});
+  document.querySelector('.bar i').style.width=(steps.length?n/steps.length*100:0)+'%';
+  document.querySelector('.count').textContent=n+' of '+steps.length+' steps done';
+  document.querySelector('.done-all').style.display=n===steps.length?'block':'none';
+}
+steps.forEach(function(s,i){
+  s.querySelector('.donebtn').onclick=function(){st[s.id]=!st[s.id];save();paint()};
+  var b=s.querySelector('.next button');if(b)b.onclick=function(){st[s.id]=true;save();paint();
+    var nx=steps[i+1];if(nx)nx.scrollIntoView({behavior:'smooth'});else document.querySelector('.done-all').scrollIntoView({behavior:'smooth'})};
+});
+document.querySelector('.reset').onclick=function(){st={};save();paint();window.scrollTo(0,0)};
+document.querySelectorAll('ul.check input').forEach(function(c,i){c.checked=!!st['c'+i];c.onchange=function(){st['c'+i]=c.checked;save()}});
+document.querySelectorAll('pre').forEach(function(p){var b=document.createElement('button');b.className='copy';b.type='button';b.textContent='Copy';
+  b.onclick=function(){var t=p.querySelector('code').innerText.replace(/\n$/,'');
+    var done=function(){b.textContent='Copied ✓';b.classList.add('ok');setTimeout(function(){b.textContent='Copy';b.classList.remove('ok')},1600)};
+    if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,fallback);else fallback();
+    function fallback(){var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy');done()}catch(e){}a.remove()}};
+  p.appendChild(b)});
+var first=steps.filter(function(s){return!st[s.id]})[0];
+if(first&&location.hash===''&&Object.keys(st).length)setTimeout(function(){first.scrollIntoView()},50);
+paint();
+})();
+</script></body></html>
