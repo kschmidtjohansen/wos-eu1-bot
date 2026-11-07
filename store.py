@@ -1077,3 +1077,30 @@ def member_growth(days: int = 90) -> dict:
     return {"current": items[-1]["members"], "items": items,
             "joined": sum(i["joins"] for i in last30), "left": sum(i["leaves"] for i in last30),
             "estimated": any(i["est"] for i in items)}
+
+
+# ----------------------------------------------------------------- deleting bugs (e.g. test reports)
+def delete_bugs(ids, reset_numbers: bool = False) -> list:
+    """Deletes bugs completely: the report, its files, history, points and duplicate links.
+    Returns the deleted rows (so the bot can also remove the Discord messages)."""
+    import shutil
+    ids = sorted({int(i) for i in ids})
+    rows = [r for r in (get_bug(i) for i in ids) if r is not None]
+    for r in rows:
+        i = r["id"]
+        shutil.rmtree(ATTACH_DIR / str(i), ignore_errors=True)
+        db.execute("DELETE FROM bug_files WHERE bug_id=?", (i,))
+        db.execute("DELETE FROM points WHERE kind IN ('bug_accepted','bug_fixed') AND ref=?", (i,))
+        db.execute("DELETE FROM actions WHERE kind='bug' AND item_id=?", (i,))
+        db.execute("UPDATE bug_reports SET duplicate_of=NULL WHERE duplicate_of=?", (i,))
+        if r["ticket_thread_id"]:
+            db.execute("DELETE FROM tickets WHERE thread_id=?", (r["ticket_thread_id"],))
+        db.execute("DELETE FROM bug_reports WHERE id=?", (i,))
+    if reset_numbers and not db.execute("SELECT 1 FROM bug_reports LIMIT 1").fetchone():
+        db.execute("DELETE FROM sqlite_sequence WHERE name='bug_reports'")   # next bug is #1 again
+    db.commit()
+    return rows
+
+
+def all_bug_ids() -> list:
+    return [r[0] for r in db.execute("SELECT id FROM bug_reports")]

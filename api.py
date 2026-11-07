@@ -397,6 +397,31 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 raise ApiError(502, f"Discord refused: {exc.text or exc}")
         return web.json_response(bug_dict(r, full=True))
 
+    @routes.delete("/api/bugs/{id}")
+    async def delete_bug(request):
+        r = bug_or_404(int_param(request, "id"))
+        n = await hooks["delete_bugs"]([r["id"]], request.query.get("discord", "1") != "0", "Dashboard")
+        return web.json_response({"deleted": n})
+
+    @routes.post("/api/bugs/delete")
+    async def delete_many(request):
+        data = await body_json(request)
+        if data.get("all"):
+            if str(data.get("confirm") or "").strip().upper() != "DELETE":
+                raise ApiError(400, "Type DELETE to confirm.")
+            ids = store.all_bug_ids()
+        else:
+            raw = data.get("ids") or []
+            if not isinstance(raw, list) or not raw or len(raw) > 500:
+                raise ApiError(400, "Choose 1–500 bugs.")
+            try:
+                ids = [int(i) for i in raw]
+            except (TypeError, ValueError):
+                raise ApiError(400, "Bug numbers must be numbers.")
+        n = await hooks["delete_bugs"](ids, bool(data.get("discord", True)), "Dashboard",
+                                       reset_numbers=bool(data.get("all") and data.get("reset_numbers")))
+        return web.json_response({"deleted": n})
+
     @routes.post("/api/bugs/{id}/reply")
     async def reply_bug(request):
         r = bug_or_404(int_param(request, "id"))

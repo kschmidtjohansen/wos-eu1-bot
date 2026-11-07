@@ -1058,7 +1058,8 @@ class WosBot(discord.Client):
                          "set_bug_status": apply_bug_status, "send_reply": send_bug_reply,
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
-                         "set_severity": set_severity, "run_backup": run_backup, "post_digest": post_digest}
+                         "set_severity": set_severity, "run_backup": run_backup, "post_digest": post_digest,
+                         "delete_bugs": delete_bugs}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
                 self.api_runner = await start_api(self, GUILD_ID, DASHBOARD_API_KEY, DASHBOARD_ORIGINS,
                                                   DASHBOARD_HOST, DASHBOARD_PORT, hooks, roles)
@@ -1587,6 +1588,31 @@ async def post_digest(force: bool = False):
     await ch.send(embed=digest_embed(store.digest_data()), allowed_mentions=discord.AllowedMentions.none())
     log_event("system", "Weekly digest posted" + (" (sent manually)" if force else ""), None, brand())
     return ch
+
+
+async def delete_bugs(ids, discord_too: bool, by_name: str, by_id=None, reset_numbers: bool = False) -> int:
+    """Delete bugs from the database and (optionally) their messages and info tickets in Discord."""
+    rows = store.delete_bugs(ids, reset_numbers)
+    if discord_too:
+        mod, adm = chan("mod_channel_id"), chan("admin_channel_id")
+        for r in rows:
+            for ch, mid in ((mod, r["msg_id"]), (adm, r["admin_msg_id"])):
+                if ch is not None and mid:
+                    try:
+                        await ch.get_partial_message(mid).delete()
+                    except discord.HTTPException:
+                        pass                      # already gone or no permission – the bug is deleted anyway
+            if r["ticket_thread_id"]:
+                try:
+                    th = bot.get_channel(r["ticket_thread_id"]) or await bot.fetch_channel(r["ticket_thread_id"])
+                    await th.delete()
+                except discord.HTTPException:
+                    pass
+    if rows:
+        nums = ", ".join(f"#{r['id']}" for r in rows[:15]) + (" …" if len(rows) > 15 else "")
+        log_event("admin", f"Deleted {len(rows)} bug{'s' if len(rows) != 1 else ''}: {nums}"
+                  + (" (numbering restarts at #1)" if reset_numbers and not store.all_bug_ids() else ""), by_id, by_name)
+    return len(rows)
 
 
 async def run_schedules(now=None):
