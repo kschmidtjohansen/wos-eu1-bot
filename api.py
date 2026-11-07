@@ -842,6 +842,32 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                         who_id(request), who(request))
         return web.json_response({"ok": True, "custom": len(mine)})
 
+    @routes.post("/api/giftcodes/import")
+    async def import_codes(request):
+        data = await body_json(request)
+        lines = str(data.get("codes") or "").replace(",", "\n").splitlines()
+        if not any(x.strip() for x in lines) or len(lines) > 300:
+            raise ApiError(400, "Paste 1–300 codes, one per line.")
+        hours = data.get("hours")
+        hours = int(hours) if str(hours or "").isdigit() and int(hours) > 0 else None
+        added, skipped = store.import_gift_codes(lines, who(request), hours, backdate=not data.get("as_new"))
+        store.log_event("admin", f"Added {len(added)} gift codes at once", who_id(request), who(request))
+        return web.json_response({"added": added, "skipped": skipped})
+
+    @routes.post("/api/info")
+    async def post_info(request):
+        data = await body_json(request)
+        if "rules" in data:
+            store.set_cfg("info_rules", data["rules"])
+        cid = str(data.get("channel_id") or "")
+        if not cid.isdigit():
+            raise ApiError(400, "Choose the info channel.")
+        try:
+            ids = await hooks["publish_info"](int(cid), who_id(request), who(request))
+        except discord.HTTPException as exc:
+            raise ApiError(502, f"Discord refused: {exc.text or exc}")
+        return web.json_response({"ok": True, "messages": len(ids)})
+
     # ---------------------------------------------------------- suggestions
     def sug_dict(r):
         return {"id": r["id"], "text": r["text"], "status": r["status"], "created_at": r["created_at"],

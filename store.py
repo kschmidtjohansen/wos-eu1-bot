@@ -23,6 +23,15 @@ DEFAULT_WELCOME_MESSAGE = (
     "You're member #{member_count}. Have a look around – and if you find a bug, "
     "use the 🐛 reaction in the bug report channel."
 )
+DEFAULT_RULES = (
+    "**1. Be respectful** – no insults, hate speech, harassment or threats.\n"
+    "**2. No cheating or exploits** – report bugs instead of abusing them.\n"
+    "**3. No spam or advertising** – this includes DMs to other members.\n"
+    "**4. Keep it in the right channel** – use the language channels for chat in your language.\n"
+    "**5. No selling accounts or items** for real money.\n"
+    "**6. Listen to the moderators** – if you disagree, message an admin calmly.\n\n"
+    "*Breaking the rules can lead to a warning, mute or ban.*"
+)
 OLD_PANEL_TEXT = (
     "Found a bug or have an idea? React below:\n\n"
     "🐛 **Report a bug** – a private ticket opens where you answer a few questions.\n"
@@ -339,6 +348,9 @@ SCHEMA = {
     "giftcodes_ping": {"type": "choice", "default": "none", "choices": ["none", "here", "everyone", "role"]},
     "giftcodes_role_id": {"type": "text", "default": "", "min": 0, "max": 25},
     "giftcodes_new_hours": {"type": "int", "default": 24, "min": 1, "max": 168},
+    "giftcodes_delete_expired": {"type": "bool", "default": True},
+    "info_channel_id": {"type": "channel", "default": None},
+    "info_rules": {"type": "text", "default": DEFAULT_RULES, "min": 1, "max": 4000},
     "bugs_enabled": {"type": "bool", "default": True},
     "suggestions_enabled": {"type": "bool", "default": True},
     "investigate_enabled": {"type": "bool", "default": True},
@@ -1402,3 +1414,21 @@ def end_sessions(user_id: Optional[int] = None):
 def list_sessions():
     return db.execute("SELECT user_id, name, avatar, created, expires, last_seen FROM sessions WHERE expires > ? "
                       "ORDER BY last_seen DESC", (int(time.time()),)).fetchall()
+
+
+def import_gift_codes(lines, by_name: str = "Import", hours=None, backdate: bool = True) -> tuple:
+    """Add many codes at once (one per line). Skips blanks, comments, invalid and already active codes.
+    Returns (added, skipped). Backdated so they don't all show as "New" on the website."""
+    added, skipped = [], []
+    for raw_line in lines:
+        code = raw_line.split("#", 1)[0].strip()
+        if not code:
+            continue
+        try:
+            r = add_gift_code(code, "", hours, by_name)
+            if backdate:
+                set_gift_code(r["id"], created_at=int(time.time()) - 7 * 86400 if hours is None else r["created_at"])
+            added.append(code)
+        except ValueError:
+            skipped.append(code)
+    return added, skipped

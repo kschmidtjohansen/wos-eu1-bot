@@ -503,7 +503,7 @@ const S = {
 const NAV = [
   ['overview', 'Overview', 'grid'], ['status', 'Server status', 'pulse'], ['bugs', 'Bugs', 'bug'], ['suggestions', 'Suggestions', 'bulb'], ['codes', 'Gift codes', 'gift'], ['insights', 'Insights', 'chart'],
   ['panel', 'Panel message', 'message'], ['channels', 'Channels', 'hash'], ['features', 'Features', 'sliders'],
-  ['welcome', 'Welcome', 'userplus'], ['translations', 'Translations', 'globe'], ['patch', 'Patch notes', 'wrench'], ['mod', 'Moderation', 'shield'],
+  ['welcome', 'Welcome', 'userplus'], ['info', 'Info channel', 'list'], ['translations', 'Translations', 'globe'], ['patch', 'Patch notes', 'wrench'], ['mod', 'Moderation', 'shield'],
   ['bot', 'Bot profile', 'bot'], ['data', 'Data', 'db'], ['log', 'Activity log', 'list']
 ];
 // Moderators who log in with Discord see these pages; admins see everything.
@@ -527,7 +527,7 @@ const FEATURE_KEYS = ['bugs_enabled', 'suggestions_enabled', 'investigate_enable
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
   'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'bounty_enabled', 'points_accepted', 'points_fixed', 'points_suggestion', 'update_notice_enabled',
-  'report_style', 'info_remind_hours', 'info_close_hours', 'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'drive_enabled', 'drive_every_days', 'drive_keep'];
+  'report_style', 'info_remind_hours', 'info_close_hours', 'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'giftcodes_delete_expired', 'drive_enabled', 'drive_every_days', 'drive_keep'];
 const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'];
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
 const PLACEHOLDERS = [['{user}', 'Tags the new member'], ['{username}', 'Their name'], ['{server}', 'Server name'], ['{member_count}', 'Number of members']];
@@ -772,6 +772,7 @@ function viewFeatures() {
       ${toggleRow('giftcodes_enabled', 'Gift codes', 'Shows the Gift codes page on the website and lets players use /codes. Add codes on the Gift codes page.')}
       ${selectRow('giftcodes_ping', 'Notify players', 'Who is tagged when a new code is announced.', ['none', 'here', 'everyone', 'role'])}
       ${textRow('giftcodes_role_id', 'Role to tag', 'Only when “Notify players” is “role”: the role ID (right-click the role → Copy Role ID).', '123456789012345678', 25)}
+      ${toggleRow('giftcodes_delete_expired', 'Remove codes when their time is up', 'Codes with a timer (e.g. 3 days) disappear from the list and their Discord announcement is deleted. Off = they stay, marked “expired”.')}
       ${numberRow('giftcodes_new_hours', 'Show as “New” for', 'New codes are highlighted at the top of the website list for this long, then move into the normal list.', 1, 168, 'hours')}
     </section>
     <section class="w-card w-pad"><div class="w-group-title">Bug-hunter points</div>
@@ -1156,6 +1157,11 @@ function viewCodes() {
       <div class="w-inline"><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="gc-announce" checked> Announce in ${ch || 'Discord'}${S.settings.giftcodes_ping !== 'none' ? ' and tag ' + (S.settings.giftcodes_ping === 'role' ? 'the role' : '@' + S.settings.giftcodes_ping) : ''}</label>
         <div class="w-spacer"></div><button class="w-btn primary" data-act="codeAdd">${icon('gift')} Add code</button></div>
     </section>
+    <details class="w-card w-pad w-bulk"><summary><b>Add several codes at once</b> <span class="w-hint">– paste a list, one code per line (not announced)</span></summary>
+      <textarea class="w-textarea" id="gc-bulk" style="min-height:140px;margin-top:12px;font-family:ui-monospace,monospace" placeholder="CODE1&#10;CODE2&#10;CODE3"></textarea>
+      <div class="w-inline" style="margin-top:10px"><select class="w-select w-fsel" id="gc-bulkdur" aria-label="How long they work">${C.durations.map(d => html`<option value="${d.hours == null ? '' : d.hours}" ${d.hours == null ? 'selected' : ''}>${d.label}</option>`)}</select>
+        <label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="gc-bulknew"> Show as “New” on the website</label>
+        <div class="w-spacer"></div><button class="w-btn primary" data-act="codeBulk">Add codes</button></div></details>
     <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Active codes (${live.length})</h3></div>
       ${live.length ? live.map(row) : html`<div class="w-empty">No active codes.</div>`}</section>
     ${old.length ? html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Expired (${old.length})</h3></div>${old.slice(0, 30).map(row)}</section>` : ''}`;
@@ -1241,6 +1247,35 @@ async function setLanguages(langs, def) {
   const body = { languages: langs.join('\n') }; if (def) body.default_language = def;
   const r = await call('PUT', '/api/settings', body); S.settings = r.settings; S.draft = Object.assign({}, r.settings);
   await loadTr(S.tr.data.lang in langs ? S.tr.data.lang : null); renderMain();
+}
+
+/* ---- info channel ---- */
+const PLAYER_COMMANDS = [['/mybugs', 'See the status of your bug reports and ideas'], ['/codes', 'Show the active gift codes'], ['/points', 'Your bug-hunter points'],
+  ['/leaderboard', 'The best bug hunters'], ['/link', 'Link your in-game account (chief name + UID) – it fills in your bug reports'], ['/unlink', 'Remove that link'],
+  ['/language', 'Choose the language the bot uses with you'], ['/members', 'How many members the server has'],
+  ['Translate', 'Right-click (or long-press) any message → Apps → Translate, to read it in your language']];
+function viewInfo() {
+  const st = S.settings, rules = S.infoDraft != null ? S.infoDraft : st.info_rules, rep = chanName(st.report_channel_id) || '#bug-reports', b = S.overview.bot;
+  const emb = (color, title, body) => html`<div class="w-dp-embed" style="border-left-color:${color};margin-top:8px"><div class="w-dp-title">${title}</div><div class="w-dp-desc">${raw(body)}</div><div class="w-dp-foot">${b.name}</div></div>`;
+  return html`
+    <div class="w-pagehead"><h2>Info channel</h2><p>Three messages in one channel: your server rules, the commands players can use, and how to report a bug or suggest an idea.</p></div>
+    <div class="w-grid2">
+      <section class="w-card w-pad">
+        <div class="w-field"><label class="w-label" for="in-chan">Info channel</label><select class="w-select" id="in-chan"><option value="">Choose…</option>${channelOptions(st.info_channel_id)}</select>
+          <span class="w-hint">Make it read-only for players (deny “Send Messages”).</span></div>
+        <div class="w-field"><label class="w-label" for="in-rules">Server rules</label>
+          <textarea class="w-textarea" id="in-rules" maxlength="4000" style="min-height:300px">${rules}</textarea>
+          <span class="w-hint">**bold**, *italic* and new lines work like in Discord. <span id="in-cnt">${rules.length}</span>/4000</span></div>
+        <div class="w-hint" style="margin-bottom:12px">The commands and the “how to report” part are written by the bot and stay up to date.</div>
+        <div class="w-actions"><button class="w-btn primary" data-act="infoPublish">${icon('send')} Publish / update info</button></div>
+      </section>
+      <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:8px">Preview</h3>
+        <div class="w-dp" id="in-pv"><div class="w-dp-head"><img src="${b.avatar_url}" alt=""><div><span class="w-dp-name">${b.name}</span><span class="w-dp-tag">BOT</span></div></div>
+          ${emb('#e67e22', '📜 Server rules', md(rules || ' '))}
+          ${emb('#5865f2', '⌨️ Commands you can use', PLAYER_COMMANDS.map(c => c[0][0] === '/' ? '<code>' + esc(c[0]) + '</code> – ' + esc(c[1]) : '<b>' + esc(c[0]) + '</b> – ' + esc(c[1])).join('<br>'))}
+          ${emb('#2ecc71', '🐛 How to report a bug or suggest an idea', md('1️⃣ Go to ' + rep + '\n2️⃣ Press **🐛 Report a bug** – or **💡 Suggest an idea**\n3️⃣ Fill in the short form – where it happened, a short title, what happened, and a screenshot if you have one\n4️⃣ Press **Submit** – done ✅\n\nOnly you can see the form. If the bug is already known, the bot tells you straight away.\n📬 Keep your DMs open: the bot tells you when your report is accepted, investigated or fixed.\n🏆 Accepted reports earn bug-hunter points!'))}
+        </div></section>
+    </div>`;
 }
 
 /* ---- suggestions ---- */
@@ -1565,7 +1600,7 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+const VIEWS = { info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
   features: viewFeatures, welcome: viewWelcome, patch: viewPatch, mod: viewMod, bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
@@ -1838,6 +1873,24 @@ root.addEventListener('click', async e => {
       try { const r = await call('POST', '/api/drive/upload'); toast('Copied to Google Drive: ' + r.name); S.data = await call('GET', '/api/data'); renderMain(); }
       catch (err) { busy(el, false); toast(err.message, 'err'); S.data = await call('GET', '/api/data'); renderMain(); }
     }
+    else if (act === 'codeBulk') {
+      const codes = $('#gc-bulk').value, dur = $('#gc-bulkdur').value;
+      if (!codes.trim()) return toast('Paste the codes first.', 'err');
+      busy(el, true, 'Adding…');
+      try {
+        const r = await call('POST', '/api/giftcodes/import', { codes, hours: dur ? parseInt(dur, 10) : null, as_new: $('#gc-bulknew').checked });
+        toast('Added ' + r.added.length + ' code' + (r.added.length === 1 ? '' : 's') + (r.skipped.length ? ' · skipped ' + r.skipped.length + ' (already there or not valid): ' + r.skipped.slice(0, 5).join(', ') : '') + '.', r.skipped.length ? 'warn' : undefined);
+        S.codes = await call('GET', '/api/giftcodes'); renderMain();
+      } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'infoPublish') {
+      const channel_id = $('#in-chan').value, rules = $('#in-rules').value.trim();
+      if (!channel_id) return toast('Choose the info channel.', 'err');
+      if (!rules) return toast('Write the rules first.', 'err');
+      busy(el, true, 'Publishing…');
+      try { const r = await call('POST', '/api/info', { channel_id, rules }); S.settings.info_rules = rules; S.settings.info_channel_id = channel_id; S.draft.info_rules = rules; S.draft.info_channel_id = channel_id; toast('Info posted (' + r.messages + ' messages). Publishing again updates them in place.'); renderMain(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
     else if (act === 'codeAdd') {
       const code = $('#gc-code').value.trim(), dur = $('#gc-dur').value;
       if (!code) return toast('Type the code first.', 'err');
@@ -2093,6 +2146,10 @@ function onInput(e) {
     loadTr(el.value).then(renderMain).catch(err => toast(err.message, 'err'));
   } else if (el.id === 'tr-group') { S.tr.group = el.value; renderMain(); }
   else if (el.id === 'tr-q') { clearTimeout(logTimer); logTimer = setTimeout(() => { S.tr.q = el.value; renderMain(); const i = $('#tr-q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 300); }
+  else if (el.id === 'in-rules') {
+    S.infoDraft = el.value; $('#in-cnt').textContent = el.value.length;
+    const pv = $('#in-pv .w-dp-embed .w-dp-desc'); if (pv) pv.innerHTML = md(el.value || ' ');
+  }
   else if (el.id === 'sugq') {
     clearTimeout(logTimer); logTimer = setTimeout(() => { S.sugs.q = el.value.trim(); loadSugs(true); }, 300);
   } else if (el.id === 'bugarea' || el.id === 'bugsev') {
@@ -2124,7 +2181,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
     backup_channel_id: null, bug_areas: 'City\nAlliance\nCombat\nHeroes\nEvents\nShop & payments\nChat\nLogin & connection\nUI & display\nOther',
@@ -2264,6 +2321,10 @@ function makeMock() {
         known: Object.keys(names).map(c => ({ code: c, name: names[c] })) };
     }
     if (p === '/api/translations') { trOver[body.lang] = Object.assign(trOver[body.lang] || {}, body.items); Object.keys(trOver[body.lang]).forEach(k => { if (!trOver[body.lang][k]) delete trOver[body.lang][k]; }); return { ok: true }; }
+    if (p === '/api/giftcodes/import') { const t = Math.floor(Date.now() / 1000), added = [], skipped = [];
+      body.codes.split('\n').map(x => x.trim()).filter(Boolean).forEach(c => { if (!/^[A-Za-z0-9_-]{3,40}$/.test(c) || codes.some(k => k.code.toLowerCase() === c.toLowerCase())) skipped.push(c); else { added.push(c); codes.push({ id: codes.length + 100, code: c, reward: '', created_at: t - 7 * 86400, expires_at: null, by: 'Dashboard', url: null }); } });
+      return { added, skipped }; }
+    if (p === '/api/info') { settings.info_rules = body.rules; settings.info_channel_id = body.channel_id; addLog('panel', 'Info messages published'); return { ok: true, messages: 3 }; }
     if (p === '/api/giftcodes' && method === 'GET') {
       const t = Math.floor(Date.now() / 1000);
       return { items: codes.map(c => Object.assign({}, c, { state: c.expires_at && c.expires_at <= t ? 'expired' : (t - c.created_at < 86400 ? 'new' : 'active') })),

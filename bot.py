@@ -1172,6 +1172,78 @@ async def publish_panel(title: str, text: str, channel_id: int,
     return msg
 
 
+# ------------------------------------------------------------- info channel
+PLAYER_COMMANDS = [
+    ("/mybugs", "See the status of your bug reports and ideas"),
+    ("/codes", "Show the active gift codes"),
+    ("/points", "Your bug-hunter points"),
+    ("/leaderboard", "The best bug hunters"),
+    ("/link", "Link your in-game account (chief name + UID) – it fills in your bug reports"),
+    ("/unlink", "Remove that link"),
+    ("/language", "Choose the language the bot uses with you"),
+    ("/members", "How many members the server has"),
+    ("Translate", "Right-click (or long-press) any message → Apps → Translate, to read it in your language"),
+]
+
+
+def info_embeds() -> list:
+    report = chan("report_channel_id")
+    where = report.mention if report else "the bug report channel"
+    rules = discord.Embed(title="📜 Server rules", description=cfg("info_rules")[:4000], color=0xE67E22)
+    cmds = discord.Embed(title="⌨️ Commands you can use", color=0x5865F2,
+                         description="\n".join(f"`{c}` – {d}" if c.startswith("/") else f"**{c}** – {d}" for c, d in PLAYER_COMMANDS))
+    how = discord.Embed(title="🐛 How to report a bug or suggest an idea", color=0x2ECC71, description=(
+        f"1️⃣ Go to {where}\n"
+        "2️⃣ Press **🐛 Report a bug** – or **💡 Suggest an idea**\n"
+        "3️⃣ Fill in the short form – where it happened, a short title, what happened, and a screenshot if you have one\n"
+        "4️⃣ Press **Submit** – done ✅\n\n"
+        "Only you can see the form. If the bug is already known, the bot tells you straight away.\n"
+        "📬 Keep your DMs open: the bot tells you when your report is accepted, investigated or fixed.\n"
+        "🏆 Accepted reports earn bug-hunter points!"))
+    for e in (rules, cmds, how):
+        e.set_footer(text=brand())
+    return [rules, cmds, how]
+
+
+async def publish_info(channel_id: int, actor_id=None, actor_name: str = "Dashboard"):
+    """Post the info messages (rules, commands, how to report) – or update them in place."""
+    channel = bot.get_channel(channel_id)
+    if not isinstance(channel, discord.TextChannel):
+        raise ValueError("Pick a normal text channel for the info messages.")
+    perms = channel.permissions_for(channel.guild.me)
+    missing = [l for a, l in (("view_channel", "View Channel"), ("send_messages", "Send Messages"), ("embed_links", "Embed Links"))
+               if not getattr(perms, a)]
+    if missing:
+        raise ValueError(f"The bot is missing permissions in #{channel.name}: {', '.join(missing)}.")
+    embeds = info_embeds()
+    try:
+        old = json.loads(get_raw("info_msgs") or "{}")
+    except ValueError:
+        old = {}
+    ids = []
+    if old.get("channel") == channel.id and len(old.get("ids", [])) == len(embeds):
+        try:
+            for mid, e in zip(old["ids"], embeds):
+                await channel.get_partial_message(mid).edit(embed=e)
+            ids = old["ids"]
+        except discord.NotFound:
+            ids = []
+    if not ids:
+        if old.get("channel") and old.get("ids"):
+            prev = bot.get_channel(old["channel"])
+            for mid in old["ids"]:
+                try:
+                    await prev.get_partial_message(mid).delete()
+                except (discord.HTTPException, AttributeError):
+                    pass
+        for e in embeds:
+            ids.append((await channel.send(embed=e)).id)
+    put_raw("info_msgs", json.dumps({"channel": channel.id, "ids": ids}))
+    set_cfg("info_channel_id", channel.id)
+    log_event("panel", f"Info messages published in #{channel.name}", actor_id, actor_name)
+    return ids
+
+
 # ------------------------------------------------------------- bot profile
 def profile_info() -> dict:
     guild = bot.get_guild(GUILD_ID)
@@ -1317,7 +1389,8 @@ class WosBot(discord.Client):
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
-                         "drive_backup": drive_backup, "fill_translations": fill_translations}
+                         "drive_backup": drive_backup, "fill_translations": fill_translations,
+                         "publish_info": publish_info}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
                 self.api_runner = await start_api(self, GUILD_ID, DASHBOARD_API_KEY, DASHBOARD_ORIGINS,
                                                   DASHBOARD_HOST, DASHBOARD_PORT, hooks, roles)
@@ -1333,6 +1406,10 @@ class WosBot(discord.Client):
             ver = Path(__file__).with_name("VERSION")
             log_event("system", "Bot started" + (f" – version {ver.read_text().strip()}" if ver.exists() else ""), None, brand())
             store.add_server_languages()
+            try:
+                import_seed_codes()
+            except Exception as exc:  # noqa: BLE001
+                print(f"[codes] {exc!r}")
             try:
                 await refresh_panel_buttons()
             except Exception as exc:  # noqa: BLE001
@@ -2136,9 +2213,30 @@ async def mark_gift_expired(r):
 
 
 async def expire_gift_codes():
-    for r in store.expired_unnoted_gift_codes():
-        await mark_gift_expired(r)
-        log_event("system", f"Gift code {r['code']} expired", None, brand())
+    """Codes with a timer: when the time is up the code is removed (announcement deleted) – or only marked
+    "expired" if the admins switched auto-delete off."""
+    delete = cfg("giftcodes_delete_expired")
+    rows = store.db.execute("SELECT * FROM gift_codes WHERE expires_at IS NOT NULL AND expires_at<=?", (int(time.time()),)).fetchall() \
+        if delete else store.expired_unnoted_gift_codes()
+    for r in rows:
+        if delete:
+            await remove_gift_code(r["id"], True, brand())
+            log_event("system", f"Gift code {r['code']} expired and was removed", None, brand())
+        else:
+            await mark_gift_expired(r)
+            log_event("system", f"Gift code {r['code']} expired", None, brand())
+
+
+def import_seed_codes():
+    """Once: add the codes in seed/giftcodes.txt (permanent, without announcing each one)."""
+    f = Path(__file__).with_name("seed") / "giftcodes.txt"
+    if not f.exists() or get_raw("seed_codes") == str(int(f.stat().st_size)):
+        return
+    added, skipped = store.import_gift_codes(f.read_text(encoding="utf-8").splitlines(), "Import")
+    put_raw("seed_codes", str(int(f.stat().st_size)))
+    if added:
+        log_event("admin", f"Imported {len(added)} permanent gift codes" + (f" ({len(skipped)} already there)" if skipped else ""),
+                  None, brand())
 
 
 async def end_gift_code(cid: int, by_name: str, by_id=None):
