@@ -149,6 +149,15 @@ db.executescript(
         lang TEXT NOT NULL,
         chosen INTEGER NOT NULL DEFAULT 0          -- 1 = picked by the player, 0 = taken from their Discord language
     );
+    CREATE TABLE IF NOT EXISTS sessions (      -- dashboard logins with Discord (only a hash of the cookie is stored)
+        token_hash TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        name TEXT,
+        avatar TEXT,
+        created INTEGER NOT NULL,
+        expires INTEGER NOT NULL,
+        last_seen INTEGER
+    );
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1342,3 +1351,54 @@ def add_server_languages():
     if merged != cur and db.execute("SELECT 1 FROM settings WHERE key='languages'").fetchone():
         set_cfg("languages", "\n".join(merged))
     put_raw("langs_v2", "1")
+
+
+# ----------------------------------------------------------------- dashboard sessions (Discord login)
+import hashlib as _hashlib
+import secrets as _secrets
+
+SESSION_DAYS = 7
+
+
+def _th(token: str) -> str:
+    return _hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_session(user_id: int, name: str, avatar: str = "") -> str:
+    token = _secrets.token_urlsafe(32)
+    now = int(time.time())
+    db.execute("DELETE FROM sessions WHERE expires < ?", (now,))
+    db.execute("INSERT INTO sessions (token_hash, user_id, name, avatar, created, expires, last_seen) VALUES (?,?,?,?,?,?,?)",
+               (_th(token), user_id, name, avatar, now, now + SESSION_DAYS * 86400, now))
+    db.commit()
+    return token
+
+
+def get_session(token: str):
+    if not token:
+        return None
+    row = db.execute("SELECT * FROM sessions WHERE token_hash=?", (_th(token),)).fetchone()
+    if row is None or row["expires"] < time.time():
+        return None
+    if time.time() - (row["last_seen"] or 0) > 300:
+        db.execute("UPDATE sessions SET last_seen=? WHERE token_hash=?", (int(time.time()), row["token_hash"]))
+        db.commit()
+    return row
+
+
+def end_session(token: str):
+    db.execute("DELETE FROM sessions WHERE token_hash=?", (_th(token or ""),))
+    db.commit()
+
+
+def end_sessions(user_id: Optional[int] = None):
+    if user_id is None:
+        db.execute("DELETE FROM sessions")
+    else:
+        db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+    db.commit()
+
+
+def list_sessions():
+    return db.execute("SELECT user_id, name, avatar, created, expires, last_seen FROM sessions WHERE expires > ? "
+                      "ORDER BY last_seen DESC", (int(time.time()),)).fetchall()

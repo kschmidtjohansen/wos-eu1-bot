@@ -285,6 +285,26 @@ You can close the SSH window – the bot keeps running.</p>
 </ol>
 <p>How often and how many copies are kept: dashboard → <strong>Features → Screenshots &amp; backups</strong> (default: weekly, newest 8).
 To restore: download a file from the folder, unzip it (<code>.gz</code>), and follow <em>Restore a backup</em> below.</p>
+<h2>Automatic translation (optional, about 5 minutes)</h2>
+<p>With a free Google key the bot can:
+- write all its messages (forms, DMs, gift codes …) in each player's own Discord language – 18 languages are switched on,
+- let anyone right-click (or long-press) a message → <strong>Apps → Translate</strong> to read it in their own Discord language (only they see it),
+- post the messages of chosen language channels, translated, in one <strong>translation feed</strong> channel for the staff.</p>
+<p>Messages that are already in the reader's language are never translated.</p>
+<ol>
+<li>Open <a href="https://console.cloud.google.com">https://console.cloud.google.com</a> – the same project as your server.</li>
+<li>Search for <strong>Cloud Translation API</strong> → open it → <strong>Enable</strong>.</li>
+<li>Search for <strong>Credentials</strong> → <strong>Create credentials → API key</strong>. Copy the key (it starts with <code>AIza</code>).</li>
+<li>Click <strong>Edit API key</strong> → under <em>API restrictions</em> choose <strong>Restrict key</strong> → tick <strong>Cloud Translation API</strong> → <strong>Save</strong>.</li>
+<li>Dashboard → <strong>Translations</strong> → paste the key → <strong>Save key</strong>. The bot texts are translated within a minute.</li>
+<li>Optional: on the same page choose a <strong>feed channel</strong> and tick the language channels to translate.</li>
+</ol>
+<p><strong>Cost:</strong> the first 500,000 characters each month are free. The dashboard shows how much is used and stops at <strong>450,000</strong> by default,
+so it stays free. (Translating all bot texts into 18 languages once uses about 170,000.)</p>
+<h2>Dashboard login with Discord (optional)</h2>
+<p>Instead of sharing the dashboard key, moderators and admins can log in with their own Discord account. Moderators only see bugs,
+suggestions, insights and moderation; admins see everything, and every action is logged with the person's name.
+Set it up on the dashboard → <strong>Bot profile → Dashboard login with Discord</strong> (3 steps, shown there).</p>
 <h2>Everyday tasks</h2>
 <p>Open the SSH window (step 6) first.</p>
 <table>

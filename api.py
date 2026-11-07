@@ -15,7 +15,9 @@ import platform
 from pathlib import Path
 from collections import defaultdict
 
-STARTED = time.time()   # when the bot process started (for the uptime on the Server status page)
+STARTED = time.time()
+SESSION_COOKIE = "wos_session"
+DISCORD_API = "https://discord.com/api/v10"   # when the bot process started (for the uptime on the Server status page)
 
 import discord
 from aiohttp import web
@@ -94,7 +96,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         origin = request.headers.get("Origin")
         if origin and (allow_all or origin in origins):
             resp.headers["Access-Control-Allow-Origin"] = origin
-            resp.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+            resp.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Requested-With"
             resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
             resp.headers["Access-Control-Max-Age"] = "600"
             resp.headers["Vary"] = "Origin"
@@ -114,9 +116,37 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             print(f"[dashboard api] {request.method} {request.path} failed: {exc!r}")
             return web.json_response({"error": "Something went wrong in the bot. Check its console."}, status=500)
 
+    AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout"}
+    MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("PUT", r"/api/suggestions/\d+"),
+                 (None, r"/api/replies(/\d+)?"), (None, r"/api/blocklist(/\d+)?"), ("DELETE", r"/api/webblocks")]
+    MOD_HIDDEN = [r"/api/backups/.*", r"/api/auth/settings", r"/api/translate", r"/api/drive/.*"]
+
+    async def staff_role(user_id: int):
+        """'admin', 'mod' or None – checked live against the member's Discord roles."""
+        g = client.get_guild(guild_id)
+        if g is None:
+            return None
+        m = g.get_member(user_id)
+        if m is None:
+            try:
+                m = await g.fetch_member(user_id)
+            except discord.HTTPException:
+                return None
+        ids = {r.id for r in getattr(m, "roles", [])}
+        if m.guild_permissions.administrator or roles.get("Admin role") in ids:
+            return "admin"
+        if roles.get("Moderator role") in ids:
+            return "mod"
+        return None
+
+    def mod_may(method: str, path: str) -> bool:
+        if method == "GET":
+            return not any(re.fullmatch(p, path) for p in MOD_HIDDEN)
+        return any((m is None or m == method) and re.fullmatch(p, path) for m, p in MOD_WRITE)
+
     @web.middleware
     async def auth_mw(request, handler):
-        if request.method == "OPTIONS" or not request.path.startswith("/api/"):
+        if request.method == "OPTIONS" or not request.path.startswith("/api/") or request.path in AUTH_OPEN:
             return await handler(request)
         ip = request.headers.get("CF-Connecting-IP") or request.remote or "?"
         now = time.time()
@@ -125,10 +155,31 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(429, "Too many wrong keys. Wait a few minutes.")
         header = request.headers.get("Authorization", "")
         token = header[7:] if header.startswith("Bearer ") else ""
-        if not hmac.compare_digest(token.encode(), api_key.encode()):
-            failures[ip].append(now)
-            raise ApiError(401, "Wrong or missing API key.")
+        if token:
+            if not hmac.compare_digest(token.encode(), api_key.encode()):
+                failures[ip].append(now)
+                raise ApiError(401, "Wrong or missing API key.")
+            request["actor_name"], request["actor_id"], request["role"] = "Dashboard", None, "admin"
+            return await handler(request)
+        sess = store.get_session(request.cookies.get(SESSION_COOKIE, ""))
+        if sess is None:
+            raise ApiError(401, "Please log in.")
+        role = await staff_role(sess["user_id"])
+        if role is None:
+            store.end_sessions(sess["user_id"])
+            raise ApiError(401, "You no longer have the Moderator or Admin role.")
+        if request.method != "GET" and request.headers.get("X-Requested-With") != "wos":
+            raise ApiError(403, "Missing request header.")          # blocks cross-site form posts
+        if role == "mod" and not mod_may(request.method, request.path):
+            raise ApiError(403, "Only admins can do this.")
+        request["actor_name"], request["actor_id"], request["role"] = sess["name"], sess["user_id"], role
         return await handler(request)
+
+    def who(request) -> str:
+        return request.get("actor_name") or "Dashboard"
+
+    def who_id(request):
+        return request.get("actor_id")
 
     async def body_json(request) -> dict:
         try:
@@ -245,7 +296,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             else:
                 changes.append(f"{name} → {str(v)[:40]}")
         if changes:
-            store.log_event("settings", "Dashboard: " + "; ".join(changes), None, "Dashboard")
+            store.log_event("settings", "Dashboard: " + "; ".join(changes), who_id(request), who(request))
         if {"bot_status", "activity_type", "activity_text"} & set(clean):
             await hooks["apply_presence"]()
         return web.json_response(settings_payload())
@@ -259,7 +310,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if cid is None:
             raise ApiError(400, "Choose the bug report channel first.")
         try:
-            msg = await hooks["publish_panel"](title, text, cid, None, "Dashboard")
+            msg = await hooks["publish_panel"](title, text, cid, who_id(request), who(request))
         except discord.HTTPException as exc:
             raise ApiError(502, f"Discord refused: {exc.text or exc}")
         return web.json_response({"ok": True, "message_id": str(msg.id), "channel_id": str(cid),
@@ -384,10 +435,12 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if "severity" in data:
             sev = data["severity"] or None
             try:
-                r = await hooks["set_severity"](r, sev, "Dashboard", None)
+                r = await hooks["set_severity"](r, sev, who(request), who_id(request))
             except discord.HTTPException as exc:
                 raise ApiError(502, f"Discord refused: {exc.text or exc}")
         status, dup = data.get("status"), data.get("duplicate_of")
+        if request.get("role") == "mod" and status in ("being_investigated", "fixed", "admin_rejected"):
+            raise ApiError(403, "Only admins can mark bugs as investigated, fixed or rejected by admins.")
         if dup not in (None, ""):
             if not str(dup).lstrip("#").isdigit():
                 raise ApiError(400, "The original bug must be a number.")
@@ -396,7 +449,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             dup = None
         if status or dup:
             try:
-                r = await hooks["set_bug_status"](r, status or "rejected", "Dashboard", None,
+                r = await hooks["set_bug_status"](r, status or "rejected", who(request), who_id(request),
                                                   duplicate_of=dup, log_kind="admin")
             except discord.HTTPException as exc:
                 raise ApiError(502, f"Discord refused: {exc.text or exc}")
@@ -405,7 +458,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     @routes.delete("/api/bugs/{id}")
     async def delete_bug(request):
         r = bug_or_404(int_param(request, "id"))
-        n = await hooks["delete_bugs"]([r["id"]], request.query.get("discord", "1") != "0", "Dashboard")
+        n = await hooks["delete_bugs"]([r["id"]], request.query.get("discord", "1") != "0", who(request), who_id(request))
         return web.json_response({"deleted": n})
 
     @routes.post("/api/bugs/delete")
@@ -423,9 +476,140 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 ids = [int(i) for i in raw]
             except (TypeError, ValueError):
                 raise ApiError(400, "Bug numbers must be numbers.")
-        n = await hooks["delete_bugs"](ids, bool(data.get("discord", True)), "Dashboard",
+        n = await hooks["delete_bugs"](ids, bool(data.get("discord", True)), who(request), who_id(request),
                                        reset_numbers=bool(data.get("all") and data.get("reset_numbers")))
         return web.json_response({"deleted": n})
+
+    # ------------------------------------------------------------ Discord login for the dashboard
+    pending_logins = {}       # state -> time; the state is also kept in a cookie for the same browser
+
+    def oauth_conf():
+        return {"secret": store.get_raw("oauth_secret") or "", "redirect": store.get_raw("oauth_redirect") or "",
+                "return_to": store.get_raw("oauth_return") or "/staff/"}
+
+    def client_id():
+        return str(client.application_id or (client.user.id if client.user else ""))
+
+    @routes.get("/api/auth/info")
+    async def auth_info(request):
+        c = oauth_conf()
+        return web.json_response({"discord": bool(c["secret"] and c["redirect"])})
+
+    @routes.get("/api/auth/login")
+    async def auth_login(request):
+        c = oauth_conf()
+        if not (c["secret"] and c["redirect"]):
+            raise ApiError(404, "Discord login is not set up.")
+        import secrets
+        state = secrets.token_urlsafe(24)
+        now = time.time()
+        for k in [k for k, t in pending_logins.items() if now - t > 600]:
+            pending_logins.pop(k, None)
+        pending_logins[state] = now
+        from urllib.parse import urlencode
+        url = "https://discord.com/oauth2/authorize?" + urlencode({"client_id": client_id(), "response_type": "code",
+              "scope": "identify", "redirect_uri": c["redirect"], "state": state, "prompt": "none"})
+        resp = web.HTTPFound(url)
+        resp.set_cookie("wos_state", state, max_age=600, httponly=True, samesite="Lax", path="/api/auth/",
+                        secure=c["redirect"].startswith("https://"))
+        raise resp
+
+    def page(msg: str, status: int = 403):
+        body = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><title>Login</title>"
+                "<body style='font:16px system-ui;background:#0b1220;color:#eef3fb;display:grid;place-items:center;min-height:90vh'>"
+                f"<div style='max-width:420px;text-align:center'><p>{msg}</p><p><a style='color:#8cb8f2' href='{oauth_conf()['return_to']}'>Back to the dashboard</a></p></div>")
+        return web.Response(text=body, content_type="text/html", status=status)
+
+    @routes.get("/api/auth/callback")
+    async def auth_callback(request):
+        import aiohttp
+        c = oauth_conf()
+        state, code = request.query.get("state", ""), request.query.get("code", "")
+        if request.query.get("error"):
+            return page("Login was cancelled.", 400)
+        if not state or state != request.cookies.get("wos_state") or pending_logins.pop(state, None) is None:
+            return page("This login link expired. Please try again.", 400)
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
+            async with s.post(f"{DISCORD_API}/oauth2/token", data={
+                    "client_id": client_id(), "client_secret": c["secret"], "grant_type": "authorization_code",
+                    "code": code, "redirect_uri": c["redirect"]}) as r:
+                tok = await r.json(content_type=None)
+            if r.status != 200 or "access_token" not in tok:
+                return page("Discord didn't accept the login (check the Client Secret and the redirect address).", 400)
+            async with s.get(f"{DISCORD_API}/users/@me", headers={"Authorization": "Bearer " + tok["access_token"]}) as r:
+                user = await r.json(content_type=None)
+        uid = int(user["id"])
+        role = await staff_role(uid)
+        if role is None:
+            store.log_event("system", f"Dashboard login refused for {user.get('global_name') or user.get('username')} (not staff)", uid,
+                            user.get("username"))
+            return page("You need the Moderator or Admin role in the server to use the dashboard.")
+        g = client.get_guild(guild_id)
+        m = g.get_member(uid) if g else None
+        name = (m.display_name if m else None) or user.get("global_name") or user.get("username") or str(uid)
+        avatar = str(m.display_avatar.replace(size=64).url) if m else ""
+        token = store.create_session(uid, name, avatar)
+        store.log_event("settings", f"{name} logged in to the dashboard ({role})", uid, name)
+        resp = web.HTTPFound(c["return_to"])
+        resp.set_cookie(SESSION_COOKIE, token, max_age=store.SESSION_DAYS * 86400, httponly=True, samesite="Lax", path="/",
+                        secure=c["redirect"].startswith("https://"))
+        resp.del_cookie("wos_state", path="/api/auth/")
+        raise resp
+
+    @routes.get("/api/auth/me")
+    async def auth_me(request):
+        sess = store.get_session(request.cookies.get(SESSION_COOKIE, ""))
+        if sess is None:
+            raise ApiError(401, "Not logged in.")
+        role = await staff_role(sess["user_id"])
+        if role is None:
+            store.end_sessions(sess["user_id"])
+            raise ApiError(401, "You no longer have the Moderator or Admin role.")
+        return web.json_response({"name": sess["name"], "id": str(sess["user_id"]), "avatar": sess["avatar"], "role": role})
+
+    @routes.post("/api/auth/logout")
+    async def auth_logout(request):
+        store.end_session(request.cookies.get(SESSION_COOKIE, ""))
+        resp = web.json_response({"ok": True})
+        resp.del_cookie(SESSION_COOKIE, path="/")
+        return resp
+
+    @routes.get("/api/auth/settings")
+    async def auth_settings(request):
+        if request.get("role") != "admin":
+            raise ApiError(403, "Only admins can do this.")
+        c = oauth_conf()
+        return web.json_response({"enabled": bool(c["secret"] and c["redirect"]), "secret_set": bool(c["secret"]),
+                                  "redirect": c["redirect"], "return_to": c["return_to"], "client_id": client_id(),
+                                  "sessions": [{"name": s["name"], "id": str(s["user_id"]), "last_seen": s["last_seen"]}
+                                               for s in store.list_sessions()]})
+
+    @routes.put("/api/auth/settings")
+    async def put_auth_settings(request):
+        if request.get("role") != "admin":
+            raise ApiError(403, "Only admins can do this.")
+        data = await body_json(request)
+        if "secret" in data:
+            sec = str(data["secret"] or "").strip()
+            if sec and not re.fullmatch(r"[A-Za-z0-9_\-]{20,80}", sec):
+                raise ApiError(400, "That doesn't look like a Client Secret.")
+            store.put_raw("oauth_secret", sec)
+        for k, raw_key in (("redirect", "oauth_redirect"), ("return_to", "oauth_return")):
+            if k in data:
+                v = str(data[k] or "").strip()
+                if v and not re.fullmatch(r"https?://[^\s]+" if k == "redirect" else r"(https?://[^\s]+|/[^\s]*)", v):
+                    raise ApiError(400, f"The {k.replace('_', ' ')} address is not valid.")
+                store.put_raw(raw_key, v)
+        store.log_event("settings", "Dashboard: Discord login settings changed", who_id(request), who(request))
+        return await auth_settings(request)
+
+    @routes.delete("/api/auth/sessions")
+    async def end_all_sessions(request):
+        if request.get("role") != "admin":
+            raise ApiError(403, "Only admins can do this.")
+        store.end_sessions()
+        store.log_event("settings", "Dashboard: everyone was logged out", who_id(request), who(request))
+        return web.json_response({"ok": True})
 
     # ---------------------------------------------------------- server status
     def meminfo():
@@ -524,7 +708,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(400, "Choose how long the code works.")
         try:
             r, warn = await hooks["add_gift_code"](str(data.get("code") or ""), str(data.get("reward") or ""),
-                                                   int(hours) if hours not in (None, "", 0) else None, "Dashboard",
+                                                   int(hours) if hours not in (None, "", 0) else None, who(request), who_id(request),
                                                    announce=bool(data.get("announce", True)))
         except ValueError as exc:
             raise ApiError(400, str(exc))
@@ -541,13 +725,13 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         r = code_or_404(int_param(request, "id"))
         if (await body_json(request)).get("action") != "end":
             raise ApiError(400, "Unknown action.")
-        await hooks["end_gift_code"](r["id"], "Dashboard")
+        await hooks["end_gift_code"](r["id"], who(request), who_id(request))
         return web.json_response({"item": code_dict(store.get_gift_code(r["id"]))})
 
     @routes.delete("/api/giftcodes/{id}")
     async def delete_code(request):
         r = code_or_404(int_param(request, "id"))
-        await hooks["remove_gift_code"](r["id"], request.query.get("discord", "1") != "0", "Dashboard")
+        await hooks["remove_gift_code"](r["id"], request.query.get("discord", "1") != "0", who(request), who_id(request))
         return web.json_response({"ok": True})
 
     # ---------------------------------------------------------- translations
@@ -599,7 +783,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 except translate.TranslateError as exc:
                     store.put_raw("translate_key", "")
                     raise ApiError(400, f"The key didn't work: {exc}")
-            store.log_event("settings", "Google translation key " + ("saved" if k else "removed"), None, "Dashboard")
+            store.log_event("settings", "Google translation key " + ("saved" if k else "removed"), who_id(request), who(request))
         if "limit" in data:
             try:
                 store.set_cfg("translate_monthly_limit", int(data["limit"]))
@@ -614,7 +798,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             if target not in texts_langs():
                 raise ApiError(400, "Unknown language.")
             translate.save_feed(f.get("channel_id"), ids, target)
-            store.log_event("settings", f"Translation feed updated ({len(ids)} channel(s))", None, "Dashboard")
+            store.log_event("settings", f"Translation feed updated ({len(ids)} channel(s))", who_id(request), who(request))
         return web.json_response(translate_info())
 
     def texts_langs():
@@ -655,7 +839,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         over[lang] = mine
         store.save_translations(over)
         store.log_event("settings", f"Dashboard: translations for {texts.lang_name(lang)} saved ({len(items)} text(s))",
-                        None, "Dashboard")
+                        who_id(request), who(request))
         return web.json_response({"ok": True, "custom": len(mine)})
 
     # ---------------------------------------------------------- suggestions
@@ -691,13 +875,13 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(400, "Status must be accepted or rejected.")
         if r["status"] != "new":
             raise ApiError(409, "This suggestion has already been decided.")
-        r = await hooks["decide_suggestion"](r, status, None, "Dashboard")
+        r = await hooks["decide_suggestion"](r, status, who_id(request), who(request))
         return web.json_response(sug_dict(r))
 
     @routes.delete("/api/suggestions/{id}")
     async def delete_suggestion(request):
         r = sug_or_404(int_param(request, "id"))
-        n = await hooks["delete_suggestions"]([r["id"]], request.query.get("discord", "1") != "0", "Dashboard")
+        n = await hooks["delete_suggestions"]([r["id"]], request.query.get("discord", "1") != "0", who(request), who_id(request))
         return web.json_response({"deleted": n})
 
     @routes.post("/api/suggestions/delete")
@@ -715,7 +899,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 ids = [int(i) for i in raw]
             except (TypeError, ValueError):
                 raise ApiError(400, "Suggestion numbers must be numbers.")
-        n = await hooks["delete_suggestions"](ids, bool(data.get("discord", True)), "Dashboard",
+        n = await hooks["delete_suggestions"](ids, bool(data.get("discord", True)), who(request), who_id(request),
                                               reset_numbers=bool(data.get("all") and data.get("reset_numbers")))
         return web.json_response({"deleted": n})
 
@@ -726,7 +910,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         text = str(data.get("text") or "").strip()
         if not 1 <= len(text) <= 1500:
             raise ApiError(400, "The message must be 1–1500 characters.")
-        ok = await hooks["send_reply"](r["id"], text, "Dashboard", None)
+        ok = await hooks["send_reply"](r["id"], text, who(request), who_id(request))
         return web.json_response({"ok": ok, "error": None if ok else "I couldn't DM them – their DMs are closed."})
 
     # ------------------------------------------------------------- insights
@@ -830,10 +1014,10 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if member and (member.bot or any(x.id in roles.values() for x in member.roles)):
             raise ApiError(400, "You can't block staff or bots.")
         reason = str(data.get("reason") or "")[:200]
-        store.block_user(int(uid), reason, days, "Dashboard")
+        store.block_user(int(uid), reason, days, who(request))
         store.log_event("block", f"{person(uid) or 'User ' + uid} blocked from the dashboard"
                         + (f" for {days} day(s)" if days else "") + (f": {reason}" if reason else ""),
-                        None, "Dashboard")
+                        who_id(request), who(request))
         return web.json_response({"ok": True})
 
     @routes.delete("/api/blocklist/{user_id}")
@@ -842,7 +1026,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if not uid.isdigit():
             raise ApiError(400, "Invalid user ID.")
         if store.unblock_user(int(uid)):
-            store.log_event("block", f"{person(uid) or 'User ' + uid} unblocked from the dashboard", None, "Dashboard")
+            store.log_event("block", f"{person(uid) or 'User ' + uid} unblocked from the dashboard", who_id(request), who(request))
         return web.json_response({"ok": True})
 
     # ------------------------------------------------------------ patch notes
@@ -860,7 +1044,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     async def publish_patch(request):
         data = await body_json(request)
         try:
-            bugs, msg = await hooks["publish_patchnotes"](str(data.get("title") or ""), "Dashboard", None)
+            bugs, msg = await hooks["publish_patchnotes"](str(data.get("title") or ""), who(request), who_id(request))
         except discord.HTTPException as exc:
             raise ApiError(502, f"Discord refused: {exc.text or exc}")
         return web.json_response({"ok": True, "count": len(bugs), "jump_url": msg.jump_url})
@@ -914,7 +1098,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         key = (request.query.get("key") or "")[:60]
         if not store.remove_web_block(key):
             raise ApiError(404, "That pause no longer exists.")
-        store.log_event("block", f"Website pause {key[:12]}… lifted from the dashboard", None, "Dashboard")
+        store.log_event("block", f"Website pause {key[:12]}… lifted from the dashboard", who_id(request), who(request))
         return web.json_response({"ok": True})
 
     # ------------------------------------------------------------ data & backups

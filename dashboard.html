@@ -309,6 +309,15 @@
 .w-qbtn:disabled{opacity:.5}
 .w-chanpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 14px;max-height:260px;overflow:auto;padding:10px 12px;border:1px solid var(--w-border);border-radius:12px;background:var(--w-surface-2)}
 .w-chanpick label{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.w-me{display:flex;align-items:center;gap:10px;padding:8px 10px;margin:0 0 4px;border-radius:12px;background:var(--w-surface-2)}
+.w-me img{width:30px;height:30px;border-radius:50%}
+.w-me b{display:block;font-size:14px}
+.w-me .w-hint{font-size:12px}
+.w-discord{width:100%;background:#5865f2 !important;margin-bottom:14px;padding:12px}
+.w-or{display:flex;align-items:center;gap:10px;color:var(--w-muted);font-size:13px;margin:0 0 14px}
+.w-or::before,.w-or::after{content:"";flex:1;height:1px;background:var(--w-border)}
+.w-steps{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px}
+.w-steps code{font-size:12.5px;background:var(--w-surface-2);padding:2px 6px;border-radius:6px;overflow-wrap:anywhere}
 .w-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border-radius:14px;background:var(--w-bad-soft);border:1px solid color-mix(in srgb,var(--w-bad) 35%,transparent)}
 .w-bugrow.sel[aria-pressed="true"]{border-color:var(--w-bad);background:var(--w-bad-soft)}
 .w-form2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
@@ -497,6 +506,9 @@ const NAV = [
   ['welcome', 'Welcome', 'userplus'], ['translations', 'Translations', 'globe'], ['patch', 'Patch notes', 'wrench'], ['mod', 'Moderation', 'shield'],
   ['bot', 'Bot profile', 'bot'], ['data', 'Data', 'db'], ['log', 'Activity log', 'list']
 ];
+// Moderators who log in with Discord see these pages; admins see everything.
+const MOD_TABS = ['overview', 'status', 'bugs', 'suggestions', 'insights', 'mod', 'log'];
+const isMod = () => !!(S.user && S.user.role !== 'admin');
 const CHANNELS = [
   ['report_channel_id', 'Bug report channel', 'Where the panel message lives and where players open their private tickets.'],
   ['mod_channel_id', 'Mod channel', 'Submitted bug reports arrive here for moderators (✅ Pass · 🔍 Investigate · ❌ Reject). Keep it private.'],
@@ -534,7 +546,8 @@ async function api(method, path, body) {
   try {
     res = await fetch(S.base.replace(/\/+$/, '') + path, {
       method,
-      headers: Object.assign({ Authorization: 'Bearer ' + S.key }, body ? { 'Content-Type': 'application/json' } : {}),
+      headers: Object.assign({ 'X-Requested-With': 'wos' }, S.key ? { Authorization: 'Bearer ' + S.key } : {}, body ? { 'Content-Type': 'application/json' } : {}),
+      credentials: 'same-origin',
       body: body ? JSON.stringify(body) : undefined
     });
   } catch (e) {
@@ -552,7 +565,7 @@ async function api(method, path, body) {
 }
 async function call(method, path, body) {
   try { return await api(method, path, body); }
-  catch (e) { if (e.status === 401) { logout('Your key was rejected. Please connect again.'); } throw e; }
+  catch (e) { if (e.status === 401) { logout(S.user ? (e.message || 'Please log in again.') : 'Your key was rejected. Please connect again.'); } throw e; }
 }
 
 /* ============================================================== helpers */
@@ -868,7 +881,27 @@ function viewBot() {
           <span class="w-hint">Leave the text empty to show no activity.</span></div>
       </div>
       <div class="w-actions"><button class="w-btn primary" data-act="saveBot">Save profile</button></div>
-    </section>`;
+    </section>
+    ${loginCard()}`;
+}
+function loginCard() {
+  const A = S.auth; if (!A) return '';
+  const cb = (S.base || location.origin).replace(/\/+$/, '') + '/api/auth/callback';
+  return html`<section class="w-card w-pad"><h3 class="w-h3">Dashboard login with Discord</h3>
+    <p class="w-sub" style="margin:4px 0 12px">Moderators and admins log in with their own Discord account – no shared key. Moderators see bugs, suggestions, insights and moderation;
+      admins see everything. Every action is logged with their name. Someone who loses the role loses access at once.</p>
+    <ol class="w-steps">
+      <li>Open the <a href="https://discord.com/developers/applications/${A.client_id}/oauth2" target="_blank" rel="noopener">Discord Developer Portal → OAuth2</a> for this bot.</li>
+      <li>Under <b>Redirects</b> click <b>Add Redirect</b>, paste <code class="w-copyable">${cb}</code> and press <b>Save Changes</b>.</li>
+      <li>Under <b>Client Secret</b> press <b>Reset Secret</b>, copy it and paste it here.</li></ol>
+    <div class="w-inline" style="margin-top:10px"><input class="w-input" id="au-secret" type="password" autocomplete="off" placeholder="${A.secret_set ? 'Client Secret saved – paste a new one to replace it' : 'Client Secret'}" style="max-width:380px">
+      <button class="w-btn primary" data-act="authSave">${A.enabled ? 'Update' : 'Turn on Discord login'}</button>
+      ${A.enabled ? html`<button class="w-btn danger" data-act="authOff">Turn off</button>` : ''}</div>
+    ${A.enabled ? html`<div class="w-check" style="margin-top:12px"><div class="w-check-ic ok">${icon('check')}</div><div><div class="w-check-label">Discord login is on</div>
+      <div class="w-check-detail">The login page now shows “Log in with Discord”. ${location.protocol === 'http:' ? 'Tip: with HTTPS (a domain + certificate) the login cookie is also encrypted.' : ''}</div></div></div>
+      <div class="w-sect"><div class="w-sec-head"><span class="w-label">Logged in (${A.sessions.length})</span>${A.sessions.length ? html`<button class="w-btn small danger" data-act="authKick">Log everyone out</button>` : ''}</div>
+      ${A.sessions.map(x => html`<div class="w-hint">${x.name} · active ${ago(x.last_seen)}</div>`)}</div>` : ''}
+  </section>`;
 }
 
 
@@ -901,7 +934,7 @@ const QUICK = {
   admin: [['being_investigated', '🔍', 'Being investigated'], ['fixed', '✅', 'Fixed'], ['admin_rejected', '❌', 'Reject (admins)']]
 };
 function quickBtns(b) {
-  const set = ['new', 'investigating'].includes(b.status) ? QUICK.mod : ['passed', 'being_investigated'].includes(b.status) ? QUICK.admin : [];
+  const set = ['new', 'investigating'].includes(b.status) ? QUICK.mod : ['passed', 'being_investigated'].includes(b.status) && !isMod() ? QUICK.admin : [];
   return html`<span class="w-quick">${set.filter(q => q[0] !== b.status).map(q => html`<button class="w-qbtn" data-act="bugQuick" data-id="${b.id}" data-s="${q[0]}" title="${q[2]}" aria-label="#${b.id}: ${q[2]}">${q[1]}</button>`)}</span>`;
 }
 function viewBugs() {
@@ -931,8 +964,8 @@ function selBar() {
   return html`<div class="w-selbar"><b>${B.sel.length} selected</b><span class="w-hint">Click bugs to select them.</span><div class="w-spacer"></div>
     <button class="w-btn small" data-act="bugSelAll">Select all shown</button>
     <select class="w-select w-fsel" id="sel-mark" aria-label="Mark selected bugs as"><option value="">Mark as…</option>
-      <option value="passed">✅ Passed to admins</option><option value="being_investigated">🔍 Being investigated</option><option value="fixed">✅ Fixed</option>
-      <option value="admin_rejected">❌ Rejected by admins</option><option value="rejected">❌ Rejected</option></select>
+      <option value="passed">✅ Passed to admins</option>${isMod() ? '' : html`<option value="being_investigated">🔍 Being investigated</option><option value="fixed">✅ Fixed</option>`}
+      ${isMod() ? '' : html`<option value="admin_rejected">❌ Rejected by admins</option>`}<option value="rejected">❌ Rejected</option></select>
     <button class="w-btn small" data-act="bugMarkSel" ${B.sel.length ? '' : 'disabled'}>Mark</button>
     <label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="sel-discord" checked> Also delete their Discord messages</label>
     <button class="w-btn small danger" data-act="bugDelSel" ${B.sel.length ? '' : 'disabled'}>Delete ${B.sel.length || ''} selected</button></div>`;
@@ -983,7 +1016,7 @@ function bugModal() {
       <div class="w-inline"><input class="w-input" id="m-sum" maxlength="100" value="${b.summary}"><button class="w-btn" data-act="bugSummary">Save title</button></div></div>
 
     <div class="w-sect"><span class="w-label">Change status</span>
-      <div class="w-inline">${STATUS_BTNS.filter(s => s[0] !== b.status).map(s => html`<button class="w-btn small" data-act="bugSet" data-s="${s[0]}">${s[1]}</button>`)}</div>
+      <div class="w-inline">${STATUS_BTNS.filter(s => s[0] !== b.status && (!isMod() || ['passed', 'rejected'].includes(s[0]))).map(s => html`<button class="w-btn small" data-act="bugSet" data-s="${s[0]}">${s[1]}</button>`)}</div>
       <div class="w-hint" style="margin-top:6px">Updates the Discord messages and tells the reporter (if DMs are on).</div>
       <div class="w-inline" style="margin-top:12px"><input class="w-input" id="m-dup" inputmode="numeric" placeholder="Duplicate of bug number, e.g. 41" aria-label="Original bug number"><button class="w-btn small" data-act="bugDup">Close as duplicate</button></div></div>
 
@@ -1538,6 +1571,7 @@ const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
   codes: async () => { S.codes = await call('GET', '/api/giftcodes'); },
   translations: () => loadTr(S.tr && S.tr.data ? S.tr.data.lang : null),
+  bot: async () => { try { S.auth = S.user && S.user.role !== 'admin' ? null : await call('GET', '/api/auth/settings'); } catch (e) { S.auth = null; } },
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
@@ -1560,6 +1594,7 @@ function renderTab() {
   if (['channels', 'features', 'welcome'].includes(S.tab)) updateSaveBar();
 }
 function renderApp() {
+  if (isMod() && !MOD_TABS.includes(S.tab)) S.tab = 'overview';
   const o = S.overview, b = o.bot;
   root.innerHTML = String(html`
     <div class="w-layout">
@@ -1570,12 +1605,13 @@ function renderApp() {
         </div>
         <div class="w-status"><span class="w-pill"><i class="w-dot"></i>Online${b.latency_ms != null ? ' · ' + b.latency_ms + ' ms' : ''}</span>
           ${S.demo ? html`<span class="w-pill w-demo">Demo – nothing saved</span>` : ''}</div>
+        ${S.user ? html`<div class="w-me">${S.user.avatar ? html`<img src="${S.user.avatar}" alt="">` : ''}<div><b>${S.user.name}</b><span class="w-hint">${S.user.role === 'admin' ? 'Admin' : 'Moderator'} · logged in with Discord</span></div></div>` : ''}
         <nav class="w-nav" role="tablist" aria-label="Sections">
-          ${NAV.map(n => html`<button role="tab" data-act="nav" data-tab="${n[0]}" aria-selected="${String(n[0] === S.tab)}">${icon(n[2])}<span>${n[1]}</span>${n[0] === 'bugs' && o.stats.bugs.awaiting ? html`<em class="w-count">${o.stats.bugs.awaiting}</em>` : ''}</button>`)}
+          ${NAV.filter(n => !isMod() || MOD_TABS.includes(n[0])).map(n => html`<button role="tab" data-act="nav" data-tab="${n[0]}" aria-selected="${String(n[0] === S.tab)}">${icon(n[2])}<span>${n[1]}</span>${n[0] === 'bugs' && o.stats.bugs.awaiting ? html`<em class="w-count">${o.stats.bugs.awaiting}</em>` : ''}</button>`)}
         </nav>
         <div class="w-sidefoot">
           <button class="w-btn small" data-act="refresh">${icon('refresh')} Refresh</button>
-          <button class="w-btn small" data-act="logout">Disconnect</button>
+          <button class="w-btn small" data-act="logout">${S.user ? 'Log out' : 'Disconnect'}</button>
         </div>
       </aside>
       <main class="w-main" id="wosd-main" role="tabpanel"></main>
@@ -1589,6 +1625,8 @@ function renderLogin(error) {
       <h1>${CFG.productName} manager</h1>
       <p>Connect to your bot to manage the panel, channels, features and see the activity log.</p>
       ${error ? html`<div class="w-error" role="alert">${error}</div>` : ''}
+      ${S.discordLogin ? html`<a class="w-btn primary w-discord" href="${(S.base || location.origin).replace(/\/+$/, '')}/api/auth/login">${raw('<svg class="w-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 4.6A19 19 0 0 0 15.3 3l-.6 1.2a17 17 0 0 0-5.4 0L8.7 3A19 19 0 0 0 4 4.6C1 9 .3 13.3.6 17.6a19 19 0 0 0 5.8 2.9l1.2-2a12 12 0 0 1-1.9-.9l.5-.4a13.6 13.6 0 0 0 11.6 0l.5.4-1.9.9 1.2 2a19 19 0 0 0 5.8-2.9c.4-5-.8-9.3-3.4-13zM8.7 15c-1.1 0-2-1-2-2.3s.9-2.2 2-2.2 2 1 2 2.2-.9 2.3-2 2.3zm6.6 0c-1.1 0-2-1-2-2.3s.9-2.2 2-2.2 2 1 2 2.2-.9 2.3-2 2.3z"/></svg>')} Log in with Discord</a>
+        <div class="w-or"><span>or use the admin key</span></div>` : ''}
       <form data-form="login" novalidate>
         ${CFG.apiBase ? '' : html`<div class="w-field"><label class="w-label" for="l-base">Bot API address</label>
           <input class="w-input" id="l-base" name="base" placeholder="https://bot.example.com" value="${S.base}" autocomplete="off"></div>`}
@@ -1612,16 +1650,17 @@ async function loadAll() {
   S.botDraft = { username: S.bot.username, nickname: S.bot.nickname || '', status: S.bot.status,
     activity_type: S.bot.activity_type, activity_text: S.bot.activity_text || '', avatar: null, banner: null };
 }
-async function connect(base, key, demo) {
-  S.demo = !!demo; S.base = base; S.key = key;
+async function connect(base, key, demo, user) {
+  S.demo = !!demo; S.base = base; S.key = key; S.user = user || null;
   try {
     await loadAll();
-    if (!demo) { try { sessionStorage.setItem('wosd.key', key); sessionStorage.setItem('wosd.base', base); } catch (e) { /* private mode */ } }
+    if (!demo && key) { try { sessionStorage.setItem('wosd.key', key); sessionStorage.setItem('wosd.base', base); } catch (e) { /* private mode */ } }
     renderApp(); startPolling();
   } catch (e) { S.demo = false; renderLogin(e.message); }
 }
 function logout(msg) {
-  S.mock = null;
+  if (S.user && !S.demo) fetch(S.base.replace(/\/+$/, '') + '/api/auth/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'wos' } }).catch(() => {});
+  S.user = null; S.mock = null;
   try { sessionStorage.removeItem('wosd.key'); } catch (e) { /* ignore */ }
   clearInterval(S.timer); S.key = ''; S.demo = false; S.tab = 'overview'; renderLogin(msg);
 }
@@ -1632,7 +1671,7 @@ async function refreshLive() {
 function startPolling() {
   clearInterval(S.timer);
   S.timer = setInterval(async () => {
-    if (document.hidden || !S.key && !S.demo) return;
+    if (document.hidden || !S.key && !S.demo && !S.user) return;
     try {
       if (S.tab === 'log' && S.log.auto && S.log.items.length <= 50) loadLogs(true, true);
       else if (S.tab === 'overview') { await refreshLive(); if (S.tab === 'overview') renderTab(); }
@@ -1727,6 +1766,16 @@ root.addEventListener('click', async e => {
     else if (act === 'saveBot') saveBot(el);
     else if (act === 'pickAvatar') $('#avfile').click();
     else if (act === 'pickBanner') $('#bnfile').click();
+    else if (act === 'authSave' || act === 'authOff') {
+      const body = act === 'authOff' ? { secret: '', redirect: '' } : { redirect: (S.base || location.origin).replace(/\/+$/, '') + '/api/auth/callback', return_to: location.href.split('?')[0].split('#')[0] };
+      if (act === 'authSave') { const sec = $('#au-secret').value.trim(); if (sec) body.secret = sec; else if (!S.auth.secret_set) return toast('Paste the Client Secret first.', 'err'); }
+      try { S.auth = await call('PUT', '/api/auth/settings', body); toast(act === 'authOff' ? 'Discord login turned off.' : 'Saved. Open the dashboard in a private window to try “Log in with Discord”.'); renderMain(); }
+      catch (err) { toast(err.message, 'err'); }
+    }
+    else if (act === 'authKick') {
+      if (!el.dataset.armed) { el.dataset.armed = '1'; el.textContent = 'Click again'; setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = 'Log everyone out'; } }, 3500); return; }
+      await call('DELETE', '/api/auth/sessions'); S.auth = await call('GET', '/api/auth/settings'); toast('Everyone was logged out.'); renderMain();
+    }
     else if (act === 'serverArt') {
       busy(el, true, 'Applying…');
       try {
@@ -2123,6 +2172,7 @@ function makeMock() {
   const NAMES = ['Mira', 'Jonas', 'Anders', 'Lærke', 'Sofie', 'Lars', 'Freja', 'Mikkel'];
   const TRK = [{"key": "bug.title", "group": "Bug ticket", "en": "🐛 Bug report", "pl": "🐛 Zgłoszenie błędu", "placeholders": []}, {"key": "bug.title_edit", "group": "Bug ticket", "en": "✏️ Edit your bug report", "pl": "✏️ Popraw swoje zgłoszenie", "placeholders": []}, {"key": "bug.body", "group": "Bug ticket", "en": "**Step 1** – pick the **area** in the menu, then press **Add details** (short title, chief name, player UID, game version).\n**Step 2** – answer these questions **in one message**:\n\n**1. What is the bug?**\n**2. Do you know why it is happening?**\n**3. What is the correct way the feature should work?**\n**4. Attach a picture or video** to the same message{again}\n\nWhen you press **Send**, I'll show you a preview where you can **Submit**, **Edit** or **Delete** your report.", "pl": "**Krok 1** – wybierz **obszar** w menu, a potem naciśnij **Dodaj szczegóły** (krótki tytuł, nazwa wodza, UID gracza, wersja gry).\n**Krok 2** – odpowiedz na te pytania **w jednej wiadomości**:\n\n**1. Na czym polega błąd?**\n**2. Czy wiesz, dlaczego się pojawia?**\n**3. Jak ta funkcja powinna działać prawidłowo?**\n**4. Dołącz zdjęcie lub film** do tej samej wiadomości{again}\n\nGdy naciśniesz **Wyślij**, pokażę podgląd, w którym możesz **Wysłać**, **Poprawić** albo **Usunąć** zgłoszenie.", "placeholders": ["again"]}, {"key": "bug.again", "group": "Bug ticket", "en": " (attachments have to be added again)", "pl": " (załączniki trzeba dodać ponownie)", "placeholders": []}, {"key": "bug.template_name", "group": "Bug ticket", "en": "Template you can copy", "pl": "Szablon do skopiowania", "placeholders": []}, {"key": "bug.template", "group": "Bug ticket", "en": "What is the bug?\n\nDo you know why it is happening?\n\nWhat is the correct way the feature should work?", "pl": "Na czym polega błąd?\n\nCzy wiesz, dlaczego się pojawia?\n\nJak ta funkcja powinna działać prawidłowo?", "placeholders": []}, {"key": "bug.area_ph", "group": "Bug ticket", "en": "Where is the problem? (area)", "pl": "Gdzie jest problem? (obszar)", "placeholders": []}, {"key": "bug.area_set", "group": "Bug ticket", "en": "✅ Area: **{area}**", "pl": "✅ Obszar: **{area}**", "placeholders": ["area"]}, {"key": "bug.area_gone", "group": "Bug ticket", "en": "That area doesn't exist any more.", "pl": "Ten obszar już nie istnieje.", "placeholders": []}, {"key": "bug.details_btn", "group": "Bug ticket", "en": "Add details", "pl": "Dodaj szczegóły", "placeholders": []}, {"key": "pv.title", "group": "Preview", "en": "📋 Preview – is this ready to send?", "pl": "📋 Podgląd – czy można wysłać?", "placeholders": []}, {"key": "pv.no_text", "group": "Preview", "en": "*(no text)*", "pl": "*(brak tekstu)*", "placeholders": []}, {"key": "pv.f_title", "group": "Preview", "en": "Title", "pl": "Tytuł", "placeholders": []}, {"key": "pv.f_title_missing", "group": "Preview", "en": "⚠️ *(missing – press Add details)*", "pl": "⚠️ *(brak – naciśnij Dodaj szczegóły)*", "placeholders": []}, {"key": "pv.f_area", "group": "Preview", "en": "Area", "pl": "Obszar", "placeholders": []}, {"key": "pv.f_area_missing", "group": "Preview", "en": "⚠️ *(missing – use the menu)*", "pl": "⚠️ *(brak – użyj menu)*", "placeholders": []}, {"key": "pv.f_version", "group": "Preview", "en": "Game version", "pl": "Wersja gry", "placeholders": []}, {"key": "pv.f_chief", "group": "Preview", "en": "Chief / UID", "pl": "Wódz / UID", "placeholders": []}, {"key": "pv.f_files", "group": "Preview", "en": "Attachments", "pl": "Załączniki", "placeholders": []}, {"key": "pv.footer", "group": "Preview", "en": "Submit = send to the moderators · Edit = change it · Delete = discard", "pl": "Wyślij = do moderatorów · Popraw = zmień · Usuń = odrzuć", "placeholders": []}, {"key": "pv.submit", "group": "Preview", "en": "Submit", "pl": "Wyślij", "placeholders": []}, {"key": "pv.edit", "group": "Preview", "en": "Edit", "pl": "Popraw", "placeholders": []}, {"key": "pv.delete", "group": "Preview", "en": "Delete", "pl": "Usuń", "placeholders": []}, {"key": "pv.previous", "group": "Preview", "en": "Your previous message (copy & edit)", "pl": "Twoja poprzednia wiadomość (skopiuj i popraw)", "placeholders": []}];
   const trOver = {};
+  const authS = { enabled: true, secret_set: true, redirect: '', return_to: '/staff/', client_id: '123456789012345678', sessions: [{ name: 'Sofie', id: '2', last_seen: now - 600 }, { name: 'Kasper', id: '1', last_seen: now - 60 }] };
   const trx = { key_set: true, key_hint: '…x9Qa', usage: { month: '2026-11', chars: 163400 }, limit: 450000, feed: { channel_id: '1006', target: 'en', sources: ['1002'] } };
   const drive = { configured: true, account: 'kasper@example.com', folder_url: 'https://drive.google.com/drive/folders/x', last_ok: now - 2 * 86400, last_name: 'bugs-20261105-031502.db.gz', last_error: null, last_try: now - 2 * 86400 };
   const codes = [['WOSEU1WEEKEND', '300 gems + 2× 1h speed-up', 3600 * 5, 86400 * 2], ['HAPPYHALLOWEEN', 'Pumpkin frame', 86400 * 3, 86400 * 4], ['WELCOME2026', 'Starter pack', 86400 * 20, null], ['LAUNCHDAY', '1000 gems', 86400 * 9, 86400 * 2]]
@@ -2199,6 +2249,9 @@ function makeMock() {
       const counts = {}; bugs.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
       return { items: f.slice(off, off + lim).map(briefBug), total: f.length, counts };
     }
+    if (p === '/api/auth/settings' && method === 'GET') return authS;
+    if (p === '/api/auth/settings') { if ('secret' in body) authS.secret_set = !!body.secret; authS.enabled = authS.secret_set && !!body.redirect; return authS; }
+    if (p === '/api/auth/sessions') { authS.sessions = []; return { ok: true }; }
     if (p === '/api/translate' && method === 'GET') return trx;
     if (p === '/api/translate') { if ('key' in body) { trx.key_set = !!body.key; trx.key_hint = body.key ? '…' + body.key.slice(-4) : ''; } if ('limit' in body) trx.limit = body.limit; if (body.feed) trx.feed = body.feed; return trx; }
     if (p === '/api/translate/fill') { trx.usage.chars += 9800; return Object.assign({ filled: 0 }, trx); }
@@ -2318,9 +2371,21 @@ function makeMock() {
 /* ================================================================== go */
 let saved = '';
 try { saved = sessionStorage.getItem('wosd.key') || ''; S.base = CFG.apiBase || sessionStorage.getItem('wosd.base') || ''; } catch (e) { /* ignore */ }
-if (new URLSearchParams(location.search).has('demo')) connect('', '', true);
-else if (saved && S.base) connect(S.base, saved, false);
-else renderLogin();
+async function boot() {
+  if (new URLSearchParams(location.search).has('demo')) return connect('', '', true);
+  if (saved && S.base) return connect(S.base, saved, false);
+  const base = (S.base || CFG.apiBase || '').replace(/\/+$/, '');
+  if (base) {
+    try {
+      const me = await fetch(base + '/api/auth/me', { credentials: 'same-origin' });
+      if (me.ok) return connect(base, '', false, await me.json());
+      const info = await (await fetch(base + '/api/auth/info', { credentials: 'same-origin' })).json();
+      S.discordLogin = !!info.discord; S.base = base;
+    } catch (e) { /* bot not reachable – the normal login shows the error */ }
+  }
+  renderLogin();
+}
+boot();
 })();
 </script>
 <!-- ============ copy until here ============ -->

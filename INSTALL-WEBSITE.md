@@ -121,7 +121,8 @@ Open these (use your own address):
 
 1. **Channels** → choose the bug report, mod, suggestions and admin channels (plus any optional ones you made) → **Save**.
    **Overview** shows a checklist – fix anything red or yellow (it says exactly what is missing).
-2. **Panel message** → write the text players see → **Publish panel**. The bot adds 🐛 and 💡 to it.
+2. **Panel message** → write the text players see → **Publish panel**. The message gets two buttons: **Report a bug** and
+   **Suggest an idea**. Each opens a short form (only the player sees it) – with an area menu and a screenshot upload for bugs.
 3. **Features** →
    - set the **current game version** (e.g. `V5 · 1.33.9`) and check the **Areas** list,
    - turn on **Accept bug reports from the website**,
@@ -131,8 +132,10 @@ Open these (use your own address):
 5. **Gift codes** (optional) → on **Channels** choose a gift-codes channel, on **Features → Gift codes** switch them on and pick who is tagged.
    Then add codes on the **Gift codes** page: each one is announced in Discord at once, shown as **New** at the top of `/bugs/codes.html`
    for 24 hours, and listed there until it expires. Players can also type `/codes` in Discord.
-6. **Translations** → players get the bot's messages in English or Polish (their Discord language, or what they pick in the ticket
-   or with `/language`). Change any text or add more languages there.
+6. **Translations** → players get the bot's messages in their own Discord language (or what they pick with `/language`).
+   With a free Google key (bot guide, “Automatic translation”) all 18 languages are filled in automatically, and anyone can
+   right-click a message → **Apps → Translate**. Change any text there.
+7. **Bot profile → Use server look** gives the bot the server's icon and banner.
 
 ## Step 8 – Link the new pages from your site
 
@@ -143,7 +146,7 @@ On your existing site, point the **Report a bug** button to `/bugs/report.html`,
 
 ## Step 9 – Go-live test
 
-- [ ] React 🐛 in the report channel → a private ticket opens → fill it in → **Submit** → the bug appears in `#mod-bugs`.
+- [ ] Press **Report a bug** in the report channel → fill in the form (add a screenshot) → **Submit** → the bug appears in `#mod-bugs`.
 - [ ] A moderator presses ✅ → it appears in `#admin-bugs`; an admin presses ✅ **Fixed**.
 - [ ] Open `/bugs/report.html`, send a test report with a screenshot → it appears in `#mod-bugs` marked "website".
 - [ ] On the dashboard open that bug → the screenshot shows. Tick **Show on the public known-issues list** → it appears on `/bugs/known-issues.html` (within a minute).

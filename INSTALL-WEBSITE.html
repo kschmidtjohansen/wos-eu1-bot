@@ -175,7 +175,8 @@ website to add it to the site:
 <ol>
 <li><strong>Channels</strong> → choose the bug report, mod, suggestions and admin channels (plus any optional ones you made) → <strong>Save</strong>.
    <strong>Overview</strong> shows a checklist – fix anything red or yellow (it says exactly what is missing).</li>
-<li><strong>Panel message</strong> → write the text players see → <strong>Publish panel</strong>. The bot adds 🐛 and 💡 to it.</li>
+<li><strong>Panel message</strong> → write the text players see → <strong>Publish panel</strong>. The message gets two buttons: <strong>Report a bug</strong> and
+   <strong>Suggest an idea</strong>. Each opens a short form (only the player sees it) – with an area menu and a screenshot upload for bugs.</li>
 <li><strong>Features</strong> →</li>
 <li>set the <strong>current game version</strong> (e.g. <code>V5 · 1.33.9</code>) and check the <strong>Areas</strong> list,</li>
 <li>turn on <strong>Accept bug reports from the website</strong>,</li>
@@ -185,8 +186,10 @@ website to add it to the site:
 <li><strong>Gift codes</strong> (optional) → on <strong>Channels</strong> choose a gift-codes channel, on <strong>Features → Gift codes</strong> switch them on and pick who is tagged.
    Then add codes on the <strong>Gift codes</strong> page: each one is announced in Discord at once, shown as <strong>New</strong> at the top of <code>/bugs/codes.html</code>
    for 24 hours, and listed there until it expires. Players can also type <code>/codes</code> in Discord.</li>
-<li><strong>Translations</strong> → players get the bot's messages in English or Polish (their Discord language, or what they pick in the ticket
-   or with <code>/language</code>). Change any text or add more languages there.</li>
+<li><strong>Translations</strong> → players get the bot's messages in their own Discord language (or what they pick with <code>/language</code>).
+   With a free Google key (bot guide, “Automatic translation”) all 18 languages are filled in automatically, and anyone can
+   right-click a message → <strong>Apps → Translate</strong>. Change any text there.</li>
+<li><strong>Bot profile → Use server look</strong> gives the bot the server's icon and banner.</li>
 </ol>
 <div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step8"><h2><span class="num">8</span><span class="t">Link the new pages from your site</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
 <p>On your existing site, point the <strong>Report a bug</strong> button to <code>/bugs/report.html</code>, and add links to <code>/bugs/</code> (home),
@@ -195,7 +198,7 @@ website to add it to the site:
 <p>💡 Want the colours to match your site exactly? They are at the top of <code>/var/www/wos/bugs/style.css</code> (<code>--bg</code>, <code>--card</code>, <code>--accent</code> …).</p>
 </blockquote>
 <div class="next"><button type="button">Done – next step ↓</button></div></div></section><section class="step" id="step9"><h2><span class="num">9</span><span class="t">Go-live test</span><button class="donebtn" type="button">Mark as done</button></h2><div class="body">
-<ul class="check"><li><input type="checkbox"><span>React 🐛 in the report channel → a private ticket opens → fill it in → <strong>Submit</strong> → the bug appears in <code>#mod-bugs</code>.</span></li>
+<ul class="check"><li><input type="checkbox"><span>Press <strong>Report a bug</strong> in the report channel → fill in the form (add a screenshot) → <strong>Submit</strong> → the bug appears in <code>#mod-bugs</code>.</span></li>
 <li><input type="checkbox"><span>A moderator presses ✅ → it appears in <code>#admin-bugs</code>; an admin presses ✅ <strong>Fixed</strong>.</span></li>
 <li><input type="checkbox"><span>Open <code>/bugs/report.html</code>, send a test report with a screenshot → it appears in <code>#mod-bugs</code> marked "website".</span></li>
 <li><input type="checkbox"><span>On the dashboard open that bug → the screenshot shows. Tick <strong>Show on the public known-issues list</strong> → it appears on <code>/bugs/known-issues.html</code> (within a minute).</span></li>

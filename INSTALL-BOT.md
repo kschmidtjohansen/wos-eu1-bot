@@ -193,6 +193,31 @@ The bot already makes a backup every day on the server (and in `#bot-backups` if
 How often and how many copies are kept: dashboard → **Features → Screenshots & backups** (default: weekly, newest 8).
 To restore: download a file from the folder, unzip it (`.gz`), and follow *Restore a backup* below.
 
+## Automatic translation (optional, about 5 minutes)
+
+With a free Google key the bot can:
+- write all its messages (forms, DMs, gift codes …) in each player's own Discord language – 18 languages are switched on,
+- let anyone right-click (or long-press) a message → **Apps → Translate** to read it in their own Discord language (only they see it),
+- post the messages of chosen language channels, translated, in one **translation feed** channel for the staff.
+
+Messages that are already in the reader's language are never translated.
+
+1. Open <https://console.cloud.google.com> – the same project as your server.
+2. Search for **Cloud Translation API** → open it → **Enable**.
+3. Search for **Credentials** → **Create credentials → API key**. Copy the key (it starts with `AIza`).
+4. Click **Edit API key** → under *API restrictions* choose **Restrict key** → tick **Cloud Translation API** → **Save**.
+5. Dashboard → **Translations** → paste the key → **Save key**. The bot texts are translated within a minute.
+6. Optional: on the same page choose a **feed channel** and tick the language channels to translate.
+
+**Cost:** the first 500,000 characters each month are free. The dashboard shows how much is used and stops at **450,000** by default,
+so it stays free. (Translating all bot texts into 18 languages once uses about 170,000.)
+
+## Dashboard login with Discord (optional)
+
+Instead of sharing the dashboard key, moderators and admins can log in with their own Discord account. Moderators only see bugs,
+suggestions, insights and moderation; admins see everything, and every action is logged with the person's name.
+Set it up on the dashboard → **Bot profile → Dashboard login with Discord** (3 steps, shown there).
+
 ## Everyday tasks
 
 Open the SSH window (step 6) first.

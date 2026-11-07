@@ -1132,7 +1132,7 @@ async def publish_panel(title: str, text: str, channel_id: int,
         raise ValueError("Pick a normal text channel for the panel.")
     perms = channel.permissions_for(channel.guild.me)
     need = {"view_channel": "View Channel", "send_messages": "Send Messages", "embed_links": "Embed Links",
-            "add_reactions": "Add Reactions", "read_message_history": "Read Message History",
+            "read_message_history": "Read Message History",
             "manage_messages": "Manage Messages"}
     missing = [label for attr, label in need.items() if not getattr(perms, attr)]
     if missing:
