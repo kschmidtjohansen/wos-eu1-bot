@@ -28,7 +28,10 @@ install -d -m 700 $STATE
 [[ -f $STATE/id_ed25519 ]] || ssh-keygen -q -t ed25519 -N '' -C wos-bot-updates -f $STATE/id_ed25519
 export GIT_SSH_COMMAND="ssh -i $STATE/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$STATE/known_hosts"
 
-if git ls-remote "$URL" >/dev/null 2>&1; then
+if [[ -z "${WOS_REPO_URL:-}" ]] && GIT_TERMINAL_PROMPT=0 git ls-remote "https://github.com/$REPO.git" >/dev/null 2>&1; then
+  URL="https://github.com/$REPO.git"
+  ok "The repository is public – no key needed"
+elif git ls-remote "$URL" >/dev/null 2>&1; then
   ok "This server can already read the repository"
 else
   printf '  %sGive this server permission to READ the code on GitHub:%s\n\n' "$B" "$N"
