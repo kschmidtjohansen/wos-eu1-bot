@@ -1218,8 +1218,8 @@ function autoCard() {
   const pct = X.limit ? Math.min(100, Math.round(X.usage.chars / X.limit * 100)) : 100, F = X.feed;
   const chans = S.channels.filter(c => c.id !== F.channel_id);
   return html`<section class="w-card w-pad"><h3 class="w-h3">Automatic translation (Google)</h3>
-    <p class="w-sub" style="margin:4px 0 12px">Translates the bot’s texts into every language below, and lets anyone right-click a message → <b>Apps → Translate</b> to read it in their own Discord language (only they see it).
-      Messages already in that language are not translated. Free up to 500,000 characters a month – the limit below stops it before anything costs money.</p>
+    <p class="w-sub" style="margin:4px 0 12px">Used only when someone asks: a player right-clicks a message → <b>Apps → Translate</b> (only they see it, in their Discord language),
+      or you press “Translate missing … texts” below. Free up to 500,000 characters a month – the limit stops it before anything costs money.</p>
     ${X.key_set ? html`
       <div class="w-check"><div class="w-check-ic ok">${icon('check')}</div><div><div class="w-check-label">Google key saved (${X.key_hint})</div>
         <div class="w-check-detail">${X.usage.chars.toLocaleString()} of ${X.limit.toLocaleString()} characters used in ${X.usage.month}</div>
@@ -1228,12 +1228,14 @@ function autoCard() {
       <div class="w-inline" style="margin-top:10px"><label class="w-label" for="trx-limit" style="margin:0">Monthly limit</label>
         <input class="w-input w-num" id="trx-limit" type="number" min="0" max="20000000" step="10000" value="${X.limit}" style="width:140px"><span class="w-hint">characters</span>
         <button class="w-btn small" data-act="trLimit">Save limit</button><div class="w-spacer"></div>
-        <button class="w-btn small primary" data-act="trFill">Translate missing bot texts now</button></div>`
+        ${S.tr.data.lang !== 'en' ? html`<button class="w-btn small primary" data-act="trFill">Translate missing ${S.tr.data.languages.find(l => l.code === S.tr.data.lang).name} texts</button>` : ''}</div>
+      <div class="w-hint" style="margin-top:6px">Only manual: the bot never translates by itself. Pick a language in the editor below, then press the button – each language costs about 10,000 characters, once.</div>`
     : html`<div class="w-inline"><input class="w-input" id="trx-key" placeholder="Google API key (AIza…)" autocomplete="off" style="max-width:360px">
         <button class="w-btn primary" data-act="trKeySave">Save key</button></div>
       <div class="w-hint" style="margin-top:6px">How to get the key: bot guide → “Automatic translation”.</div>`}
     <div class="w-sect"><span class="w-label">Translation feed</span>
-      <p class="w-hint" style="margin-bottom:10px">Messages from the language channels you tick are posted, translated, in one feed channel – so staff can read every channel in one language. Messages already in that language are skipped.</p>
+      <p class="w-hint" style="margin-bottom:10px">Messages from the language channels you tick are posted, translated, in one feed channel. <b>This translates every message automatically and uses the allowance fastest</b> – it is off unless you switch it on.</p>
+      <label class="w-inline" style="gap:8px;margin-bottom:12px"><input type="checkbox" id="trx-on" ${X.feed_on ? 'checked' : ''}> <b>Feed switched on</b></label>
       <div class="w-form2"><div class="w-field"><label class="w-label" for="trx-feed">Feed channel</label>
         <select class="w-select" id="trx-feed"><option value="">– off –</option>${channelOptions(F.channel_id)}</select></div>
         <div class="w-field"><label class="w-label" for="trx-target">Translate into</label>
@@ -1839,20 +1841,20 @@ root.addEventListener('click', async e => {
       busy(el, true, act === 'trKeySave' ? 'Testing the key…' : 'Removing…');
       try {
         S.tr.x = await call('PUT', '/api/translate', { key }); renderMain();
-        toast(key ? 'Key works and is saved. The bot texts are being translated (about a minute).' : 'Key removed.');
-        if (key) call('POST', '/api/translate/fill').then(() => loadTr(S.tr.data.lang)).then(renderMain).catch(err => toast(err.message, 'err'));
+        toast(key ? 'Key works and is saved. Nothing is translated until you press a button.' : 'Key removed.');
+
       } catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'trLimit') { try { S.tr.x = await call('PUT', '/api/translate', { limit: parseInt($('#trx-limit').value, 10) || 0 }); toast('Limit saved.'); renderMain(); } catch (err) { toast(err.message, 'err'); } }
     else if (act === 'trFill') {
       busy(el, true, 'Translating…');
-      try { const r = await call('POST', '/api/translate/fill'); toast(r.filled ? 'Translated ' + r.filled + ' texts.' : 'Everything is translated already.'); await loadTr(S.tr.data.lang); renderMain(); }
+      try { const r = await call('POST', '/api/translate/fill', { lang: S.tr.data.lang }); toast(r.filled ? 'Translated ' + r.filled + ' texts.' : 'Everything is translated already.'); await loadTr(S.tr.data.lang); renderMain(); }
       catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'trFeedSave') {
       const feed = { channel_id: $('#trx-feed').value || null, target: $('#trx-target').value, sources: $$('.trx-src').filter(c => c.checked).map(c => c.value) };
       if (feed.sources.length && !feed.channel_id) return toast('Choose the feed channel first.', 'err');
-      try { S.tr.x = await call('PUT', '/api/translate', { feed }); toast('Translation feed saved.'); renderMain(); } catch (err) { toast(err.message, 'err'); }
+      try { S.tr.x = await call('PUT', '/api/translate', { feed, feed_on: $('#trx-on').checked }); toast($('#trx-on').checked ? 'Translation feed saved and switched on.' : 'Saved – the feed is off.'); renderMain(); } catch (err) { toast(err.message, 'err'); }
     }
     else if (act === 'trSave') {
       busy(el, true, 'Saving…');
@@ -2310,7 +2312,7 @@ function makeMock() {
     if (p === '/api/auth/settings') { if ('secret' in body) authS.secret_set = !!body.secret; authS.enabled = authS.secret_set && !!body.redirect; return authS; }
     if (p === '/api/auth/sessions') { authS.sessions = []; return { ok: true }; }
     if (p === '/api/translate' && method === 'GET') return trx;
-    if (p === '/api/translate') { if ('key' in body) { trx.key_set = !!body.key; trx.key_hint = body.key ? '…' + body.key.slice(-4) : ''; } if ('limit' in body) trx.limit = body.limit; if (body.feed) trx.feed = body.feed; return trx; }
+    if (p === '/api/translate') { if ('key' in body) { trx.key_set = !!body.key; trx.key_hint = body.key ? '…' + body.key.slice(-4) : ''; } if ('limit' in body) trx.limit = body.limit; if (body.feed) trx.feed = body.feed; if ('feed_on' in body) trx.feed_on = body.feed_on; return trx; }
     if (p === '/api/translate/fill') { trx.usage.chars += 9800; return Object.assign({ filled: 0 }, trx); }
     if (p === '/api/translations' && method === 'GET') {
       const langs = ['en'].concat(String(settings.languages || '').split('\n').filter(x => x && x !== 'en')), lang = q.get('lang') || langs[1] || 'en';

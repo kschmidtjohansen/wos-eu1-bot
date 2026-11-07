@@ -1445,7 +1445,7 @@ class WosBot(discord.Client):
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
-        if message.guild and message.channel.id in translate.feed()["sources"]:
+        if message.guild and cfg("translate_feed_on") and message.channel.id in translate.feed()["sources"]:
             try:
                 await feed_translation(message)
             except Exception as exc:  # noqa: BLE001 – translation must never break the rest
@@ -2076,12 +2076,13 @@ async def translate_message(interaction: discord.Interaction, message: discord.M
     await interaction.followup.send(embed=e, ephemeral=True)
 
 
-async def fill_translations():
-    """Machine-translate the bot texts for every switched-on language that is still missing some (cheap when done)."""
+async def fill_translations(lang: Optional[str] = None):
+    """Machine-translate the bot texts that are still missing – only when an admin presses the button
+    (one language, or all switched-on languages)."""
     if not translate.key():
         return 0
     total = 0
-    for lg in store.languages():
+    for lg in ([lang] if lang else store.languages()):
         try:
             n = await translate.fill_language(lg)
         except translate.TranslateError as exc:
@@ -2325,7 +2326,6 @@ async def schedule_loop():
         snapshot_members()
         await expire_gift_codes()
         await check_info_tickets()
-        await fill_translations()
         await run_schedules()
     except Exception as exc:  # noqa: BLE001
         print(f"[schedule] {exc!r}")

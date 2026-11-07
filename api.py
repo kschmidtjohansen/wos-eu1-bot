@@ -760,6 +760,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         import translate
         k = translate.key()
         return {"key_set": bool(k), "key_hint": ("…" + k[-4:]) if k else "", "usage": translate.usage(),
+                "feed_on": bool(store.cfg("translate_feed_on")),
                 "limit": store.cfg("translate_monthly_limit"), "feed": {**translate.feed(),
                 "channel_id": str(translate.feed()["channel_id"]) if translate.feed()["channel_id"] else None,
                 "sources": [str(x) for x in translate.feed()["sources"]]}}
@@ -779,11 +780,13 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             store.put_raw("translate_key", k)
             if k:
                 try:
-                    out, _ = await translate.text("Hello, world", "da")
+                    out, _ = await translate.text("Hi", "da")
                 except translate.TranslateError as exc:
                     store.put_raw("translate_key", "")
                     raise ApiError(400, f"The key didn't work: {exc}")
             store.log_event("settings", "Google translation key " + ("saved" if k else "removed"), who_id(request), who(request))
+        if "feed_on" in data:
+            store.set_cfg("translate_feed_on", bool(data["feed_on"]))
         if "limit" in data:
             try:
                 store.set_cfg("translate_monthly_limit", int(data["limit"]))
@@ -810,7 +813,10 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         import translate
         if not translate.key():
             raise ApiError(400, "Add a Google translation key first.")
-        n = await hooks["fill_translations"]()
+        lang = str((await body_json(request)).get("lang") or "").lower() if request.can_read_body else ""
+        if lang and lang not in store.languages():
+            raise ApiError(400, "That language is not switched on.")
+        n = await hooks["fill_translations"](lang or None)
         return web.json_response({"filled": n, **translate_info()})
 
     @routes.put("/api/translations")

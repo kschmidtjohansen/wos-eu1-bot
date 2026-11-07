@@ -154,7 +154,8 @@ async def fill_language(lang: str) -> int:
     if lang == "en":
         return 0
     over, auto = store.translations(), auto_texts()
-    have = set((over.get(lang) or {})) | set(texts.DEFAULTS.get(lang, {})) | set(auto.get(lang) or {})
+    failed = set((auto.get("_failed") or {}).get(lang) or [])      # tried before and unusable – don't pay again
+    have = set((over.get(lang) or {})) | set(texts.DEFAULTS.get(lang, {})) | set(auto.get(lang) or {}) | failed
     todo = [k for k in texts.KEYS if k not in have]
     done = 0
     for i in range(0, len(todo), 60):
@@ -166,5 +167,7 @@ async def fill_language(lang: str) -> int:
             if texts.check_translation(k, t) is None:      # never keep a text with broken {placeholders}
                 mine[k] = t
                 done += 1
+            else:
+                auto.setdefault("_failed", {}).setdefault(lang, []).append(k)
         store.put_raw("translations_auto", texts.dumps(auto))
     return done

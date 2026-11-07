@@ -206,11 +206,14 @@ Messages that are already in the reader's language are never translated.
 2. Search for **Cloud Translation API** → open it → **Enable**.
 3. Search for **Credentials** → **Create credentials → API key**. Copy the key (it starts with `AIza`).
 4. Click **Edit API key** → under *API restrictions* choose **Restrict key** → tick **Cloud Translation API** → **Save**.
-5. Dashboard → **Translations** → paste the key → **Save key**. The bot texts are translated within a minute.
-6. Optional: on the same page choose a **feed channel** and tick the language channels to translate.
+5. Dashboard → **Translations** → paste the key → **Save key**.
+6. To translate the bot's own texts: pick a language in the editor and press **Translate missing … texts** (about 10,000 characters per language, once).
+7. Optional: the **translation feed** – choose a feed channel, tick the language channels and switch it on. It translates every message, so it uses the allowance fastest.
+
+Nothing is translated by itself – only when a player uses **Translate** on a message, or you press a button.
 
 **Cost:** the first 500,000 characters each month are free. The dashboard shows how much is used and stops at **450,000** by default,
-so it stays free. (Translating all bot texts into 18 languages once uses about 170,000.)
+so it stays free.
 
 ## Dashboard login with Discord (optional)
 

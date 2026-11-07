@@ -343,6 +343,7 @@ SCHEMA = {
     "drive_keep": {"type": "int", "default": 8, "min": 1, "max": 60},
     "languages": {"type": "lines", "default": "\n".join(_texts_langs), "max_lines": 30, "max_len": 10},
     "translate_monthly_limit": {"type": "int", "default": 450000, "min": 0, "max": 20000000},
+    "translate_feed_on": {"type": "bool", "default": False},
     "giftcodes_enabled": {"type": "bool", "default": False},
     "giftcodes_channel_id": {"type": "channel", "default": None},
     "giftcodes_ping": {"type": "choice", "default": "none", "choices": ["none", "here", "everyone", "role"]},
