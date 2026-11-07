@@ -23,10 +23,16 @@ DEFAULT_WELCOME_MESSAGE = (
     "You're member #{member_count}. Have a look around – and if you find a bug, "
     "use the 🐛 reaction in the bug report channel."
 )
-DEFAULT_PANEL_TEXT = (
+OLD_PANEL_TEXT = (
     "Found a bug or have an idea? React below:\n\n"
     "🐛 **Report a bug** – a private ticket opens where you answer a few questions.\n"
     "💡 **Create a suggestion** – a private ticket opens where you write your idea freely.\n\n"
+    "*Turn on DMs from server members to get updates on your reports.*"
+)
+DEFAULT_PANEL_TEXT = (
+    "Found a bug or have an idea? Press a button below – a short form opens that only you can see.\n\n"
+    "🐛 **Report a bug** – where it is, what happened, and a screenshot if you have one.\n"
+    "💡 **Suggest an idea** – tell us what you would like to see in the game.\n\n"
     "*Turn on DMs from server members to get updates on your reports.*"
 )
 
@@ -269,6 +275,8 @@ def _env_int(*names) -> Optional[int]:
     return None
 
 
+from texts import SERVER_LANGUAGES as _texts_langs  # noqa: E402
+
 # Everything the dashboard may change. Channel defaults come from .env (optional).
 SCHEMA = {
     "report_channel_id": {"type": "channel", "default": _env_int("REPORT_CHANNEL_ID")},
@@ -308,11 +316,15 @@ SCHEMA = {
     "points_fixed": {"type": "int", "default": 3, "min": 0, "max": 100},
     "points_suggestion": {"type": "int", "default": 2, "min": 0, "max": 100},
     "update_notice_enabled": {"type": "bool", "default": True},
+    "report_style": {"type": "choice", "default": "form", "choices": ["form", "ticket"]},
+    "info_remind_hours": {"type": "int", "default": 48, "min": 0, "max": 720},
+    "info_close_hours": {"type": "int", "default": 72, "min": 0, "max": 720},
     "default_language": {"type": "text", "default": "en", "min": 2, "max": 10},
     "drive_enabled": {"type": "bool", "default": True},
     "drive_every_days": {"type": "int", "default": 7, "min": 1, "max": 30},
     "drive_keep": {"type": "int", "default": 8, "min": 1, "max": 60},
-    "languages": {"type": "lines", "default": "en\npl", "max_lines": 10, "max_len": 10},
+    "languages": {"type": "lines", "default": "\n".join(_texts_langs), "max_lines": 30, "max_len": 10},
+    "translate_monthly_limit": {"type": "int", "default": 450000, "min": 0, "max": 20000000},
     "giftcodes_enabled": {"type": "bool", "default": False},
     "giftcodes_channel_id": {"type": "channel", "default": None},
     "giftcodes_ping": {"type": "choice", "default": "none", "choices": ["none", "here", "everyone", "role"]},
@@ -1265,8 +1277,14 @@ def T(key: str, lang: Optional[str] = None, **kw) -> str:
     """A player-facing text in the given language: the admins' version first, then the built-in one, then English."""
     lang = lang or default_language()
     over = translations()
+    if lang != "en":
+        try:
+            auto = json.loads(get_raw("translations_auto") or "{}").get(lang) or {}
+        except ValueError:
+            auto = {}
     for lg in (lang, "en"):
-        txt = (over.get(lg) or {}).get(key) or _texts.DEFAULTS.get(lg, {}).get(key)
+        txt = ((over.get(lg) or {}).get(key) or _texts.DEFAULTS.get(lg, {}).get(key)
+               or (auto.get(key) if lg != "en" else None))
         if txt:
             return _texts.fill(txt, **kw)
     return key
@@ -1313,3 +1331,14 @@ def set_user_language(user_id: int, lang: Optional[str]):
 
 def language_counts() -> dict:
     return {r["lang"]: r["n"] for r in db.execute("SELECT lang, COUNT(*) AS n FROM user_lang GROUP BY lang")}
+
+
+def add_server_languages():
+    """Once: switch on the languages of the server's text channels (keeps any the admins added)."""
+    if get_raw("langs_v2") == "1":
+        return
+    cur = languages()
+    merged = cur + [x for x in _texts.SERVER_LANGUAGES if x not in cur]
+    if merged != cur and db.execute("SELECT 1 FROM settings WHERE key='languages'").fetchone():
+        set_cfg("languages", "\n".join(merged))
+    put_raw("langs_v2", "1")

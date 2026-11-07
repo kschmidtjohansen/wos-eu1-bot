@@ -169,11 +169,17 @@
 .w-dp-foot{font-size:12px;color:#b5bac1;margin-top:10px}
 .w-dp-reacts{margin:8px 0 0 46px;display:flex;gap:6px}
 .w-dp-reacts span{background:#2b2d31;border:1px solid #3f4147;border-radius:8px;padding:2px 9px;font-size:13px}
+.w-dp-reacts .w-dp-btn{background:#4e5058;border:0;border-radius:4px;padding:6px 14px;font-size:14px;font-weight:500;color:#fff}
+.w-dp-reacts .w-dp-btn.pri{background:#5865f2}
 @media (max-width:520px){.w-dp-embed,.w-dp-reacts{margin-left:0}}
 .w-live{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--w-muted)}
 
 /* ---- bot profile ---- */
 .w-avrow{display:flex;align-items:center;gap:18px;margin-bottom:20px;flex-wrap:wrap}
+.w-bprev{position:relative;margin-bottom:58px}
+.w-bannerbox{height:150px;border-radius:16px;background:linear-gradient(180deg,#d8753a,#f4c07c);background-size:cover;background-position:center;border:1px solid var(--w-border)}
+.w-avover{position:absolute;left:22px;bottom:-48px;border:6px solid var(--w-surface)}
+.w-servart{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:14px 16px;border-radius:14px;background:var(--w-accent-soft);margin-bottom:20px}
 .w-avbig{width:96px;height:96px;border-radius:50%;object-fit:cover;background:var(--w-surface-2);border:1px solid var(--w-border)}
 
 /* ---- log ---- */
@@ -286,8 +292,8 @@
 .w-codebody{min-width:0;flex:1}
 .w-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:16px;font-weight:700;letter-spacing:.04em;padding:4px 10px;border-radius:9px;background:var(--w-surface-2);border:1px dashed var(--w-border);overflow-wrap:anywhere}
 .w-coderow.new .w-code{border-color:var(--w-accent);color:var(--w-accent)}
-.w-langs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-.w-lang{padding:12px 14px;border:1px solid var(--w-border);border-radius:14px;background:var(--w-surface-2);display:flex;flex-direction:column}
+.w-langs{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.w-lang{padding:10px 12px;font-size:14px;border:1px solid var(--w-border);border-radius:14px;background:var(--w-surface-2);display:flex;flex-direction:column}
 .w-lang.def{border-color:var(--w-accent)}
 .w-tr{padding:14px 0;border-top:1px solid var(--w-border)}
 .w-tr:first-child{border-top:0}
@@ -297,6 +303,12 @@
 .w-tr-in{min-height:0;font-size:14px}
 .w-tr.changed .w-tr-in{border-color:var(--w-accent)}
 .w-tr code{font-size:12px;background:var(--w-surface-2);padding:1px 5px;border-radius:5px}
+.w-quick{display:inline-flex;gap:4px}
+.w-qbtn{width:34px;height:32px;border-radius:9px;border:1px solid var(--w-border);background:var(--w-surface);cursor:pointer;font-size:15px;line-height:1;display:grid;place-items:center;transition:transform .1s,border-color .15s}
+.w-qbtn:hover{border-color:var(--w-accent);transform:scale(1.08)}
+.w-qbtn:disabled{opacity:.5}
+.w-chanpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 14px;max-height:260px;overflow:auto;padding:10px 12px;border:1px solid var(--w-border);border-radius:12px;background:var(--w-surface-2)}
+.w-chanpick label{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .w-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border-radius:14px;background:var(--w-bad-soft);border:1px solid color-mix(in srgb,var(--w-bad) 35%,transparent)}
 .w-bugrow.sel[aria-pressed="true"]{border-color:var(--w-bad);background:var(--w-bad-soft)}
 .w-form2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
@@ -362,7 +374,7 @@
 .w-chip[aria-pressed="true"]{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--w-accent) 60%,transparent)}
 .w-toolbar{gap:8px}
 .w-search{max-width:none;flex:2 1 260px}
-.w-bugrow{position:relative;padding:14px 14px 14px 18px;border:1px solid var(--w-border);border-radius:14px;margin-bottom:8px;background:var(--w-surface-2);grid-template-columns:56px minmax(0,1fr) auto 84px;transition:border-color .15s,transform .15s,background .15s}
+.w-bugrow{position:relative;padding:14px 14px 14px 18px;border:1px solid var(--w-border);border-radius:14px;margin-bottom:8px;background:var(--w-surface-2);grid-template-columns:56px minmax(0,1fr) auto auto 84px;transition:border-color .15s,transform .15s,background .15s}
 .w-bugrow:first-child{border-top:1px solid var(--w-border)}
 .w-bugrow:hover{transform:translateX(2px);border-color:color-mix(in srgb,var(--w-accent) 55%,var(--w-border));background:var(--w-surface-2)}
 .w-bugrow::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:4px;border-radius:0 4px 4px 0;background:var(--w-border)}
@@ -398,6 +410,7 @@
   .w-pad{padding:18px}
   .w-tile b{font-size:28px}
   .w-bugrow{grid-template-columns:48px minmax(0,1fr)}
+  .w-bugrow .w-quick{grid-column:2}
 }
 @media (max-width:520px){.w-tiles,.w-tiles4{grid-template-columns:repeat(2,minmax(0,1fr))}.w-tile{padding:14px}.w-tile b{font-size:26px}.w-sidefoot .w-btn{padding:7px 4px;font-size:13px}}
 @media (prefers-reduced-motion:reduce){.wosd *{transition:none !important;animation:none !important}}
@@ -502,7 +515,7 @@ const FEATURE_KEYS = ['bugs_enabled', 'suggestions_enabled', 'investigate_enable
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
   'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'bounty_enabled', 'points_accepted', 'points_fixed', 'points_suggestion', 'update_notice_enabled',
-  'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'drive_enabled', 'drive_every_days', 'drive_keep'];
+  'report_style', 'info_remind_hours', 'info_close_hours', 'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'drive_enabled', 'drive_every_days', 'drive_keep'];
 const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'];
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
 const PLACEHOLDERS = [['{user}', 'Tags the new member'], ['{username}', 'Their name'], ['{server}', 'Server name'], ['{member_count}', 'Number of members']];
@@ -634,9 +647,9 @@ function previewHtml() {
     <div class="w-dp-embed">
       <div class="w-dp-title">${d.title || 'Title'}</div>
       <div class="w-dp-desc">${raw(md(d.text || 'Your message appears here.'))}</div>
-      <div class="w-dp-foot">🐛 Report a bug  ·  💡 Create a suggestion  ·  ${b.name}</div>
+      <div class="w-dp-foot">${b.name}</div>
     </div>
-    <div class="w-dp-reacts"><span>🐛 1</span><span>💡 1</span></div>
+    <div class="w-dp-reacts"><span class="w-dp-btn pri">🐛 Report a bug</span><span class="w-dp-btn">💡 Suggest an idea</span></div>
   </div>`;
 }
 function viewPanel() {
@@ -701,7 +714,8 @@ function viewFeatures() {
   return html`
     <div class="w-pagehead"><h2>Features</h2><p>Switch parts of the bot on or off and set limits.</p></div>
     <section class="w-card w-pad"><div class="w-group-title">Bug reports</div>
-      ${toggleRow('bugs_enabled', 'Bug reports (🐛)', 'When off, players who react 🐛 are told that reports are closed.')}
+      ${toggleRow('bugs_enabled', 'Bug reports (🐛)', 'When off, players who press “Report a bug” are told that reports are closed.')}
+      ${selectRow('report_style', 'How players report', '“Form” = one short form with a screenshot upload (recommended). “Ticket” = the older private thread with step-by-step questions.', ['form', 'ticket'])}
       ${numberRow('report_cooldown_minutes', 'Cooldown between reports', 'How long a player must wait after submitting a bug before sending another. 0 = no limit.', 0, 1440, 'minutes')}
       ${toggleRow('delete_ticket_on_close', 'Delete tickets after submitting', 'Off = the finished ticket thread is archived and locked instead of deleted.')}
       ${toggleRow('ticket_details_required', 'Require area and title', 'Players must pick an area and write a short title before they can submit.')}
@@ -723,6 +737,8 @@ function viewFeatures() {
     </section>
     <section class="w-card w-pad"><div class="w-group-title">Moderation & messages</div>
       ${toggleRow('investigate_enabled', 'Investigate tickets (🔍)', 'Lets moderators open a private ticket with the reporter to ask for more information.')}
+      ${numberRow('info_remind_hours', 'Remind the reporter after', 'If a moderator’s question in an info ticket is not answered, the player is tagged and gets a DM. 0 = never.', 0, 720, 'hours')}
+      ${numberRow('info_close_hours', 'Close unanswered info tickets after', 'The ticket is closed and the bug goes back to the moderators as New. 0 = never.', 0, 720, 'hours')}
       ${toggleRow('dm_notifications', 'Send status updates by DM', 'Tell players by DM when their bug or suggestion is handled.')}
       ${toggleRow('update_notice_enabled', 'Announce updates', 'After “Update bugbot”, post the new version and what changed in the admin channel.')}
     </section>
@@ -818,12 +834,21 @@ function viewBot() {
   return html`
     <div class="w-pagehead"><h2>Bot profile</h2><p>How the bot looks and what it shows next to its name.</p></div>
     <section class="w-card w-pad">
+      <div class="w-bprev"><div class="w-bannerbox" id="bnprev" style="${d.banner || b.banner_url ? 'background-image:url(' + (d.banner || b.banner_url) + ')' : ''}"></div>
+        <img class="w-avbig w-avover" src="${d.avatar || b.avatar_url}" alt=""></div>
+      <div class="w-servart"><div><b>Use the server’s icon and banner</b><div class="w-hint">Copies ${b.server_icon ? 'the server icon' : 'the WOS globe icon'} and
+        ${b.server_banner ? 'the server banner' : 'an orange banner matching the server'} to the bot, so it looks like the server. Applied at once.</div></div>
+        <button class="w-btn primary" data-act="serverArt">Use server look</button></div>
       <div class="w-avrow">
         <img class="w-avbig" id="avprev" src="${d.avatar || b.avatar_url}" alt="Bot avatar">
         <div><div class="w-label">Avatar</div>
           <div class="w-hint" style="margin-bottom:8px">PNG, JPG or WebP. It is cropped to a square.</div>
           <button class="w-btn small" data-act="pickAvatar">${icon('upload')} Upload new image</button>
-          <input type="file" id="avfile" accept="image/png,image/jpeg,image/webp" hidden></div>
+          <input type="file" id="avfile" accept="image/png,image/jpeg,image/webp" hidden>
+          <div class="w-label" style="margin-top:14px">Banner</div>
+          <div class="w-hint" style="margin-bottom:8px">Shown at the top of the bot’s profile. Cropped to 680 × 240.</div>
+          <button class="w-btn small" data-act="pickBanner">${icon('upload')} Upload banner</button>
+          <input type="file" id="bnfile" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div>
       </div>
       <div class="w-grid2" style="gap:0 20px">
         <div class="w-field"><label class="w-label" for="b-name">Bot username</label>
@@ -852,7 +877,7 @@ const BUG_LABEL = { new: 'New', investigating: 'Info ticket', passed: 'With admi
   fixed: 'Fixed', rejected: 'Rejected', admin_rejected: 'Rejected by admins' };
 const BUG_BADGE = { new: 'todo', investigating: 'warn', passed: 'info', being_investigated: 'warn', fixed: 'ok', rejected: 'bad', admin_rejected: 'bad' };
 const bugBadge = s => html`<span class="w-badge ${BUG_BADGE[s] || 'todo'}">${BUG_LABEL[s] || s}</span>`;
-const ACTION_LABEL = { passed: 'Passed to admins', rejected: 'Rejected', investigating: 'Opened an info ticket', being_investigated: 'Marked as being investigated',
+const ACTION_LABEL = { ticket_closed: 'Info ticket closed – no answer', passed: 'Passed to admins', rejected: 'Rejected', investigating: 'Opened an info ticket', being_investigated: 'Marked as being investigated',
   fixed: 'Marked as fixed', admin_rejected: 'Rejected (admins)', replied: 'Sent a message to the reporter' };
 
 const SEV = { critical: '🚨 Critical', major: '🟠 Major', minor: '🟡 Minor' };
@@ -865,10 +890,19 @@ function bugChips() {
 function bugList() {
   const B = S.bugs;
   if (!B.items.length) return html`<div class="w-empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`;
-  return html`${B.items.map(b => html`<button class="w-bugrow${B.selecting ? ' sel' : ''}" data-act="${B.selecting ? 'bugPick' : 'bugOpen'}" data-id="${b.id}" data-sev="${b.severity || ''}"${B.selecting ? html` aria-pressed="${String(B.sel.includes(b.id))}"` : ''}>
+  return html`${B.items.map(b => html`<div class="w-bugrow${B.selecting ? ' sel' : ''}" role="button" tabindex="0" data-act="${B.selecting ? 'bugPick' : 'bugOpen'}" data-id="${b.id}" data-sev="${b.severity || ''}"${B.selecting ? html` aria-pressed="${String(B.sel.includes(b.id))}"` : ''}>
     <b>${B.selecting ? (B.sel.includes(b.id) ? '☑' : '☐') : ''} #${b.id}</b>
     <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}</div></div>
-    ${bugBadge(b.status)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></button>`)}`;
+    ${bugBadge(b.status)}${B.selecting ? html`<span></span>` : quickBtns(b)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}`;
+}
+// The same choices as the reaction buttons in Discord: mod channel (new bugs) and admin channel (passed bugs).
+const QUICK = {
+  mod: [['passed', '✅', 'Pass to admins'], ['rejected', '❌', 'Reject (duplicate / works as intended)']],
+  admin: [['being_investigated', '🔍', 'Being investigated'], ['fixed', '✅', 'Fixed'], ['admin_rejected', '❌', 'Reject (admins)']]
+};
+function quickBtns(b) {
+  const set = ['new', 'investigating'].includes(b.status) ? QUICK.mod : ['passed', 'being_investigated'].includes(b.status) ? QUICK.admin : [];
+  return html`<span class="w-quick">${set.filter(q => q[0] !== b.status).map(q => html`<button class="w-qbtn" data-act="bugQuick" data-id="${b.id}" data-s="${q[0]}" title="${q[2]}" aria-label="#${b.id}: ${q[2]}">${q[1]}</button>`)}</span>`;
 }
 function viewBugs() {
   const B = S.bugs;
@@ -885,7 +919,7 @@ function viewBugs() {
         <div class="w-spacer"></div>
         <button class="w-btn small" data-act="export" data-what="bugs.csv">${icon('upload')} Export bugs (CSV)</button>
         <button class="w-btn small" data-act="export" data-what="suggestions.csv">${icon('upload')} Export suggestions</button>
-        <button class="w-btn small" data-act="bugSelect" id="bugselbtn">${B.selecting ? 'Cancel selecting' : 'Select to delete'}</button>
+        <button class="w-btn small" data-act="bugSelect" id="bugselbtn">${B.selecting ? 'Cancel selecting' : 'Select several'}</button>
       </div>
       <div id="bugselbar">${selBar()}</div>
       <div id="buglist">${bugList()}</div>
@@ -896,6 +930,10 @@ function selBar() {
   const B = S.bugs; if (!B.selecting) return '';
   return html`<div class="w-selbar"><b>${B.sel.length} selected</b><span class="w-hint">Click bugs to select them.</span><div class="w-spacer"></div>
     <button class="w-btn small" data-act="bugSelAll">Select all shown</button>
+    <select class="w-select w-fsel" id="sel-mark" aria-label="Mark selected bugs as"><option value="">Mark as…</option>
+      <option value="passed">✅ Passed to admins</option><option value="being_investigated">🔍 Being investigated</option><option value="fixed">✅ Fixed</option>
+      <option value="admin_rejected">❌ Rejected by admins</option><option value="rejected">❌ Rejected</option></select>
+    <button class="w-btn small" data-act="bugMarkSel" ${B.sel.length ? '' : 'disabled'}>Mark</button>
     <label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="sel-discord" checked> Also delete their Discord messages</label>
     <button class="w-btn small danger" data-act="bugDelSel" ${B.sel.length ? '' : 'disabled'}>Delete ${B.sel.length || ''} selected</button></div>`;
 }
@@ -903,7 +941,7 @@ function renderBugList() {
   const l = $('#buglist'); if (!l) return;
   l.innerHTML = String(bugList()); $('#bugchips').innerHTML = String(bugChips());
   const sb = $('#bugselbar'); if (sb) sb.innerHTML = String(selBar());
-  const btn = $('#bugselbtn'); if (btn) btn.textContent = S.bugs.selecting ? 'Cancel selecting' : 'Select to delete';
+  const btn = $('#bugselbtn'); if (btn) btn.textContent = S.bugs.selecting ? 'Cancel selecting' : 'Select several';
   const m = $('#bugmore'); if (m) m.hidden = S.bugs.items.length >= S.bugs.total;
 }
 async function loadBugs(reset) {
@@ -1103,13 +1141,14 @@ function viewTranslations() {
   return html`
     <div class="w-pagehead"><h2>Translations</h2><p>Every message players get from the bot – tickets, buttons, DMs, gift codes. Each player gets their own language:
       the one they pick in a ticket or with <b>/language</b>, otherwise their Discord language, otherwise the default below.</p></div>
+    ${autoCard()}
     <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:12px">Languages</h3>
       <div class="w-langs">${D.languages.map(l => html`<div class="w-lang ${l.code === D.default ? 'def' : ''}"><b>${l.name}</b>
-        <span class="w-hint">${l.code}${l.code === D.default ? ' · default' : ''} · ${l.players} player${l.players === 1 ? '' : 's'}${l.custom ? ' · ' + l.custom + ' edited' : ''}${!l.builtin && l.code !== 'en' ? ' · you translate' : ''}</span>
-        <div class="w-inline" style="gap:6px;margin-top:8px">${l.code !== D.default ? html`<button class="w-btn small" data-act="langDefault" data-l="${l.code}">Make default</button>` : ''}
-          ${l.code !== 'en' ? html`<button class="w-btn small danger" data-act="langRemove" data-l="${l.code}">Remove</button>` : ''}</div></div>`)}</div>
+        <span class="w-hint">${l.code}${l.code === D.default ? ' · default' : ''} · ${l.players} player${l.players === 1 ? '' : 's'}${l.custom ? ' · ' + l.custom + ' edited' : ''}${l.auto ? ' · ' + l.auto + ' auto-translated' : !l.builtin && l.code !== 'en' ? ' · not translated yet' : ''}</span>
+        <div class="w-inline" style="gap:12px;margin-top:6px">${l.code !== D.default ? html`<button class="w-linkbtn" data-act="langDefault" data-l="${l.code}">Make default</button>` : ''}
+          ${l.code !== 'en' ? html`<button class="w-linkbtn" style="color:var(--w-bad)" data-act="langRemove" data-l="${l.code}">Remove</button>` : ''}</div></div>`)}</div>
       ${addable.length ? html`<div class="w-inline" style="margin-top:14px"><select class="w-select" id="tr-add" style="max-width:220px" aria-label="Language to add">${addable.map(k => html`<option value="${k.code}">${k.name}</option>`)}</select>
-        <button class="w-btn" data-act="langAdd">Add language</button><span class="w-hint">English and Polish are translated already. Other languages start in English until you translate them.</span></div>` : ''}
+        <button class="w-btn" data-act="langAdd">Add language</button><span class="w-hint">With a Google key, new languages are translated automatically. Without one they use English until you translate them here.</span></div>` : ''}
     </section>
     <section class="w-card w-pad">
       <div class="w-toolbar">
@@ -1118,7 +1157,7 @@ function viewTranslations() {
         <input class="w-input w-search" id="tr-q" type="search" placeholder="Search texts…" value="${R.q}" aria-label="Search texts">
         <span class="w-hint">${missing ? missing + ' not translated yet' : 'All ' + D.keys.length + ' texts translated'}</span>
       </div>
-      <div id="tr-list">${list.map(k => { const v = trValue(k), st = k.key in R.dirty ? 'changed' : k.custom != null ? 'custom' : v ? 'built-in' : 'missing';
+      <div id="tr-list">${list.map(k => { const v = trValue(k), st = k.key in R.dirty ? 'changed' : k.custom != null ? 'custom' : k.auto ? 'auto-translated' : v ? 'built-in' : 'missing';
         return html`<div class="w-tr ${st}"><div class="w-tr-head"><span class="w-hint">${k.group}</span>
           <span class="w-badge ${st === 'missing' ? 'warn' : st === 'built-in' ? 'todo' : 'info'}">${st === 'missing' ? 'Uses English' : st}</span>
           ${k.custom != null || k.key in R.dirty ? html`<button class="w-linkbtn" data-act="trReset" data-k="${k.key}">${k.builtin || isEn ? 'Reset to built-in' : 'Clear'}</button>` : ''}</div>
@@ -1132,7 +1171,38 @@ function viewTranslations() {
 }
 async function loadTr(lang) {
   S.tr = S.tr || { q: '', group: '', dirty: {} };
-  S.tr.data = await call('GET', '/api/translations' + (lang ? '?lang=' + encodeURIComponent(lang) : '')); S.tr.dirty = {};
+  const [d, x] = await Promise.all([call('GET', '/api/translations' + (lang ? '?lang=' + encodeURIComponent(lang) : '')), call('GET', '/api/translate')]);
+  S.tr.data = d; S.tr.x = x; S.tr.dirty = {};
+}
+function autoCard() {
+  const X = S.tr.x; if (!X) return '';
+  const pct = X.limit ? Math.min(100, Math.round(X.usage.chars / X.limit * 100)) : 100, F = X.feed;
+  const chans = S.channels.filter(c => c.id !== F.channel_id);
+  return html`<section class="w-card w-pad"><h3 class="w-h3">Automatic translation (Google)</h3>
+    <p class="w-sub" style="margin:4px 0 12px">Translates the bot’s texts into every language below, and lets anyone right-click a message → <b>Apps → Translate</b> to read it in their own Discord language (only they see it).
+      Messages already in that language are not translated. Free up to 500,000 characters a month – the limit below stops it before anything costs money.</p>
+    ${X.key_set ? html`
+      <div class="w-check"><div class="w-check-ic ok">${icon('check')}</div><div><div class="w-check-label">Google key saved (${X.key_hint})</div>
+        <div class="w-check-detail">${X.usage.chars.toLocaleString()} of ${X.limit.toLocaleString()} characters used in ${X.usage.month}</div>
+        <div class="w-meter-bar ${pct >= 90 ? 'bad' : pct >= 75 ? 'warn' : 'ok'}" style="margin-top:6px;max-width:360px"><i style="width:${pct}%"></i></div></div>
+        <button class="w-btn small danger" data-act="trKeyRemove">Remove key</button></div>
+      <div class="w-inline" style="margin-top:10px"><label class="w-label" for="trx-limit" style="margin:0">Monthly limit</label>
+        <input class="w-input w-num" id="trx-limit" type="number" min="0" max="20000000" step="10000" value="${X.limit}" style="width:140px"><span class="w-hint">characters</span>
+        <button class="w-btn small" data-act="trLimit">Save limit</button><div class="w-spacer"></div>
+        <button class="w-btn small primary" data-act="trFill">Translate missing bot texts now</button></div>`
+    : html`<div class="w-inline"><input class="w-input" id="trx-key" placeholder="Google API key (AIza…)" autocomplete="off" style="max-width:360px">
+        <button class="w-btn primary" data-act="trKeySave">Save key</button></div>
+      <div class="w-hint" style="margin-top:6px">How to get the key: bot guide → “Automatic translation”.</div>`}
+    <div class="w-sect"><span class="w-label">Translation feed</span>
+      <p class="w-hint" style="margin-bottom:10px">Messages from the language channels you tick are posted, translated, in one feed channel – so staff can read every channel in one language. Messages already in that language are skipped.</p>
+      <div class="w-form2"><div class="w-field"><label class="w-label" for="trx-feed">Feed channel</label>
+        <select class="w-select" id="trx-feed"><option value="">– off –</option>${channelOptions(F.channel_id)}</select></div>
+        <div class="w-field"><label class="w-label" for="trx-target">Translate into</label>
+        <select class="w-select" id="trx-target">${S.tr.data.known.map(k => html`<option value="${k.code}" ${k.code === F.target ? 'selected' : ''}>${k.name}</option>`)}</select></div></div>
+      <div class="w-label" style="margin:4px 0 6px">Channels to translate (${F.sources.length})</div>
+      <div class="w-chanpick">${chans.map(c => html`<label><input type="checkbox" class="trx-src" value="${c.id}" ${F.sources.includes(c.id) ? 'checked' : ''}> #${c.name}${c.category ? html` <span class="w-hint">${c.category}</span>` : ''}</label>`)}</div>
+      <div class="w-actions"><button class="w-btn" data-act="trFeedSave">Save feed</button></div></div>
+  </section>`;
 }
 async function setLanguages(langs, def) {
   const body = { languages: langs.join('\n') }; if (def) body.default_language = def;
@@ -1540,7 +1610,7 @@ async function loadAll() {
   S.panelInfo = st.panel; S.channels = ch.channels; S.health = health; S.bot = bot.profile;
   S.panelDraft = { title: st.settings.panel_title, text: st.settings.panel_text, channel_id: st.settings.report_channel_id };
   S.botDraft = { username: S.bot.username, nickname: S.bot.nickname || '', status: S.bot.status,
-    activity_type: S.bot.activity_type, activity_text: S.bot.activity_text || '', avatar: null };
+    activity_type: S.bot.activity_type, activity_text: S.bot.activity_text || '', avatar: null, banner: null };
 }
 async function connect(base, key, demo) {
   S.demo = !!demo; S.base = base; S.key = key;
@@ -1603,17 +1673,31 @@ async function saveBot(btn) {
   if (d.activity_type !== b.activity_type) body.activity_type = d.activity_type;
   if (d.activity_text.trim() !== (b.activity_text || '')) body.activity_text = d.activity_text.trim();
   if (d.avatar) body.avatar = d.avatar;
+  if (d.banner) body.banner = d.banner;
   if (!Object.keys(body).length) return toast('Nothing to save – no changes yet.');
   busy(btn, true, 'Saving…');
   try {
     const r = await call('PUT', '/api/bot', body);
     S.bot = r.profile; S.overview = await call('GET', '/api/overview');
     S.botDraft = { username: S.bot.username, nickname: S.bot.nickname || '', status: S.bot.status,
-      activity_type: S.bot.activity_type, activity_text: S.bot.activity_text || '', avatar: null };
+      activity_type: S.bot.activity_type, activity_text: S.bot.activity_text || '', avatar: null, banner: null };
     renderApp();
     (r.warnings || []).forEach(w => toast(w, 'warn'));
     toast((r.warnings || []).length ? 'Saved, with warnings.' : 'Bot profile saved.');
   } catch (e) { busy(btn, false); toast(e.message, 'err'); }
+}
+function cropBanner(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const W = 1360, H = 480, r = Math.max(W / img.width, H / img.height), c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      c.getContext('2d').drawImage(img, (W - img.width * r) / 2, (H - img.height * r) / 2, img.width * r, img.height * r);
+      URL.revokeObjectURL(url); resolve(c.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error("That file isn't a readable image."));
+    img.src = url;
+  });
 }
 function cropAvatar(file) {
   return new Promise((resolve, reject) => {
@@ -1642,6 +1726,15 @@ root.addEventListener('click', async e => {
     else if (act === 'publish') publishPanel(el);
     else if (act === 'saveBot') saveBot(el);
     else if (act === 'pickAvatar') $('#avfile').click();
+    else if (act === 'pickBanner') $('#bnfile').click();
+    else if (act === 'serverArt') {
+      busy(el, true, 'Applying…');
+      try {
+        const r = await call('PUT', '/api/bot', { use_server_art: true });
+        S.bot = r.profile; S.overview = await call('GET', '/api/overview'); renderApp();
+        (r.warnings || []).forEach(w => toast(w, 'warn')); if (!(r.warnings || []).length) toast('The bot now uses the server’s icon and banner.');
+      } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
     else if (act === 'kind') { S.log.kind = el.dataset.kind; $$('.w-chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.kind === S.log.kind))); loadLogs(true); }
     else if (act === 'ins') {
       const ta = $('#w-msg'), ph = el.dataset.ph, st = ta.selectionStart == null ? ta.value.length : ta.selectionStart,
@@ -1656,6 +1749,27 @@ root.addEventListener('click', async e => {
     else if (act === 'bugsRefresh') loadBugs(true);
     else if (act === 'bugsMore') loadBugs(false);
     else if (act === 'bugOpen') await openBug(parseInt(el.dataset.id, 10));
+    else if (act === 'trKeySave' || act === 'trKeyRemove') {
+      const key = act === 'trKeySave' ? $('#trx-key').value.trim() : '';
+      if (act === 'trKeySave' && !key) return toast('Paste the key first.', 'err');
+      busy(el, true, act === 'trKeySave' ? 'Testing the key…' : 'Removing…');
+      try {
+        S.tr.x = await call('PUT', '/api/translate', { key }); renderMain();
+        toast(key ? 'Key works and is saved. The bot texts are being translated (about a minute).' : 'Key removed.');
+        if (key) call('POST', '/api/translate/fill').then(() => loadTr(S.tr.data.lang)).then(renderMain).catch(err => toast(err.message, 'err'));
+      } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'trLimit') { try { S.tr.x = await call('PUT', '/api/translate', { limit: parseInt($('#trx-limit').value, 10) || 0 }); toast('Limit saved.'); renderMain(); } catch (err) { toast(err.message, 'err'); } }
+    else if (act === 'trFill') {
+      busy(el, true, 'Translating…');
+      try { const r = await call('POST', '/api/translate/fill'); toast(r.filled ? 'Translated ' + r.filled + ' texts.' : 'Everything is translated already.'); await loadTr(S.tr.data.lang); renderMain(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'trFeedSave') {
+      const feed = { channel_id: $('#trx-feed').value || null, target: $('#trx-target').value, sources: $$('.trx-src').filter(c => c.checked).map(c => c.value) };
+      if (feed.sources.length && !feed.channel_id) return toast('Choose the feed channel first.', 'err');
+      try { S.tr.x = await call('PUT', '/api/translate', { feed }); toast('Translation feed saved.'); renderMain(); } catch (err) { toast(err.message, 'err'); }
+    }
     else if (act === 'trSave') {
       busy(el, true, 'Saving…');
       try { await call('PUT', '/api/translations', { lang: S.tr.data.lang, items: S.tr.dirty }); toast('Translations saved – the bot uses them right away.'); await loadTr(S.tr.data.lang); renderMain(); }
@@ -1724,6 +1838,21 @@ root.addEventListener('click', async e => {
         const r = await call('POST', '/api/suggestions/delete', { ids: S.sugs.sel, discord: $('#sug-discord').checked });
         toast('Deleted ' + r.deleted + ' suggestion' + (r.deleted === 1 ? '' : 's') + '.'); S.sugs.selecting = false; S.sugs.sel = []; loadSugs(true);
       } catch (err) { busy(el, false); delete el.dataset.armed; toast(err.message, 'err'); }
+    }
+    else if (act === 'bugQuick') {
+      e.stopPropagation(); busy(el, true, '…');
+      try {
+        const r = await call('PUT', '/api/bugs/' + el.dataset.id, { status: el.dataset.s });
+        toast('#' + r.id + ' → ' + (BUG_LABEL[r.status] || r.status) + '. Discord and the reporter are updated.'); loadBugs(true);
+      } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'bugMarkSel') {
+      const st = $('#sel-mark').value, ids = S.bugs.sel.slice();
+      if (!st) return toast('Choose what to mark them as.', 'err');
+      busy(el, true, 'Marking…'); let ok = 0; const bad = [];
+      for (const id of ids) { try { await call('PUT', '/api/bugs/' + id, { status: st }); ok++; } catch (err) { bad.push('#' + id + ': ' + err.message); } }
+      toast('Marked ' + ok + ' bug' + (ok === 1 ? '' : 's') + ' as ' + BUG_LABEL[st] + '.'); bad.slice(0, 3).forEach(m => toast(m, 'warn'));
+      S.bugs.selecting = false; S.bugs.sel = []; loadBugs(true);
     }
     else if (act === 'bugSelect') { S.bugs.selecting = !S.bugs.selecting; S.bugs.sel = []; renderBugList(); }
     else if (act === 'bugPick') { const id = parseInt(el.dataset.id, 10), L = S.bugs.sel, i = L.indexOf(id); if (i >= 0) L.splice(i, 1); else L.push(id); renderBugList(); }
@@ -1867,7 +1996,10 @@ async function exportCsv(what) {
   root.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
   toast('Downloaded ' + what + '.');
 }
-root.addEventListener('keydown', e => { if (e.key === 'Escape' && S.detail) closeModal(); });
+root.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && S.detail) closeModal();
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.w-bugrow[role=button]')) { e.preventDefault(); e.target.click(); }
+});
 root.addEventListener('submit', e => {
   const f = e.target.closest('[data-form="login"]'); if (!f) return;
   e.preventDefault();
@@ -1880,6 +2012,7 @@ root.addEventListener('submit', e => {
 });
 let logTimer;
 function onInput(e) {
+  if ((e.target.id === 'bnfile' || e.target.id === 'avfile') && e.type !== 'change') return;   // file pickers fire both events
   const el = e.target;
   if (el.dataset.k) {                                   // channels + features
     const k = el.dataset.k; let v;
@@ -1920,6 +2053,10 @@ function onInput(e) {
   } else if (el.id === 'm-canned') {
     const r = (S.replies || []).find(x => String(x.id) === el.value); if (r) $('#m-reply').value = r.text;
   } else if (el.id === 'logauto') { S.log.auto = el.checked; }
+  else if (el.id === 'bnfile' && el.files[0]) {
+    cropBanner(el.files[0]).then(url => { S.botDraft.banner = url; $('#bnprev').style.backgroundImage = 'url(' + url + ')'; toast('New banner ready – press “Save profile”.'); })
+      .catch(err => toast(err.message, 'err'));
+  }
   else if (el.id === 'avfile' && el.files[0]) {
     cropAvatar(el.files[0]).then(url => { S.botDraft.avatar = url; $('#avprev').src = url; toast('New avatar ready – press “Save profile”.'); })
       .catch(err => toast(err.message, 'err'));
@@ -1938,7 +2075,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, languages: 'en\npl', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
     backup_channel_id: null, bug_areas: 'City\nAlliance\nCombat\nHeroes\nEvents\nShop & payments\nChat\nLogin & connection\nUI & display\nOther',
@@ -1980,12 +2117,13 @@ function makeMock() {
     roles: [{ label: 'Moderator role', found: true, name: 'Moderator' }, { label: 'Admin role', found: true, name: 'Admin' }],
     panel: { published: !!panel.message_id, channel_name: (CH.find(c => c.id === panel.channel_id) || {}).name || null }
   });
-  const prof = () => ({ username: profile.username, avatar_url: profile.avatar_url, nickname: profile.nickname,
+  const prof = () => ({ username: profile.username, avatar_url: profile.avatar_url, banner_url: profile.banner_url || null, server_icon: true, server_banner: false, nickname: profile.nickname,
     status: settings.bot_status, activity_type: settings.activity_type, activity_text: settings.activity_text });
 
   const NAMES = ['Mira', 'Jonas', 'Anders', 'Lærke', 'Sofie', 'Lars', 'Freja', 'Mikkel'];
   const TRK = [{"key": "bug.title", "group": "Bug ticket", "en": "🐛 Bug report", "pl": "🐛 Zgłoszenie błędu", "placeholders": []}, {"key": "bug.title_edit", "group": "Bug ticket", "en": "✏️ Edit your bug report", "pl": "✏️ Popraw swoje zgłoszenie", "placeholders": []}, {"key": "bug.body", "group": "Bug ticket", "en": "**Step 1** – pick the **area** in the menu, then press **Add details** (short title, chief name, player UID, game version).\n**Step 2** – answer these questions **in one message**:\n\n**1. What is the bug?**\n**2. Do you know why it is happening?**\n**3. What is the correct way the feature should work?**\n**4. Attach a picture or video** to the same message{again}\n\nWhen you press **Send**, I'll show you a preview where you can **Submit**, **Edit** or **Delete** your report.", "pl": "**Krok 1** – wybierz **obszar** w menu, a potem naciśnij **Dodaj szczegóły** (krótki tytuł, nazwa wodza, UID gracza, wersja gry).\n**Krok 2** – odpowiedz na te pytania **w jednej wiadomości**:\n\n**1. Na czym polega błąd?**\n**2. Czy wiesz, dlaczego się pojawia?**\n**3. Jak ta funkcja powinna działać prawidłowo?**\n**4. Dołącz zdjęcie lub film** do tej samej wiadomości{again}\n\nGdy naciśniesz **Wyślij**, pokażę podgląd, w którym możesz **Wysłać**, **Poprawić** albo **Usunąć** zgłoszenie.", "placeholders": ["again"]}, {"key": "bug.again", "group": "Bug ticket", "en": " (attachments have to be added again)", "pl": " (załączniki trzeba dodać ponownie)", "placeholders": []}, {"key": "bug.template_name", "group": "Bug ticket", "en": "Template you can copy", "pl": "Szablon do skopiowania", "placeholders": []}, {"key": "bug.template", "group": "Bug ticket", "en": "What is the bug?\n\nDo you know why it is happening?\n\nWhat is the correct way the feature should work?", "pl": "Na czym polega błąd?\n\nCzy wiesz, dlaczego się pojawia?\n\nJak ta funkcja powinna działać prawidłowo?", "placeholders": []}, {"key": "bug.area_ph", "group": "Bug ticket", "en": "Where is the problem? (area)", "pl": "Gdzie jest problem? (obszar)", "placeholders": []}, {"key": "bug.area_set", "group": "Bug ticket", "en": "✅ Area: **{area}**", "pl": "✅ Obszar: **{area}**", "placeholders": ["area"]}, {"key": "bug.area_gone", "group": "Bug ticket", "en": "That area doesn't exist any more.", "pl": "Ten obszar już nie istnieje.", "placeholders": []}, {"key": "bug.details_btn", "group": "Bug ticket", "en": "Add details", "pl": "Dodaj szczegóły", "placeholders": []}, {"key": "pv.title", "group": "Preview", "en": "📋 Preview – is this ready to send?", "pl": "📋 Podgląd – czy można wysłać?", "placeholders": []}, {"key": "pv.no_text", "group": "Preview", "en": "*(no text)*", "pl": "*(brak tekstu)*", "placeholders": []}, {"key": "pv.f_title", "group": "Preview", "en": "Title", "pl": "Tytuł", "placeholders": []}, {"key": "pv.f_title_missing", "group": "Preview", "en": "⚠️ *(missing – press Add details)*", "pl": "⚠️ *(brak – naciśnij Dodaj szczegóły)*", "placeholders": []}, {"key": "pv.f_area", "group": "Preview", "en": "Area", "pl": "Obszar", "placeholders": []}, {"key": "pv.f_area_missing", "group": "Preview", "en": "⚠️ *(missing – use the menu)*", "pl": "⚠️ *(brak – użyj menu)*", "placeholders": []}, {"key": "pv.f_version", "group": "Preview", "en": "Game version", "pl": "Wersja gry", "placeholders": []}, {"key": "pv.f_chief", "group": "Preview", "en": "Chief / UID", "pl": "Wódz / UID", "placeholders": []}, {"key": "pv.f_files", "group": "Preview", "en": "Attachments", "pl": "Załączniki", "placeholders": []}, {"key": "pv.footer", "group": "Preview", "en": "Submit = send to the moderators · Edit = change it · Delete = discard", "pl": "Wyślij = do moderatorów · Popraw = zmień · Usuń = odrzuć", "placeholders": []}, {"key": "pv.submit", "group": "Preview", "en": "Submit", "pl": "Wyślij", "placeholders": []}, {"key": "pv.edit", "group": "Preview", "en": "Edit", "pl": "Popraw", "placeholders": []}, {"key": "pv.delete", "group": "Preview", "en": "Delete", "pl": "Usuń", "placeholders": []}, {"key": "pv.previous", "group": "Preview", "en": "Your previous message (copy & edit)", "pl": "Twoja poprzednia wiadomość (skopiuj i popraw)", "placeholders": []}];
   const trOver = {};
+  const trx = { key_set: true, key_hint: '…x9Qa', usage: { month: '2026-11', chars: 163400 }, limit: 450000, feed: { channel_id: '1006', target: 'en', sources: ['1002'] } };
   const drive = { configured: true, account: 'kasper@example.com', folder_url: 'https://drive.google.com/drive/folders/x', last_ok: now - 2 * 86400, last_name: 'bugs-20261105-031502.db.gz', last_error: null, last_try: now - 2 * 86400 };
   const codes = [['WOSEU1WEEKEND', '300 gems + 2× 1h speed-up', 3600 * 5, 86400 * 2], ['HAPPYHALLOWEEN', 'Pumpkin frame', 86400 * 3, 86400 * 4], ['WELCOME2026', 'Starter pack', 86400 * 20, null], ['LAUNCHDAY', '1000 gems', 86400 * 9, 86400 * 2]]
     .map((c, i) => ({ id: i + 1, code: c[0], reward: c[1], created_at: now - c[2], expires_at: c[3] ? now - c[2] + c[3] : null, by: 'Kasper', url: 'https://discord.com/channels/1/2/3' }));
@@ -2043,6 +2181,8 @@ function makeMock() {
       if (body.username) profile.username = body.username;
       if ('nickname' in body) profile.nickname = body.nickname || null;
       if (body.avatar) profile.avatar_url = body.avatar;
+      if (body.banner) profile.banner_url = body.banner;
+      if (body.use_server_art) profile.banner_url = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="680" height="240"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8753a"/><stop offset="1" stop-color="#f6c47c"/></linearGradient></defs><rect width="680" height="240" fill="url(#g)"/></svg>');
       ['status:bot_status', 'activity_type:activity_type', 'activity_text:activity_text'].forEach(m => { const [a, b] = m.split(':'); if (a in body) settings[b] = body[a]; });
       addLog('profile', 'Bot profile updated from the dashboard');
       return { profile: prof(), warnings: [] };
@@ -2059,12 +2199,15 @@ function makeMock() {
       const counts = {}; bugs.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
       return { items: f.slice(off, off + lim).map(briefBug), total: f.length, counts };
     }
+    if (p === '/api/translate' && method === 'GET') return trx;
+    if (p === '/api/translate') { if ('key' in body) { trx.key_set = !!body.key; trx.key_hint = body.key ? '…' + body.key.slice(-4) : ''; } if ('limit' in body) trx.limit = body.limit; if (body.feed) trx.feed = body.feed; return trx; }
+    if (p === '/api/translate/fill') { trx.usage.chars += 9800; return Object.assign({ filled: 0 }, trx); }
     if (p === '/api/translations' && method === 'GET') {
       const langs = ['en'].concat(String(settings.languages || '').split('\n').filter(x => x && x !== 'en')), lang = q.get('lang') || langs[1] || 'en';
-      const names = { en: 'English', pl: 'Polski', da: 'Dansk', de: 'Deutsch', fr: 'Français', es: 'Español', sv: 'Svenska' };
+      const names = { en: 'English', pl: 'Polski', ar: 'العربية', tr: 'Türkçe', ms: 'Bahasa Melayu (Singapore/Malaysia)', 'zh-cn': '中文（简体）', da: 'Dansk', sv: 'Svenska', no: 'Norsk', de: 'Deutsch', id: 'Bahasa Indonesia', tl: 'Filipino', fr: 'Français', hi: 'हिन्दी', es: 'Español', nl: 'Nederlands', ru: 'Русский', 'pt-br': 'Português (Brasil)', it: 'Italiano' };
       return { lang, default: settings.default_language || 'en',
         keys: TRK.map(k => ({ key: k.key, group: k.group, en: k.en, builtin: lang === 'en' ? k.en : lang === 'pl' ? k.pl : null, custom: (trOver[lang] || {})[k.key] ?? null, placeholders: k.placeholders })),
-        languages: langs.map(c => ({ code: c, name: names[c] || c, builtin: c === 'en' || c === 'pl', custom: Object.keys(trOver[c] || {}).length, players: { en: 41, pl: 23, da: 3 }[c] || 0 })),
+        languages: langs.map(c => ({ code: c, name: names[c] || c, builtin: c === 'en' || c === 'pl', auto: c === 'en' || c === 'pl' ? 0 : 131, custom: Object.keys(trOver[c] || {}).length, players: { en: 41, pl: 23, da: 3, tr: 12, ar: 9, de: 7 }[c] || 0 })),
         known: Object.keys(names).map(c => ({ code: c, name: names[c] })) };
     }
     if (p === '/api/translations') { trOver[body.lang] = Object.assign(trOver[body.lang] || {}, body.items); Object.keys(trOver[body.lang]).forEach(k => { if (!trOver[body.lang][k]) delete trOver[body.lang][k]; }); return { ok: true }; }

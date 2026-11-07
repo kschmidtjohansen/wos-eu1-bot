@@ -23,6 +23,8 @@ Welcome:   new members are greeted (and tagged) in the welcome channel; edit the
 Channels, toggles and limits are stored in the database and edited from the dashboard.
 """
 import asyncio
+import json
+import re
 import base64
 import math
 import os
@@ -43,6 +45,7 @@ from store import (cfg, db, get_bug, get_bug_by_admin_msg, get_bug_by_msg, get_r
 from store import record_action
 import texts
 import drive
+import translate
 
 
 def BACKUP_PATH(name):  # noqa: N802
@@ -242,30 +245,42 @@ async def get_open_ticket_thread(user_id: int) -> Optional[discord.Thread]:
     return thread
 
 
-async def open_ticket(member: discord.Member, channel: discord.TextChannel, kind: str = "bug"):
-    lg = lang_for(member.id)
-
-    async def tell(msg: str):
-        await channel.send(f"{member.mention} {msg}", delete_after=15)
-
+def report_gate(member, kind: str, lg: Optional[str]) -> Optional[str]:
+    """Why this player can't report right now (blocked, switched off, cooldown…), or None."""
     blk = store.get_block(member.id)
     if blk:
         when = T("open.until", lg, time=f"<t:{blk['until']}:f>") if blk["until"] else ""
-        return await tell(T("open.blocked", lg, until=when))
+        return T("open.blocked", lg, until=when)
     if not cfg("bugs_enabled" if kind == "bug" else "suggestions_enabled"):
-        return await tell(T("open.bugs_off" if kind == "bug" else "open.sugs_off", lg))
+        return T("open.bugs_off" if kind == "bug" else "open.sugs_off", lg)
     if chan("mod_channel_id") is None:
-        return await tell(T("open.not_setup", lg))
-    existing = await get_open_ticket_thread(member.id)
-    if existing:
-        return await tell(T("open.exists", lg, ticket=existing.mention))
+        return T("open.not_setup", lg)
     cooldown = cfg("report_cooldown_minutes") if kind == "bug" else 0
     if cooldown:
         last = db.execute("SELECT MAX(created_at) AS m FROM bug_reports WHERE reporter_id=?",
                           (member.id,)).fetchone()["m"]
         if last and time.time() - last < cooldown * 60:
             wait = math.ceil((cooldown * 60 - (time.time() - last)) / 60)
-            return await tell(T("open.cooldown", lg, minutes=wait))
+            return T("open.cooldown", lg, minutes=wait)
+    return None
+
+
+def _cap(s: str) -> str:
+    return s[:1].upper() + s[1:]
+
+
+async def open_ticket(member: discord.Member, channel: discord.TextChannel, kind: str = "bug"):
+    lg = lang_for(member.id)
+
+    async def tell(msg: str):
+        await channel.send(f"{member.mention} {msg}", delete_after=15)
+
+    why = report_gate(member, kind, lg)
+    if why:
+        return await tell(why)
+    existing = await get_open_ticket_thread(member.id)
+    if existing:
+        return await tell(T("open.exists", lg, ticket=existing.mention))
 
     thread = await channel.create_thread(
         name=f"{'bug' if kind == 'bug' else 'idea'}-{member.display_name}"[:90],
@@ -328,16 +343,14 @@ class DetailsModal(discord.ui.Modal, title="Bug details"):
         super().__init__(title=T("modal.title", lang)[:45])
         self.lang = lang
         required = bool(cfg("ticket_details_required"))
-        self.title_in = discord.ui.TextInput(label=T("modal.short", lang)[:45], placeholder=T("modal.short_ph", lang)[:100],
-                                             max_length=100, min_length=5 if required else None, required=required,
-                                             default=t["title"])
-        self.chief = discord.ui.TextInput(label=T("modal.chief", lang)[:45], required=False, max_length=50,
-                                          default=t["chief_name"])
-        self.uid = discord.ui.TextInput(label=T("modal.uid", lang)[:45], required=False, max_length=20, default=t["player_uid"])
-        self.version = discord.ui.TextInput(label=T("modal.version", lang)[:45], required=False, max_length=30,
-                                            default=t["game_version"] or cfg("game_version") or None)
-        for item in (self.title_in, self.chief, self.uid, self.version):
-            self.add_item(item)
+        self.title_in = discord.ui.TextInput(placeholder=T("modal.short_ph", lang)[:100], max_length=100,
+                                             min_length=5 if required else None, required=required, default=t["title"])
+        self.chief = discord.ui.TextInput(required=False, max_length=50, default=t["chief_name"])
+        self.uid = discord.ui.TextInput(required=False, max_length=20, default=t["player_uid"])
+        self.version = discord.ui.TextInput(required=False, max_length=30, default=t["game_version"] or cfg("game_version") or None)
+        for key, item in (("modal.short", self.title_in), ("modal.chief", self.chief), ("modal.uid", self.uid),
+                          ("modal.version", self.version)):
+            self.add_item(discord.ui.Label(text=T(key, lang)[:45], component=item))
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -352,7 +365,7 @@ class DetailsModal(discord.ui.Modal, title="Bug details"):
         similar = store.similar_bugs(str(self.title_in), area=None)
         if similar:
             text += ("\n\n" + T("modal.similar", lg) + "\n"
-                     + "\n".join(f"• {s['title']} – *{s['status_label']}*"
+                     + "\n".join(f"• {s['title']} – *{T('st.' + s['status'], lg)}*"
                                   + (T("modal.similar_fixed", lg, version=s["fixed_in"]) if s["fixed_in"] else "") for s in similar)
                      + "\n" + T("modal.similar_tail", lg))
         await interaction.response.send_message(text, ephemeral=True)
@@ -540,6 +553,177 @@ class PreviewView(discord.ui.View):
                   interaction.user.id, interaction.user.display_name)
         await asyncio.sleep(3)
         await close_ticket(interaction.channel)
+
+
+# ------------------------------------------- player: report form (buttons on the panel)
+def split_who(text: str):
+    """'Ragnar 123456789' -> ('Ragnar', '123456789'). Raises ValueError for a UID that isn't a number."""
+    import re as _re
+    text = (text or "").strip()
+    m = _re.search(r"(?<!\w)\d[\d\s]{2,24}\d(?!\w)", text)
+    uid = store.clean_uid(m.group(0)) if m else ""
+    name = (text[:m.start()] + text[m.end():]).strip(" ,;·-/|") if m else text
+    if not m and _re.search(r"\d{4,}", text):
+        raise ValueError("uid")
+    return name[:50] or None, uid or None
+
+
+class BugFormModal(discord.ui.Modal):
+    """The whole bug report in one form: area, title, what happened, chief/UID and screenshots."""
+
+    def __init__(self, lg: Optional[str], link=None):
+        super().__init__(title=T("form.bug_title", lg)[:45], timeout=1800)
+        self.lg = lg
+        areas = store.area_list()[:25] or ["Other"]
+        required = bool(cfg("ticket_details_required"))
+        self.area = discord.ui.Select(placeholder=T("form.area_ph", lg)[:150], required=required, min_values=1 if required else 0,
+                                      options=[discord.SelectOption(label=a) for a in areas])
+        self.title_in = discord.ui.TextInput(placeholder=T("form.title_ph", lg)[:100], max_length=100,
+                                             min_length=5 if required else None, required=required)
+        self.desc = discord.ui.TextInput(style=discord.TextStyle.paragraph, min_length=10, max_length=1800)
+        who = " ".join(x for x in ((link["chief_name"] if link else None), (link["player_uid"] if link else None)) if x)
+        self.who = discord.ui.TextInput(placeholder=T("form.who_ph", lg)[:100], required=False, max_length=80, default=who or None)
+        self.files = discord.ui.FileUpload(required=False, min_values=0, max_values=4)
+        self.add_item(discord.ui.Label(text=T("form.area", lg)[:45], component=self.area))
+        self.add_item(discord.ui.Label(text=T("form.title", lg)[:45], component=self.title_in))
+        self.add_item(discord.ui.Label(text=T("form.desc", lg)[:45], description=T("form.desc_hint", lg)[:100], component=self.desc))
+        self.add_item(discord.ui.Label(text=T("form.who", lg)[:45], component=self.who))
+        self.add_item(discord.ui.Label(text=T("form.files", lg)[:45], description=T("form.files_hint", lg)[:100], component=self.files))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        lg = self.lg
+        try:
+            chief, uid = split_who(str(self.who.value or ""))
+        except ValueError:
+            return await interaction.response.send_message(T("form.uid_bad", lg), ephemeral=True)
+        title = str(self.title_in.value or "").strip()
+        if cfg("ticket_details_required") and len(title) < 5:
+            return await interaction.response.send_message(T("form.need_title", lg), ephemeral=True)
+        report = {"title": title or None, "area": (self.area.values or [None])[0], "game_version": cfg("game_version") or None,
+                  "chief_name": chief, "player_uid": uid, "text": str(self.desc.value).strip(), "files": list(self.files.values)[:4]}
+        similar = store.similar_bugs(title, area=None) if title else []
+        if similar:
+            text = (T("form.similar", lg) + "\n" + "\n".join(
+                f"• {s['title']} – *{T('st.' + s['status'], lg)}*" + (T("modal.similar_fixed", lg, version=s["fixed_in"]) if s["fixed_in"] else "")
+                for s in similar) + "\n\n" + T("form.similar_tail", lg))
+            return await interaction.response.send_message(text, view=SimilarView(lg, report), ephemeral=True)
+        await interaction.response.send_message(T("form.sending", lg), ephemeral=True)
+        await send_form_report(interaction, report, lg)
+
+
+async def send_form_report(interaction: discord.Interaction, report: dict, lg: Optional[str]):
+    """Post a report from the form in the mod channel and tell the player (edits the ephemeral reply)."""
+    member = interaction.user
+    why = report_gate(member, "bug", lg)
+    if why:
+        return await interaction.edit_original_response(content=_cap(why), view=None)
+    try:
+        r, _ = await submit_bug(member, report["text"], report["files"], report)
+    except (NotConfigured, discord.HTTPException) as exc:
+        log_event("system", f"Could not deliver a bug report from {member.display_name}: {exc}", member.id, member.display_name)
+        return await interaction.edit_original_response(content=T("sub.bug_fail", lg).replace("**Submit**", "**" + T("form.bug_btn", lg) + "**"), view=None)
+    log_event("bug", f"Bug #{r['id']} submitted by {member.display_name} (form)", member.id, member.display_name)
+    await interaction.edit_original_response(content=T("form.bug_done", lg, id=r["id"]), view=None)
+
+
+class SimilarView(discord.ui.View):
+    """'This may already be reported' – send anyway or drop it."""
+
+    def __init__(self, lg, report):
+        super().__init__(timeout=900)
+        self.lg, self.report = lg, report
+        self.send.label, self.drop.label = T("form.send_anyway", lg)[:80], T("form.cancel", lg)[:80]
+
+    @discord.ui.button(style=discord.ButtonStyle.primary, label="Send anyway")
+    async def send(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content=T("form.sending", self.lg), view=None)
+        await send_form_report(interaction, self.report, self.lg)
+        self.stop()
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, label="Don't send")
+    async def drop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content=T("form.cancelled", self.lg), view=None)
+        self.stop()
+
+
+class IdeaFormModal(discord.ui.Modal):
+    def __init__(self, lg: Optional[str]):
+        super().__init__(title=T("form.idea_title", lg)[:45], timeout=1800)
+        self.lg = lg
+        self.idea = discord.ui.TextInput(style=discord.TextStyle.paragraph, min_length=10,
+                                         max_length=min(4000, cfg("suggestion_max_length")))
+        self.add_item(discord.ui.Label(text=T("form.idea", lg)[:45], description=T("form.idea_hint", lg)[:100], component=self.idea))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        lg, member = self.lg, interaction.user
+        why = report_gate(member, "suggestion", lg)
+        if why:
+            return await interaction.response.send_message(_cap(why), ephemeral=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            s = await submit_suggestion(member, str(self.idea.value).strip())
+        except (NotConfigured, discord.HTTPException) as exc:
+            log_event("system", f"Could not deliver a suggestion from {member.display_name}: {exc}", member.id, member.display_name)
+            return await interaction.followup.send(T("sub.sug_fail", lg), ephemeral=True)
+        log_event("suggestion", f"Suggestion #{s['id']} submitted by {member.display_name} (form)", member.id, member.display_name)
+        await interaction.followup.send(T("form.idea_done", lg, id=s["id"]), ephemeral=True)
+
+
+class PanelView(discord.ui.View):
+    """The two buttons under the panel message (persistent across restarts)."""
+
+    def __init__(self, lg: Optional[str] = None):
+        super().__init__(timeout=None)
+        self.bug.label, self.idea.label = T("form.bug_btn", lg)[:80], T("form.idea_btn", lg)[:80]
+
+    async def _start(self, interaction: discord.Interaction, kind: str):
+        lg = ilang(interaction)
+        member = interaction.user
+        why = report_gate(member, kind, lg)
+        if why:
+            return await interaction.response.send_message(_cap(why), ephemeral=True)
+        if cfg("report_style") == "ticket":            # the older step-by-step ticket, if the admins prefer it
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            existing = await get_open_ticket_thread(member.id)
+            if existing:
+                return await interaction.followup.send(_cap(T("open.exists", lg, ticket=existing.mention)), ephemeral=True)
+            await open_ticket(member, interaction.channel, kind)
+            return await interaction.followup.send("✅", ephemeral=True)
+        if kind == "bug":
+            await interaction.response.send_modal(BugFormModal(lg, store.get_link(member.id)))
+        else:
+            await interaction.response.send_modal(IdeaFormModal(lg))
+
+    @discord.ui.button(emoji=BUG_EMOJI, label="Report a bug", style=discord.ButtonStyle.primary, custom_id="panel:bug")
+    async def bug(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._start(interaction, "bug")
+
+    @discord.ui.button(emoji=SUGGEST_EMOJI, label="Suggest an idea", style=discord.ButtonStyle.secondary, custom_id="panel:idea")
+    async def idea(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._start(interaction, "suggestion")
+
+
+async def refresh_panel_buttons():
+    """Once after updating: give the existing panel its buttons (instead of reactions) and the new default text."""
+    if get_raw("panel_buttons") == "1":
+        return
+    ch_id, msg_id = get_raw("panel_channel_id"), get_raw("panel_msg_id")
+    if cfg("panel_text") == store.OLD_PANEL_TEXT:
+        set_cfg("panel_text", store.DEFAULT_PANEL_TEXT)
+    ch = bot.get_channel(int(ch_id)) if ch_id else None
+    if ch is not None and msg_id:
+        try:
+            msg = await ch.fetch_message(int(msg_id))
+            await msg.edit(embed=panel_embed(cfg("panel_title"), cfg("panel_text")), view=PanelView(store.default_language()))
+            try:
+                await msg.clear_reactions()
+            except discord.HTTPException:
+                pass
+            log_event("panel", "Panel message now has buttons (Report a bug / Suggest an idea)", None, brand())
+        except discord.HTTPException as exc:
+            log_event("system", f"Could not add buttons to the panel message: {exc}", None, brand())
+            return
+    put_raw("panel_buttons", "1")
 
 
 async def keep_files(bug_id: int, atts):
@@ -936,7 +1120,7 @@ async def welcome_preview(interaction: discord.Interaction):
 # ------------------------------------------------------------- panel message
 def panel_embed(title: str, text: str) -> discord.Embed:
     e = discord.Embed(title=title, description=text, color=0x5865F2)
-    e.set_footer(text=f"{BUG_EMOJI} Report a bug  ·  {SUGGEST_EMOJI} Create a suggestion  ·  {brand()}")
+    e.set_footer(text=brand())
     return e
 
 
@@ -960,7 +1144,11 @@ async def publish_panel(title: str, text: str, channel_id: int,
     if old_ch and old_msg and int(old_ch) == channel.id:
         try:
             msg = await channel.fetch_message(int(old_msg))
-            await msg.edit(embed=embed)
+            await msg.edit(embed=embed, view=PanelView(store.default_language()))
+            try:
+                await msg.clear_reactions()
+            except discord.HTTPException:
+                pass
         except discord.NotFound:
             msg = None
     if msg is None:
@@ -971,9 +1159,8 @@ async def publish_panel(title: str, text: str, channel_id: int,
                     await old_channel.get_partial_message(int(old_msg)).delete()
                 except discord.HTTPException:
                     pass
-        msg = await channel.send(embed=embed)
-    for emoji in (BUG_EMOJI, SUGGEST_EMOJI):
-        await msg.add_reaction(emoji)
+        msg = await channel.send(embed=embed, view=PanelView(store.default_language()))
+    put_raw("panel_buttons", "1")
 
     set_cfg("panel_title", title)
     set_cfg("panel_text", text)
@@ -991,6 +1178,8 @@ def profile_info() -> dict:
     return {
         "username": bot.user.name,
         "avatar_url": str(bot.user.display_avatar.replace(size=256).url),
+        "banner_url": str(bot.user.banner.replace(size=1024).url) if getattr(bot.user, "banner", None) else None,
+        "server_icon": bool(guild and guild.icon), "server_banner": bool(guild and guild.banner),
         "nickname": guild.me.nick if guild and guild.me else None,
         "status": cfg("bot_status"),
         "activity_type": cfg("activity_type"),
@@ -1012,6 +1201,33 @@ async def update_profile(data: dict) -> list:
             changed.append("username")
         except discord.HTTPException as exc:
             warnings.append(f"Username not changed: {exc.text or exc} (Discord allows 2 changes per hour).")
+
+    def image(value, label):
+        try:
+            raw = base64.b64decode(value.split(",", 1)[-1], validate=True)
+        except Exception:  # noqa: BLE001
+            raise ValueError(f"The {label} image could not be read.")
+        if len(raw) > 8 * 1024 * 1024:
+            raise ValueError(f"The {label} image is larger than 8 MB.")
+        return raw
+
+    if data.get("use_server_art") and guild is not None:
+        # the server's own icon and banner (full quality); the bundled banner if the server has none
+        assets = Path(__file__).with_name("assets")
+        icon = await guild.icon.replace(size=1024, static_format="png").read() if guild.icon else (assets / "icon-fallback.png").read_bytes()
+        banner = await guild.banner.replace(size=1024, static_format="png").read() if guild.banner else (assets / "banner.png").read_bytes()
+        try:
+            await bot.user.edit(avatar=icon, banner=banner)
+            changed.append("avatar and banner (from the server)")
+        except discord.HTTPException as exc:
+            warnings.append(f"Icon/banner not changed: {exc.text or exc} (Discord limits how often this can change – try again in an hour).")
+
+    if data.get("banner"):
+        try:
+            await bot.user.edit(banner=image(data["banner"], "banner"))
+            changed.append("banner")
+        except discord.HTTPException as exc:
+            warnings.append(f"Banner not changed: {exc.text or exc}")
 
     avatar = data.get("avatar")
     if avatar:
@@ -1078,6 +1294,7 @@ class WosBot(discord.Client):
         self.add_view(PreviewView())   # keep Submit/Edit/Delete working after a restart
         self.add_view(DetailsView())   # ...and the area menu / Add details button
         self.add_view(LangView())      # ...and the language menu in suggestion tickets
+        self.add_view(PanelView())     # ...and the Report a bug / Suggest an idea buttons
         await self.tree.sync(guild=discord.Object(id=GUILD_ID))
         if not reminder_loop.is_running():
             reminder_loop.start()
@@ -1100,7 +1317,7 @@ class WosBot(discord.Client):
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
-                         "drive_backup": drive_backup}
+                         "drive_backup": drive_backup, "fill_translations": fill_translations}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
                 self.api_runner = await start_api(self, GUILD_ID, DASHBOARD_API_KEY, DASHBOARD_ORIGINS,
                                                   DASHBOARD_HOST, DASHBOARD_PORT, hooks, roles)
@@ -1115,6 +1332,11 @@ class WosBot(discord.Client):
             self._announced = True
             ver = Path(__file__).with_name("VERSION")
             log_event("system", "Bot started" + (f" – version {ver.read_text().strip()}" if ver.exists() else ""), None, brand())
+            store.add_server_languages()
+            try:
+                await refresh_panel_buttons()
+            except Exception as exc:  # noqa: BLE001
+                print(f"[panel] {exc!r}")
             try:
                 await announce_update()
             except Exception as exc:  # noqa: BLE001 – never stop the bot over a notice
@@ -1144,7 +1366,14 @@ class WosBot(discord.Client):
         store.record_members(member.guild.member_count, left=1)
 
     async def on_message(self, message: discord.Message):
-        if message.author.bot or not isinstance(message.channel, discord.Thread):
+        if message.author.bot:
+            return
+        if message.guild and message.channel.id in translate.feed()["sources"]:
+            try:
+                await feed_translation(message)
+            except Exception as exc:  # noqa: BLE001 – translation must never break the rest
+                print(f"[translate feed] {exc!r}")
+        if not isinstance(message.channel, discord.Thread):
             return
         await handle_ticket_message(message)
 
@@ -1713,6 +1942,141 @@ async def announce_update():
     log_event("system", f"Update notice posted for version {info['version']}", None, brand())
 
 
+# ------------------------------------------------------------- translation (Google)
+_ONLY_NOISE = re.compile(r"(<a?:\w+:\d+>|<[@#][!&]?\d+>|https?://\S+|[\W\d_])+", re.UNICODE)
+
+
+def lang_label(code: str) -> str:
+    code = (code or "").lower()
+    return texts.LANGUAGE_NAMES.get(code) or texts.LANGUAGE_NAMES.get(code.split("-")[0]) or code.upper() or "?"
+
+
+def worth_translating(text: str) -> bool:
+    return len(_ONLY_NOISE.sub("", text or "")) >= 2
+
+
+async def feed_translation(message: discord.Message):
+    """Messages in the chosen language channels are posted, translated, in the feed channel."""
+    f = translate.feed()
+    feed_ch = bot.get_channel(f["channel_id"]) if f["channel_id"] else None
+    if feed_ch is None or not translate.key() or not worth_translating(message.content):
+        return
+    try:
+        out, src = await translate.text(message.content, f["target"])
+    except translate.TranslateError as exc:
+        if get_raw("translate_warned") != translate.month():
+            put_raw("translate_warned", translate.month())
+            log_event("system", f"Translation feed paused: {exc}", None, brand())
+        return
+    if translate.same_language(src, f["target"]):
+        return                                           # already in the feed's language – nothing to translate
+    e = discord.Embed(description=out[:4000], color=0x5865F2, url=message.jump_url)
+    e.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url, url=message.jump_url)
+    e.set_footer(text=f"#{message.channel.name} · {lang_label(src)} → {lang_label(f['target'])}")
+    await feed_ch.send(embed=e, allowed_mentions=discord.AllowedMentions.none())
+
+
+@bot.tree.context_menu(name="Translate", guild=_GUILD)
+async def translate_message(interaction: discord.Interaction, message: discord.Message):
+    """Right-click (or long-press) a message → Apps → Translate: only you see the translation, in your Discord language."""
+    lg = ilang(interaction)
+    target = str(interaction.locale or "en").lower()
+    if not translate.key():
+        return await interaction.response.send_message(T("tr.off", lg), ephemeral=True)
+    content = message.content or " ".join(e.description or "" for e in message.embeds)
+    if not worth_translating(content):
+        return await interaction.response.send_message(T("tr.empty", lg), ephemeral=True)
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        out, src = await translate.text(content, target)
+    except translate.TranslateError as exc:
+        return await interaction.followup.send(T("tr.limit", lg) if "limit" in str(exc) else f"⚠️ {exc}", ephemeral=True)
+    if translate.same_language(src, target):
+        return await interaction.followup.send(T("tr.same", lg, language=lang_label(src)), ephemeral=True)
+    e = discord.Embed(description=out[:4000], color=0x5865F2)
+    e.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url, url=message.jump_url)
+    e.set_footer(text=T("tr.from", lg, language=lang_label(src)))
+    await interaction.followup.send(embed=e, ephemeral=True)
+
+
+async def fill_translations():
+    """Machine-translate the bot texts for every switched-on language that is still missing some (cheap when done)."""
+    if not translate.key():
+        return 0
+    total = 0
+    for lg in store.languages():
+        try:
+            n = await translate.fill_language(lg)
+        except translate.TranslateError as exc:
+            log_event("system", f"Could not translate the bot texts into {lang_label(lg)}: {exc}", None, brand())
+            break
+        if n:
+            total += n
+            log_event("settings", f"Bot texts translated into {lang_label(lg)} automatically ({n} texts)", None, brand())
+    return total
+
+
+# ------------------------------------------------------------- info tickets nobody answers
+async def check_info_tickets(now: Optional[float] = None):
+    """Remind the reporter when a moderator's question waits too long, and close the ticket after a while.
+    The bug then goes back to the moderators (status New) – nothing is rejected automatically."""
+    remind_h, close_h = cfg("info_remind_hours"), cfg("info_close_hours")
+    if not remind_h and not close_h:
+        return
+    now = now or time.time()
+    try:
+        state = json.loads(get_raw("info_tickets") or "{}")
+    except ValueError:
+        state = {}
+    rows = db.execute("SELECT * FROM bug_reports WHERE status='investigating' AND ticket_thread_id IS NOT NULL").fetchall()
+    for r in rows:
+        key = str(r["id"])
+        st = state.get(key, {})
+        try:
+            thread = bot.get_channel(r["ticket_thread_id"]) or await bot.fetch_channel(r["ticket_thread_id"])
+            history = [m async for m in thread.history(limit=25)]
+        except discord.HTTPException:
+            continue
+        waiting_since = None
+        for m in history:                                   # newest first
+            if m.id in st.get("reminders", []):
+                continue                                    # our own reminder doesn't restart the clock
+            if m.author.id == r["reporter_id"]:
+                break                                       # the player answered last – nothing to do
+            waiting_since = m.created_at.timestamp()
+            break
+        if waiting_since is None:
+            state.pop(key, None)
+            continue
+        hours = (now - waiting_since) / 3600
+        lg = lang_for(r["reporter_id"])
+        if close_h and hours >= close_h and (st.get("since") == waiting_since or not remind_h):
+            try:
+                await thread.send(T("info.closed", lg, id=r["id"]))
+                await thread.edit(archived=True, locked=True)
+            except discord.HTTPException:
+                pass
+            set_bug(r["id"], status="new", ticket_thread_id=None)
+            record_action("bug", r["id"], "ticket_closed", None, brand())
+            await sync_bug_messages(get_bug(r["id"]), "Info ticket closed – no answer from the reporter")
+            log_event("mod", f"Bug #{r['id']}: info ticket closed after {round(hours)} h without an answer – back to the moderators",
+                      None, brand())
+            state.pop(key, None)
+        elif remind_h and hours >= remind_h and st.get("since") != waiting_since:
+            mention = f"<@{r['reporter_id']}>"
+            left = max(1, round(close_h - hours)) if close_h else 0
+            try:
+                msg = await thread.send(T("info.reminder", lg, player=mention, id=r["id"], hours=left) if close_h
+                                        else T("info.reminder", lg, player=mention, id=r["id"], hours="?").split(". ")[0] + ".",
+                                        allowed_mentions=discord.AllowedMentions(users=True))
+            except discord.HTTPException:
+                continue
+            await dm_t(r["reporter_id"], "dm.info_reminder", id=r["id"], link=thread.jump_url)
+            state[key] = {"since": waiting_since, "reminders": (st.get("reminders", []) + [msg.id])[-5:]}
+            log_event("mod", f"Bug #{r['id']}: reminded the reporter to answer the info ticket", None, brand())
+    put_raw("info_tickets", json.dumps(state))
+
+
 # ------------------------------------------------------------- gift codes
 def gift_embed(r, state: Optional[str] = None, lang: Optional[str] = None) -> discord.Embed:
     state = state or store.gift_code_state(r)
@@ -1862,6 +2226,8 @@ async def schedule_loop():
     try:
         snapshot_members()
         await expire_gift_codes()
+        await check_info_tickets()
+        await fill_translations()
         await run_schedules()
     except Exception as exc:  # noqa: BLE001
         print(f"[schedule] {exc!r}")

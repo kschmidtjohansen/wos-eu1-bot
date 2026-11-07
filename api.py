@@ -558,15 +558,76 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         lang = (request.query.get("lang") or (langs[1] if len(langs) > 1 else "en")).lower()
         if lang not in langs:
             raise ApiError(400, "That language is not switched on.")
-        over, counts = store.translations(), store.language_counts()
+        import translate
+        over, counts, auto = store.translations(), store.language_counts(), translate.auto_texts()
         keys = [{"key": k, "group": texts.GROUPS[k], "en": texts.DEFAULTS["en"][k],
-                 "builtin": texts.DEFAULTS.get(lang, {}).get(k), "custom": (over.get(lang) or {}).get(k),
+                 "builtin": texts.DEFAULTS.get(lang, {}).get(k) or (auto.get(lang) or {}).get(k),
+                 "auto": k not in texts.DEFAULTS.get(lang, {}) and k in (auto.get(lang) or {}),
+                 "custom": (over.get(lang) or {}).get(k),
                  "placeholders": sorted(texts.placeholders(texts.DEFAULTS["en"][k]))} for k in texts.KEYS]
         return web.json_response({
             "lang": lang, "default": store.default_language(), "keys": keys,
             "languages": [{"code": c, "name": texts.lang_name(c), "builtin": c in texts.DEFAULTS,
+                           "auto": len((auto.get(c) or {})),
                            "custom": len(over.get(c) or {}), "players": counts.get(c, 0)} for c in langs],
             "known": [{"code": c, "name": n} for c, n in texts.LANGUAGE_NAMES.items()]})
+
+    def translate_info():
+        import translate
+        k = translate.key()
+        return {"key_set": bool(k), "key_hint": ("…" + k[-4:]) if k else "", "usage": translate.usage(),
+                "limit": store.cfg("translate_monthly_limit"), "feed": {**translate.feed(),
+                "channel_id": str(translate.feed()["channel_id"]) if translate.feed()["channel_id"] else None,
+                "sources": [str(x) for x in translate.feed()["sources"]]}}
+
+    @routes.get("/api/translate")
+    async def get_translate(request):
+        return web.json_response(translate_info())
+
+    @routes.put("/api/translate")
+    async def put_translate(request):
+        import translate
+        data = await body_json(request)
+        if "key" in data:
+            k = str(data["key"] or "").strip()
+            if k and not re.fullmatch(r"[A-Za-z0-9_\-]{20,100}", k):
+                raise ApiError(400, "That doesn't look like a Google API key (it starts with AIza…).")
+            store.put_raw("translate_key", k)
+            if k:
+                try:
+                    out, _ = await translate.text("Hello, world", "da")
+                except translate.TranslateError as exc:
+                    store.put_raw("translate_key", "")
+                    raise ApiError(400, f"The key didn't work: {exc}")
+            store.log_event("settings", "Google translation key " + ("saved" if k else "removed"), None, "Dashboard")
+        if "limit" in data:
+            try:
+                store.set_cfg("translate_monthly_limit", int(data["limit"]))
+            except (ValueError, TypeError) as exc:
+                raise ApiError(400, str(exc))
+        if "feed" in data:
+            f = data["feed"] or {}
+            ids = [str(x) for x in (f.get("sources") or [])]
+            if not all(x.isdigit() for x in ids) or (f.get("channel_id") and not str(f["channel_id"]).isdigit()):
+                raise ApiError(400, "Choose channels from the list.")
+            target = str(f.get("target") or "en").lower()
+            if target not in texts_langs():
+                raise ApiError(400, "Unknown language.")
+            translate.save_feed(f.get("channel_id"), ids, target)
+            store.log_event("settings", f"Translation feed updated ({len(ids)} channel(s))", None, "Dashboard")
+        return web.json_response(translate_info())
+
+    def texts_langs():
+        import texts
+        return list(texts.LANGUAGE_NAMES)
+
+    @routes.post("/api/translate/fill")
+    async def fill_translate(request):
+        import translate
+        if not translate.key():
+            raise ApiError(400, "Add a Google translation key first.")
+        n = await hooks["fill_translations"]()
+        return web.json_response({"filled": n, **translate_info()})
 
     @routes.put("/api/translations")
     async def put_translations(request):
