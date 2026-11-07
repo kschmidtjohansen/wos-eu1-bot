@@ -27,6 +27,9 @@ ADMINS    the manager page: panel message, channels, on/off switches, bot name &
 | `dashboard.html` | The manager page (one self-contained file, no external libraries) |
 | `site/` | The public website pages (report form, known issues, changelog) |
 | `deploy/install.sh` | Interactive installer for the bot server (also used for updates) |
+| `deploy/setup-drive.sh` | One-time setup of weekly backups to Google Drive |
+| `texts.py` | Every player-facing text in English and Polish (edit them on the dashboard's Translations page) |
+| `drive.py` | Google Drive backup upload |
 | `deploy/setup-updates.sh`, `deploy/update.sh` | One-time setup of updates from GitHub; then `Update bugbot` installs the released version |
 | `deploy/connect-website.sh` | Interactive script for the website server (secure link, nginx/Apache, pages) |
 | `deploy/` (other) | `systemd`, nginx and Apache files for manual setups |

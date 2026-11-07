@@ -138,6 +138,11 @@ db.executescript(
         created_by TEXT,
         expired_noted INTEGER NOT NULL DEFAULT 0   -- the announcement was marked "expired"
     );
+    CREATE TABLE IF NOT EXISTS user_lang (     -- which language the bot uses with each player
+        user_id INTEGER PRIMARY KEY,
+        lang TEXT NOT NULL,
+        chosen INTEGER NOT NULL DEFAULT 0          -- 1 = picked by the player, 0 = taken from their Discord language
+    );
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -303,6 +308,11 @@ SCHEMA = {
     "points_fixed": {"type": "int", "default": 3, "min": 0, "max": 100},
     "points_suggestion": {"type": "int", "default": 2, "min": 0, "max": 100},
     "update_notice_enabled": {"type": "bool", "default": True},
+    "default_language": {"type": "text", "default": "en", "min": 2, "max": 10},
+    "drive_enabled": {"type": "bool", "default": True},
+    "drive_every_days": {"type": "int", "default": 7, "min": 1, "max": 30},
+    "drive_keep": {"type": "int", "default": 8, "min": 1, "max": 60},
+    "languages": {"type": "lines", "default": "en\npl", "max_lines": 10, "max_len": 10},
     "giftcodes_enabled": {"type": "bool", "default": False},
     "giftcodes_channel_id": {"type": "channel", "default": None},
     "giftcodes_ping": {"type": "choice", "default": "none", "choices": ["none", "here", "everyone", "role"]},
@@ -1218,3 +1228,88 @@ def gift_code_state(r, now=None) -> str:
 def expired_unnoted_gift_codes(now=None):
     now = now or int(time.time())
     return db.execute("SELECT * FROM gift_codes WHERE expires_at IS NOT NULL AND expires_at<=? AND expired_noted=0", (now,)).fetchall()
+
+
+# ----------------------------------------------------------------- translations
+import texts as _texts
+
+
+def languages() -> list:
+    """Languages players can use (English is always included)."""
+    out = ["en"]
+    for x in str(cfg("languages") or "").split("\n"):
+        x = x.strip().lower()
+        if re.fullmatch(r"[a-z]{2,3}(-[a-z]{2})?", x) and x not in out:
+            out.append(x)
+    return out
+
+
+def default_language() -> str:
+    d = (cfg("default_language") or "en").strip().lower()
+    return d if d in languages() else "en"
+
+
+def translations() -> dict:
+    try:
+        d = json.loads(get_raw("translations") or "{}")
+        return d if isinstance(d, dict) else {}
+    except ValueError:
+        return {}
+
+
+def save_translations(d: dict):
+    put_raw("translations", _texts.dumps(d))
+
+
+def T(key: str, lang: Optional[str] = None, **kw) -> str:
+    """A player-facing text in the given language: the admins' version first, then the built-in one, then English."""
+    lang = lang or default_language()
+    over = translations()
+    for lg in (lang, "en"):
+        txt = (over.get(lg) or {}).get(key) or _texts.DEFAULTS.get(lg, {}).get(key)
+        if txt:
+            return _texts.fill(txt, **kw)
+    return key
+
+
+def lang_for(user_id) -> str:
+    if user_id:
+        row = db.execute("SELECT lang FROM user_lang WHERE user_id=?", (user_id,)).fetchone()
+        if row and row["lang"] in languages():
+            return row["lang"]
+    return default_language()
+
+
+def locale_lang(locale) -> Optional[str]:
+    """Match a Discord locale such as 'pl', 'en-US' or 'pt-BR' to one of our languages."""
+    loc = str(locale or "").lower().replace("_", "-")
+    langs = languages()
+    if loc in langs:
+        return loc
+    base = loc.split("-")[0]
+    if base == "nb":
+        base = "no"
+    return base if base in langs else None
+
+
+def remember_locale(user_id: int, locale):
+    """Use the player's Discord language, unless they picked one themselves."""
+    lg = locale_lang(locale)
+    if not lg:
+        return
+    row = db.execute("SELECT chosen, lang FROM user_lang WHERE user_id=?", (user_id,)).fetchone()
+    if row is None or (not row["chosen"] and row["lang"] != lg):
+        db.execute("INSERT OR REPLACE INTO user_lang (user_id, lang, chosen) VALUES (?,?,0)", (user_id, lg))
+        db.commit()
+
+
+def set_user_language(user_id: int, lang: Optional[str]):
+    if lang is None:
+        db.execute("DELETE FROM user_lang WHERE user_id=?", (user_id,))
+    else:
+        db.execute("INSERT OR REPLACE INTO user_lang (user_id, lang, chosen) VALUES (?,?,1)", (user_id, lang))
+    db.commit()
+
+
+def language_counts() -> dict:
+    return {r["lang"]: r["n"] for r in db.execute("SELECT lang, COUNT(*) AS n FROM user_lang GROUP BY lang")}

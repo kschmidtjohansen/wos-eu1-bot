@@ -286,6 +286,17 @@
 .w-codebody{min-width:0;flex:1}
 .w-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:16px;font-weight:700;letter-spacing:.04em;padding:4px 10px;border-radius:9px;background:var(--w-surface-2);border:1px dashed var(--w-border);overflow-wrap:anywhere}
 .w-coderow.new .w-code{border-color:var(--w-accent);color:var(--w-accent)}
+.w-langs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.w-lang{padding:12px 14px;border:1px solid var(--w-border);border-radius:14px;background:var(--w-surface-2);display:flex;flex-direction:column}
+.w-lang.def{border-color:var(--w-accent)}
+.w-tr{padding:14px 0;border-top:1px solid var(--w-border)}
+.w-tr:first-child{border-top:0}
+.w-tr-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.w-tr-head .w-linkbtn{margin-left:auto;font-size:13px}
+.w-tr-en{white-space:pre-wrap;color:var(--w-muted);font-size:13.5px;background:var(--w-surface-2);border-radius:10px;padding:8px 12px;margin-bottom:6px;overflow-wrap:anywhere}
+.w-tr-in{min-height:0;font-size:14px}
+.w-tr.changed .w-tr-in{border-color:var(--w-accent)}
+.w-tr code{font-size:12px;background:var(--w-surface-2);padding:1px 5px;border-radius:5px}
 .w-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border-radius:14px;background:var(--w-bad-soft);border:1px solid color-mix(in srgb,var(--w-bad) 35%,transparent)}
 .w-bugrow.sel[aria-pressed="true"]{border-color:var(--w-bad);background:var(--w-bad-soft)}
 .w-form2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
@@ -450,6 +461,7 @@ const ICON = {
   shield: '<path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6z"/>',
   pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
   gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
 };
 const icon = n => raw(`<svg class="w-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`);
@@ -469,7 +481,7 @@ const S = {
 const NAV = [
   ['overview', 'Overview', 'grid'], ['status', 'Server status', 'pulse'], ['bugs', 'Bugs', 'bug'], ['suggestions', 'Suggestions', 'bulb'], ['codes', 'Gift codes', 'gift'], ['insights', 'Insights', 'chart'],
   ['panel', 'Panel message', 'message'], ['channels', 'Channels', 'hash'], ['features', 'Features', 'sliders'],
-  ['welcome', 'Welcome', 'userplus'], ['patch', 'Patch notes', 'wrench'], ['mod', 'Moderation', 'shield'],
+  ['welcome', 'Welcome', 'userplus'], ['translations', 'Translations', 'globe'], ['patch', 'Patch notes', 'wrench'], ['mod', 'Moderation', 'shield'],
   ['bot', 'Bot profile', 'bot'], ['data', 'Data', 'db'], ['log', 'Activity log', 'list']
 ];
 const CHANNELS = [
@@ -490,7 +502,7 @@ const FEATURE_KEYS = ['bugs_enabled', 'suggestions_enabled', 'investigate_enable
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
   'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'bounty_enabled', 'points_accepted', 'points_fixed', 'points_suggestion', 'update_notice_enabled',
-  'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours'];
+  'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'drive_enabled', 'drive_every_days', 'drive_keep'];
 const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'];
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
 const PLACEHOLDERS = [['{user}', 'Tags the new member'], ['{username}', 'Their name'], ['{server}', 'Server name'], ['{member_count}', 'Number of members']];
@@ -744,6 +756,9 @@ function viewFeatures() {
       ${toggleRow('keep_attachments', 'Keep screenshots and videos', 'Saves a copy on the bot’s computer, because Discord links stop working after a while.')}
       ${numberRow('attachment_keep_days', 'Delete kept files of closed bugs after', '0 = keep forever. Only files of fixed or rejected bugs are removed.', 0, 3650, 'days')}
       ${toggleRow('backups_enabled', 'Daily backup of the database', 'Keeps the last 14 backups on the bot’s computer. See the Data page.')}
+      ${toggleRow('drive_enabled', 'Copy backups to Google Drive', 'Only works after the one-time setup (bot guide, “Backups to Google Drive”). See the Data page.')}
+      ${numberRow('drive_every_days', 'Copy to Google Drive every', '7 = once a week.', 1, 30, 'days')}
+      ${numberRow('drive_keep', 'Keep this many copies in Google Drive', 'Older copies made by the bot are deleted from the folder.', 1, 60, 'copies')}
     </section>${saveBar()}`;
 }
 
@@ -1075,6 +1090,56 @@ function viewCodes() {
     ${old.length ? html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Expired (${old.length})</h3></div>${old.slice(0, 30).map(row)}</section>` : ''}`;
 }
 
+/* ---- translations ---- */
+function trValue(k) { const R = S.tr; return k.key in R.dirty ? R.dirty[k.key] : (k.custom != null ? k.custom : (k.builtin || '')); }
+function viewTranslations() {
+  const R = S.tr;
+  if (!R || !R.data) return html`<div class="w-pagehead"><h2>Translations</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  const D = R.data, enabled = D.languages.map(l => l.code), addable = D.known.filter(k => !enabled.includes(k.code));
+  const groups = [...new Set(D.keys.map(k => k.group))], q = R.q.toLowerCase();
+  const list = D.keys.filter(k => (!R.group || k.group === R.group) && (!q || (k.en + ' ' + trValue(k)).toLowerCase().includes(q)));
+  const missing = D.keys.filter(k => !trValue(k)).length, nDirty = Object.keys(R.dirty).length;
+  const isEn = D.lang === 'en';
+  return html`
+    <div class="w-pagehead"><h2>Translations</h2><p>Every message players get from the bot – tickets, buttons, DMs, gift codes. Each player gets their own language:
+      the one they pick in a ticket or with <b>/language</b>, otherwise their Discord language, otherwise the default below.</p></div>
+    <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:12px">Languages</h3>
+      <div class="w-langs">${D.languages.map(l => html`<div class="w-lang ${l.code === D.default ? 'def' : ''}"><b>${l.name}</b>
+        <span class="w-hint">${l.code}${l.code === D.default ? ' · default' : ''} · ${l.players} player${l.players === 1 ? '' : 's'}${l.custom ? ' · ' + l.custom + ' edited' : ''}${!l.builtin && l.code !== 'en' ? ' · you translate' : ''}</span>
+        <div class="w-inline" style="gap:6px;margin-top:8px">${l.code !== D.default ? html`<button class="w-btn small" data-act="langDefault" data-l="${l.code}">Make default</button>` : ''}
+          ${l.code !== 'en' ? html`<button class="w-btn small danger" data-act="langRemove" data-l="${l.code}">Remove</button>` : ''}</div></div>`)}</div>
+      ${addable.length ? html`<div class="w-inline" style="margin-top:14px"><select class="w-select" id="tr-add" style="max-width:220px" aria-label="Language to add">${addable.map(k => html`<option value="${k.code}">${k.name}</option>`)}</select>
+        <button class="w-btn" data-act="langAdd">Add language</button><span class="w-hint">English and Polish are translated already. Other languages start in English until you translate them.</span></div>` : ''}
+    </section>
+    <section class="w-card w-pad">
+      <div class="w-toolbar">
+        <select class="w-select w-fsel" id="tr-lang" aria-label="Language to edit">${D.languages.map(l => html`<option value="${l.code}" ${l.code === D.lang ? 'selected' : ''}>${l.name}</option>`)}</select>
+        <select class="w-select w-fsel" id="tr-group" aria-label="Part"><option value="">All parts</option>${groups.map(g => html`<option ${R.group === g ? 'selected' : ''}>${g}</option>`)}</select>
+        <input class="w-input w-search" id="tr-q" type="search" placeholder="Search texts…" value="${R.q}" aria-label="Search texts">
+        <span class="w-hint">${missing ? missing + ' not translated yet' : 'All ' + D.keys.length + ' texts translated'}</span>
+      </div>
+      <div id="tr-list">${list.map(k => { const v = trValue(k), st = k.key in R.dirty ? 'changed' : k.custom != null ? 'custom' : v ? 'built-in' : 'missing';
+        return html`<div class="w-tr ${st}"><div class="w-tr-head"><span class="w-hint">${k.group}</span>
+          <span class="w-badge ${st === 'missing' ? 'warn' : st === 'built-in' ? 'todo' : 'info'}">${st === 'missing' ? 'Uses English' : st}</span>
+          ${k.custom != null || k.key in R.dirty ? html`<button class="w-linkbtn" data-act="trReset" data-k="${k.key}">${k.builtin || isEn ? 'Reset to built-in' : 'Clear'}</button>` : ''}</div>
+          ${isEn ? '' : html`<div class="w-tr-en">${k.en}</div>`}
+          <textarea class="w-textarea w-tr-in" data-tr="${k.key}" rows="${Math.min(8, Math.max(2, Math.ceil(k.en.length / 90) + (k.en.split('\n').length - 1)))}" placeholder="${isEn ? '' : 'Type the ' + D.languages.find(l => l.code === D.lang).name + ' text (empty = English is used)'}">${v}</textarea>
+          ${k.placeholders.length ? html`<div class="w-hint">Keep: ${k.placeholders.map(x => html`<code>{${x}}</code> `)}</div>` : ''}</div>`; })}
+        ${list.length ? '' : html`<div class="w-empty">No texts match.</div>`}</div>
+    </section>
+    <div class="w-savebar" id="trbar" ${nDirty ? '' : 'hidden'} role="status"><span id="trcount">${nDirty} unsaved change${nDirty === 1 ? '' : 's'}</span>
+      <button class="w-btn" data-act="trDiscard">Discard</button><button class="w-btn primary" data-act="trSave">Save translations</button></div>`;
+}
+async function loadTr(lang) {
+  S.tr = S.tr || { q: '', group: '', dirty: {} };
+  S.tr.data = await call('GET', '/api/translations' + (lang ? '?lang=' + encodeURIComponent(lang) : '')); S.tr.dirty = {};
+}
+async function setLanguages(langs, def) {
+  const body = { languages: langs.join('\n') }; if (def) body.default_language = def;
+  const r = await call('PUT', '/api/settings', body); S.settings = r.settings; S.draft = Object.assign({}, r.settings);
+  await loadTr(S.tr.data.lang in langs ? S.tr.data.lang : null); renderMain();
+}
+
 /* ---- suggestions ---- */
 const SUG_LABEL = { new: 'Open', accepted: 'Accepted', rejected: 'Rejected' };
 const SUG_BADGE = { new: 'todo', accepted: 'ok', rejected: 'bad' };
@@ -1234,6 +1299,19 @@ function viewInsights() {
 
 /* ---- data & backups ---- */
 const fmtBytes = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+function driveCard(G) {
+  if (!G) return '';
+  return html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Google Drive</h3>
+      ${G.configured ? html`<button class="w-btn small primary" data-act="driveNow">${icon('upload')} Copy to Google Drive now</button>` : ''}</div>
+    ${G.configured ? html`<div class="w-check"><div class="w-check-ic ${G.last_error ? 'warn' : 'ok'}">${icon(G.last_error ? 'alert' : 'check')}</div>
+        <div><div class="w-check-label">Connected${G.account ? ' to ' + G.account : ''}</div>
+        <div class="w-check-detail">${G.last_ok ? 'Last copy ' + ago(G.last_ok) + ' (' + G.last_name + ')' : 'No copy yet'} · every ${S.settings.drive_every_days} day(s), newest ${S.settings.drive_keep} kept${S.settings.drive_enabled ? '' : ' · switched off under Features'}</div>
+        ${G.last_error ? html`<div class="w-check-detail" style="color:var(--w-warn)">Last try ${ago(G.last_try)}: ${G.last_error}</div>` : ''}</div>
+        ${G.folder_url ? html`<a class="w-btn small" href="${G.folder_url}" target="_blank" rel="noopener">Open folder</a>` : ''}</div>`
+      : html`<p class="w-sub">Not connected. A copy of the database outside the server protects you if the server is ever lost.
+        Follow “Backups to Google Drive” in the bot guide (about 10 minutes, one time).</p>`}
+  </section>`;
+}
 function viewData() {
   const D = S.data;
   if (!D) return html`<div class="w-pagehead"><h2>Data</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
@@ -1250,6 +1328,7 @@ function viewData() {
       ${D.backups.length ? D.backups.map(x => html`<div class="w-item"><div><b>${x.name}</b><p>${full(x.ts)} · ${fmtBytes(x.size)}</p></div>
         <button class="w-btn small" data-act="dlBackup" data-n="${x.name}">${icon('upload')} Download</button></div>`) : html`<div class="w-empty">No backups yet.</div>`}
     </section>
+    ${driveCard(D.drive)}
     <section class="w-card w-pad w-danger"><h3 class="w-h3">Delete test data (end of testing)</h3>
       <p class="w-sub" style="margin-bottom:12px">Removes <b>every</b> report of the chosen kind, with screenshots, history and points. Settings and the log are kept.
         A backup is made first, so you can undo it. Use it once, when testing is over.</p>
@@ -1383,11 +1462,12 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { overview: viewOverview, status: viewStatus, codes: viewCodes, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+const VIEWS = { overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
   features: viewFeatures, welcome: viewWelcome, patch: viewPatch, mod: viewMod, bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
   codes: async () => { S.codes = await call('GET', '/api/giftcodes'); },
+  translations: () => loadTr(S.tr && S.tr.data ? S.tr.data.lang : null),
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
@@ -1576,6 +1656,25 @@ root.addEventListener('click', async e => {
     else if (act === 'bugsRefresh') loadBugs(true);
     else if (act === 'bugsMore') loadBugs(false);
     else if (act === 'bugOpen') await openBug(parseInt(el.dataset.id, 10));
+    else if (act === 'trSave') {
+      busy(el, true, 'Saving…');
+      try { await call('PUT', '/api/translations', { lang: S.tr.data.lang, items: S.tr.dirty }); toast('Translations saved – the bot uses them right away.'); await loadTr(S.tr.data.lang); renderMain(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'trDiscard') { S.tr.dirty = {}; renderMain(); }
+    else if (act === 'trReset') { S.tr.dirty[el.dataset.k] = ''; renderMain(); }
+    else if (act === 'langAdd') { const c = $('#tr-add').value; await setLanguages(S.tr.data.languages.map(l => l.code).concat(c)); await loadTr(c); renderMain(); toast('Language added.'); }
+    else if (act === 'langDefault') { await setLanguages(S.tr.data.languages.map(l => l.code), el.dataset.l); toast('Default language changed.'); }
+    else if (act === 'langRemove') {
+      if (!el.dataset.armed) { el.dataset.armed = '1'; el.textContent = 'Click again'; setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = 'Remove'; } }, 3500); return; }
+      const keep = S.tr.data.languages.map(l => l.code).filter(c => c !== el.dataset.l);
+      await setLanguages(keep, S.tr.data.default === el.dataset.l ? 'en' : null); toast('Language removed. Your translations are kept in case you add it again.');
+    }
+    else if (act === 'driveNow') {
+      busy(el, true, 'Uploading…');
+      try { const r = await call('POST', '/api/drive/upload'); toast('Copied to Google Drive: ' + r.name); S.data = await call('GET', '/api/data'); renderMain(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); S.data = await call('GET', '/api/data'); renderMain(); }
+    }
     else if (act === 'codeAdd') {
       const code = $('#gc-code').value.trim(), dur = $('#gc-dur').value;
       if (!code) return toast('Type the code first.', 'err');
@@ -1740,6 +1839,7 @@ root.addEventListener('click', async e => {
     else if (act === 'logMore') loadLogs(false);
   } catch (err) { toast(err.message, 'err'); }
 });
+function confirmLeave() { toast('Save or discard your translation changes first.', 'warn'); return false; }
 function renderMain() { const m = $('#wosd-main'); if (m) m.innerHTML = String(VIEWS[S.tab]()); }
 async function downloadBackup(name) {
   if (S.demo) return toast('Downloads are not available in the demo.', 'warn');
@@ -1802,7 +1902,16 @@ function onInput(e) {
     clearTimeout(logTimer); logTimer = setTimeout(() => { S.log.q = el.value.trim(); loadLogs(true); }, 300);
   } else if (el.id === 'bugq') {
     clearTimeout(logTimer); logTimer = setTimeout(() => { S.bugs.q = el.value.trim(); loadBugs(true); }, 300);
-  } else if (el.id === 'sugq') {
+  } else if (el.dataset.tr) {
+    const k = S.tr.data.keys.find(x => x.key === el.dataset.tr), base = k.custom != null ? k.custom : (k.builtin || '');
+    if (el.value === base) delete S.tr.dirty[k.key]; else S.tr.dirty[k.key] = el.value;
+    const n = Object.keys(S.tr.dirty).length, bar = $('#trbar'); bar.hidden = !n; $('#trcount').textContent = n + ' unsaved change' + (n === 1 ? '' : 's');
+  } else if (el.id === 'tr-lang') {
+    if (Object.keys(S.tr.dirty).length && !confirmLeave()) { el.value = S.tr.data.lang; return; }
+    loadTr(el.value).then(renderMain).catch(err => toast(err.message, 'err'));
+  } else if (el.id === 'tr-group') { S.tr.group = el.value; renderMain(); }
+  else if (el.id === 'tr-q') { clearTimeout(logTimer); logTimer = setTimeout(() => { S.tr.q = el.value; renderMain(); const i = $('#tr-q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 300); }
+  else if (el.id === 'sugq') {
     clearTimeout(logTimer); logTimer = setTimeout(() => { S.sugs.q = el.value.trim(); loadSugs(true); }, 300);
   } else if (el.id === 'bugarea' || el.id === 'bugsev') {
     S.bugs[el.id === 'bugarea' ? 'area' : 'severity'] = el.value; loadBugs(true);
@@ -1829,7 +1938,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, languages: 'en\npl', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
     backup_channel_id: null, bug_areas: 'City\nAlliance\nCombat\nHeroes\nEvents\nShop & payments\nChat\nLogin & connection\nUI & display\nOther',
@@ -1875,6 +1984,9 @@ function makeMock() {
     status: settings.bot_status, activity_type: settings.activity_type, activity_text: settings.activity_text });
 
   const NAMES = ['Mira', 'Jonas', 'Anders', 'Lærke', 'Sofie', 'Lars', 'Freja', 'Mikkel'];
+  const TRK = [{"key": "bug.title", "group": "Bug ticket", "en": "🐛 Bug report", "pl": "🐛 Zgłoszenie błędu", "placeholders": []}, {"key": "bug.title_edit", "group": "Bug ticket", "en": "✏️ Edit your bug report", "pl": "✏️ Popraw swoje zgłoszenie", "placeholders": []}, {"key": "bug.body", "group": "Bug ticket", "en": "**Step 1** – pick the **area** in the menu, then press **Add details** (short title, chief name, player UID, game version).\n**Step 2** – answer these questions **in one message**:\n\n**1. What is the bug?**\n**2. Do you know why it is happening?**\n**3. What is the correct way the feature should work?**\n**4. Attach a picture or video** to the same message{again}\n\nWhen you press **Send**, I'll show you a preview where you can **Submit**, **Edit** or **Delete** your report.", "pl": "**Krok 1** – wybierz **obszar** w menu, a potem naciśnij **Dodaj szczegóły** (krótki tytuł, nazwa wodza, UID gracza, wersja gry).\n**Krok 2** – odpowiedz na te pytania **w jednej wiadomości**:\n\n**1. Na czym polega błąd?**\n**2. Czy wiesz, dlaczego się pojawia?**\n**3. Jak ta funkcja powinna działać prawidłowo?**\n**4. Dołącz zdjęcie lub film** do tej samej wiadomości{again}\n\nGdy naciśniesz **Wyślij**, pokażę podgląd, w którym możesz **Wysłać**, **Poprawić** albo **Usunąć** zgłoszenie.", "placeholders": ["again"]}, {"key": "bug.again", "group": "Bug ticket", "en": " (attachments have to be added again)", "pl": " (załączniki trzeba dodać ponownie)", "placeholders": []}, {"key": "bug.template_name", "group": "Bug ticket", "en": "Template you can copy", "pl": "Szablon do skopiowania", "placeholders": []}, {"key": "bug.template", "group": "Bug ticket", "en": "What is the bug?\n\nDo you know why it is happening?\n\nWhat is the correct way the feature should work?", "pl": "Na czym polega błąd?\n\nCzy wiesz, dlaczego się pojawia?\n\nJak ta funkcja powinna działać prawidłowo?", "placeholders": []}, {"key": "bug.area_ph", "group": "Bug ticket", "en": "Where is the problem? (area)", "pl": "Gdzie jest problem? (obszar)", "placeholders": []}, {"key": "bug.area_set", "group": "Bug ticket", "en": "✅ Area: **{area}**", "pl": "✅ Obszar: **{area}**", "placeholders": ["area"]}, {"key": "bug.area_gone", "group": "Bug ticket", "en": "That area doesn't exist any more.", "pl": "Ten obszar już nie istnieje.", "placeholders": []}, {"key": "bug.details_btn", "group": "Bug ticket", "en": "Add details", "pl": "Dodaj szczegóły", "placeholders": []}, {"key": "pv.title", "group": "Preview", "en": "📋 Preview – is this ready to send?", "pl": "📋 Podgląd – czy można wysłać?", "placeholders": []}, {"key": "pv.no_text", "group": "Preview", "en": "*(no text)*", "pl": "*(brak tekstu)*", "placeholders": []}, {"key": "pv.f_title", "group": "Preview", "en": "Title", "pl": "Tytuł", "placeholders": []}, {"key": "pv.f_title_missing", "group": "Preview", "en": "⚠️ *(missing – press Add details)*", "pl": "⚠️ *(brak – naciśnij Dodaj szczegóły)*", "placeholders": []}, {"key": "pv.f_area", "group": "Preview", "en": "Area", "pl": "Obszar", "placeholders": []}, {"key": "pv.f_area_missing", "group": "Preview", "en": "⚠️ *(missing – use the menu)*", "pl": "⚠️ *(brak – użyj menu)*", "placeholders": []}, {"key": "pv.f_version", "group": "Preview", "en": "Game version", "pl": "Wersja gry", "placeholders": []}, {"key": "pv.f_chief", "group": "Preview", "en": "Chief / UID", "pl": "Wódz / UID", "placeholders": []}, {"key": "pv.f_files", "group": "Preview", "en": "Attachments", "pl": "Załączniki", "placeholders": []}, {"key": "pv.footer", "group": "Preview", "en": "Submit = send to the moderators · Edit = change it · Delete = discard", "pl": "Wyślij = do moderatorów · Popraw = zmień · Usuń = odrzuć", "placeholders": []}, {"key": "pv.submit", "group": "Preview", "en": "Submit", "pl": "Wyślij", "placeholders": []}, {"key": "pv.edit", "group": "Preview", "en": "Edit", "pl": "Popraw", "placeholders": []}, {"key": "pv.delete", "group": "Preview", "en": "Delete", "pl": "Usuń", "placeholders": []}, {"key": "pv.previous", "group": "Preview", "en": "Your previous message (copy & edit)", "pl": "Twoja poprzednia wiadomość (skopiuj i popraw)", "placeholders": []}];
+  const trOver = {};
+  const drive = { configured: true, account: 'kasper@example.com', folder_url: 'https://drive.google.com/drive/folders/x', last_ok: now - 2 * 86400, last_name: 'bugs-20261105-031502.db.gz', last_error: null, last_try: now - 2 * 86400 };
   const codes = [['WOSEU1WEEKEND', '300 gems + 2× 1h speed-up', 3600 * 5, 86400 * 2], ['HAPPYHALLOWEEN', 'Pumpkin frame', 86400 * 3, 86400 * 4], ['WELCOME2026', 'Starter pack', 86400 * 20, null], ['LAUNCHDAY', '1000 gems', 86400 * 9, 86400 * 2]]
     .map((c, i) => ({ id: i + 1, code: c[0], reward: c[1], created_at: now - c[2], expires_at: c[3] ? now - c[2] + c[3] : null, by: 'Kasper', url: 'https://discord.com/channels/1/2/3' }));
   const SUGT = ['Add a guild chat translation button', 'Let us rename pets', 'More daily quests on weekends', 'Show the event timer on the map',
@@ -1947,6 +2059,15 @@ function makeMock() {
       const counts = {}; bugs.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
       return { items: f.slice(off, off + lim).map(briefBug), total: f.length, counts };
     }
+    if (p === '/api/translations' && method === 'GET') {
+      const langs = ['en'].concat(String(settings.languages || '').split('\n').filter(x => x && x !== 'en')), lang = q.get('lang') || langs[1] || 'en';
+      const names = { en: 'English', pl: 'Polski', da: 'Dansk', de: 'Deutsch', fr: 'Français', es: 'Español', sv: 'Svenska' };
+      return { lang, default: settings.default_language || 'en',
+        keys: TRK.map(k => ({ key: k.key, group: k.group, en: k.en, builtin: lang === 'en' ? k.en : lang === 'pl' ? k.pl : null, custom: (trOver[lang] || {})[k.key] ?? null, placeholders: k.placeholders })),
+        languages: langs.map(c => ({ code: c, name: names[c] || c, builtin: c === 'en' || c === 'pl', custom: Object.keys(trOver[c] || {}).length, players: { en: 41, pl: 23, da: 3 }[c] || 0 })),
+        known: Object.keys(names).map(c => ({ code: c, name: names[c] })) };
+    }
+    if (p === '/api/translations') { trOver[body.lang] = Object.assign(trOver[body.lang] || {}, body.items); Object.keys(trOver[body.lang]).forEach(k => { if (!trOver[body.lang][k]) delete trOver[body.lang][k]; }); return { ok: true }; }
     if (p === '/api/giftcodes' && method === 'GET') {
       const t = Math.floor(Date.now() / 1000);
       return { items: codes.map(c => Object.assign({}, c, { state: c.expires_at && c.expires_at <= t ? 'expired' : (t - c.created_at < 86400 ? 'new' : 'active') })),
@@ -2020,7 +2141,8 @@ function makeMock() {
         { id: '2', name: 'Kasper', total: 61, counts: { being_investigated: 18, fixed: 31, admin_rejected: 5, passed: 4, replied: 3 } },
         { id: null, name: 'Dashboard', total: 6, counts: { fixed: 4, rejected: 2 } }]
     };
-    if (p === '/api/data') return { db_bytes: 482304, storage: { files: 41, bytes: 31457280 }, backups: [3, 2, 1, 0].map(i => ({ name: 'bugs-2026110' + (i + 1) + '-031502.db', size: 480000 - i * 9000, ts: now - i * 86400 })) };
+    if (p === '/api/drive/upload') { drive.last_ok = Math.floor(Date.now() / 1000); drive.last_name = 'bugs-20261107-210000.db.gz'; drive.last_error = null; return { ok: true, name: drive.last_name, drive }; }
+    if (p === '/api/data') return { drive, db_bytes: 482304, storage: { files: 41, bytes: 31457280 }, backups: [3, 2, 1, 0].map(i => ({ name: 'bugs-2026110' + (i + 1) + '-031502.db', size: 480000 - i * 9000, ts: now - i * 86400 })) };
     if (p === '/api/backup') { addLog('backup', 'Backup created from the dashboard'); return { ok: true, name: 'bugs-20261105-101500.db' }; }
     if (p === '/api/replies' && method === 'GET') return { items: replies.map(r => Object.assign({}, r)) };
     if (p === '/api/replies') { replies.push({ id: nextReply++, title: body.title, text: body.text }); return { id: nextReply - 1 }; }

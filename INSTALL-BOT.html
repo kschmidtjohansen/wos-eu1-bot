@@ -262,6 +262,29 @@ You can close the SSH window – the bot keeps running.</p>
 - To install a released version right away, type in the SSH window: <code>Update bugbot</code>
 - If a new version doesn't start, the server <strong>puts the previous version back by itself</strong>. Ask Claude to fix it.
 - See what happened: <code>cat /var/log/wos-update.log</code> (the dashboard's Activity log also shows "Bot started – version …").</p>
+<h2>Backups to Google Drive (optional, about 10 minutes)</h2>
+<p>The bot already makes a backup every day on the server (and in <code>#bot-backups</code> if you chose that channel). This adds a copy in
+<strong>your own Google Drive</strong> once a week, so nothing is lost even if the server is. The bot only gets access to the one folder it creates.</p>
+<ol>
+<li>Open <a href="https://console.cloud.google.com">https://console.cloud.google.com</a> – the same project as your server (<em>My First Project</em>).</li>
+<li>In the search bar type <strong>Google Drive API</strong> → open it → <strong>Enable</strong>.</li>
+<li>Search for <strong>Google Auth Platform</strong> → <strong>Get started</strong>:
+   App name <code>WOS EU1 backups</code>, your e-mail as support e-mail → <strong>Next</strong> → Audience <strong>External</strong> → <strong>Next</strong> →
+   your e-mail as contact → <strong>Next</strong> → tick the agreement → <strong>Create</strong>.</li>
+<li>In the left menu click <strong>Audience</strong> → <strong>Publish app</strong> → <strong>Confirm</strong>.
+   <em>(Without this, Google logs the bot out again after 7 days.)</em></li>
+<li>In the left menu click <strong>Clients</strong> → <strong>Create client</strong> → Application type <strong>TVs and Limited Input devices</strong>, name <code>wos-bot</code> → <strong>Create</strong>.
+   Copy the <strong>Client ID</strong> and the <strong>Client secret</strong>.</li>
+<li>In the server's SSH window run:
+   <code>bash
+   sudo bash /opt/wosbot/deploy/setup-drive.sh</code>
+   Paste the Client ID and secret. It shows a short code: open <a href="https://www.google.com/device">https://www.google.com/device</a> on your phone or PC, type the code,
+   choose your Google account and allow access. If Google warns that the app isn't verified, click <strong>Advanced → Go to WOS EU1 backups</strong> –
+   it is your own app.</li>
+<li>On the dashboard: <strong>Data → Copy to Google Drive now</strong>. A folder <strong>WOS EU1 backups</strong> appears in your Google Drive.</li>
+</ol>
+<p>How often and how many copies are kept: dashboard → <strong>Features → Screenshots &amp; backups</strong> (default: weekly, newest 8).
+To restore: download a file from the folder, unzip it (<code>.gz</code>), and follow <em>Restore a backup</em> below.</p>
 <h2>Everyday tasks</h2>
 <p>Open the SSH window (step 6) first.</p>
 <table>
@@ -295,6 +318,14 @@ You can close the SSH window – the bot keeps running.</p>
 <tr>
 <td>Make a backup</td>
 <td>Dashboard → <strong>Data</strong> → <strong>Back up now</strong> (and download it). The bot also makes one every day.</td>
+</tr>
+<tr>
+<td>Restore a backup</td>
+<td><code>sudo systemctl stop wosbot</code>, copy a file from <code>/opt/wosbot/data/backups/</code> (or from Google Drive, unzipped) over <code>/opt/wosbot/bugs.db</code>, then <code>sudo systemctl start wosbot</code></td>
+</tr>
+<tr>
+<td>Is everything OK?</td>
+<td>Dashboard → <strong>Server status</strong> (bot, CPU, memory, disk, website link, updates, problems)</td>
 </tr>
 </tbody>
 </table>

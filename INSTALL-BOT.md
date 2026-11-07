@@ -167,6 +167,32 @@ From then on:
 - If a new version doesn't start, the server **puts the previous version back by itself**. Ask Claude to fix it.
 - See what happened: `cat /var/log/wos-update.log` (the dashboard's Activity log also shows "Bot started – version …").
 
+## Backups to Google Drive (optional, about 10 minutes)
+
+The bot already makes a backup every day on the server (and in `#bot-backups` if you chose that channel). This adds a copy in
+**your own Google Drive** once a week, so nothing is lost even if the server is. The bot only gets access to the one folder it creates.
+
+1. Open <https://console.cloud.google.com> – the same project as your server (*My First Project*).
+2. In the search bar type **Google Drive API** → open it → **Enable**.
+3. Search for **Google Auth Platform** → **Get started**:
+   App name `WOS EU1 backups`, your e-mail as support e-mail → **Next** → Audience **External** → **Next** →
+   your e-mail as contact → **Next** → tick the agreement → **Create**.
+4. In the left menu click **Audience** → **Publish app** → **Confirm**.
+   *(Without this, Google logs the bot out again after 7 days.)*
+5. In the left menu click **Clients** → **Create client** → Application type **TVs and Limited Input devices**, name `wos-bot` → **Create**.
+   Copy the **Client ID** and the **Client secret**.
+6. In the server's SSH window run:
+   ```bash
+   sudo bash /opt/wosbot/deploy/setup-drive.sh
+   ```
+   Paste the Client ID and secret. It shows a short code: open <https://www.google.com/device> on your phone or PC, type the code,
+   choose your Google account and allow access. If Google warns that the app isn't verified, click **Advanced → Go to WOS EU1 backups** –
+   it is your own app.
+7. On the dashboard: **Data → Copy to Google Drive now**. A folder **WOS EU1 backups** appears in your Google Drive.
+
+How often and how many copies are kept: dashboard → **Features → Screenshots & backups** (default: weekly, newest 8).
+To restore: download a file from the folder, unzip it (`.gz`), and follow *Restore a backup* below.
+
 ## Everyday tasks
 
 Open the SSH window (step 6) first.
@@ -179,6 +205,8 @@ Open the SSH window (step 6) first.
 | Change the token or roles | `sudo bash bugbot/deploy/install.sh` → answer **n** to "Keep them?" |
 | **Update to a new version** | Write **Update bugbot** to Claude, or type `Update bugbot` in the SSH window (after the one-time setup above). Your database, files and settings are kept. |
 | Make a backup | Dashboard → **Data** → **Back up now** (and download it). The bot also makes one every day. |
+| Restore a backup | `sudo systemctl stop wosbot`, copy a file from `/opt/wosbot/data/backups/` (or from Google Drive, unzipped) over `/opt/wosbot/bugs.db`, then `sudo systemctl start wosbot` |
+| Is everything OK? | Dashboard → **Server status** (bot, CPU, memory, disk, website link, updates, problems) |
 
 ## Troubleshooting
 

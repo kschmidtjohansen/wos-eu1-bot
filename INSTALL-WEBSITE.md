@@ -128,6 +128,11 @@ Open these (use your own address):
    - turn on **Public known-issues list** and **Public changelog** when you're ready,
    - set your **time zone** (`Europe/Copenhagen`) for the weekly digest, and the points for bug hunters.
 4. **Welcome** → write a welcome message (optional).
+5. **Gift codes** (optional) → on **Channels** choose a gift-codes channel, on **Features → Gift codes** switch them on and pick who is tagged.
+   Then add codes on the **Gift codes** page: each one is announced in Discord at once, shown as **New** at the top of `/bugs/codes.html`
+   for 24 hours, and listed there until it expires. Players can also type `/codes` in Discord.
+6. **Translations** → players get the bot's messages in English or Polish (their Discord language, or what they pick in the ticket
+   or with `/language`). Change any text or add more languages there.
 
 ## Step 8 – Link the new pages from your site
 

@@ -6,7 +6,6 @@ All Discord IDs are sent as strings (they are too large for JavaScript numbers).
 import csv
 import hmac
 import os
-import hmac
 import io
 import re
 import time
@@ -551,6 +550,53 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         await hooks["remove_gift_code"](r["id"], request.query.get("discord", "1") != "0", "Dashboard")
         return web.json_response({"ok": True})
 
+    # ---------------------------------------------------------- translations
+    @routes.get("/api/translations")
+    async def get_translations(request):
+        import texts
+        langs = store.languages()
+        lang = (request.query.get("lang") or (langs[1] if len(langs) > 1 else "en")).lower()
+        if lang not in langs:
+            raise ApiError(400, "That language is not switched on.")
+        over, counts = store.translations(), store.language_counts()
+        keys = [{"key": k, "group": texts.GROUPS[k], "en": texts.DEFAULTS["en"][k],
+                 "builtin": texts.DEFAULTS.get(lang, {}).get(k), "custom": (over.get(lang) or {}).get(k),
+                 "placeholders": sorted(texts.placeholders(texts.DEFAULTS["en"][k]))} for k in texts.KEYS]
+        return web.json_response({
+            "lang": lang, "default": store.default_language(), "keys": keys,
+            "languages": [{"code": c, "name": texts.lang_name(c), "builtin": c in texts.DEFAULTS,
+                           "custom": len(over.get(c) or {}), "players": counts.get(c, 0)} for c in langs],
+            "known": [{"code": c, "name": n} for c, n in texts.LANGUAGE_NAMES.items()]})
+
+    @routes.put("/api/translations")
+    async def put_translations(request):
+        import texts
+        data = await body_json(request)
+        lang = str(data.get("lang") or "").lower()
+        if lang not in store.languages():
+            raise ApiError(400, "That language is not switched on.")
+        items = data.get("items")
+        if not isinstance(items, dict) or len(items) > len(texts.KEYS):
+            raise ApiError(400, "Nothing to save.")
+        over = store.translations()
+        mine = dict(over.get(lang) or {})
+        for k, v in items.items():
+            v = "" if v is None else str(v).strip()
+            if k not in texts.GROUPS:
+                raise ApiError(400, f"Unknown text '{k}'.")
+            if not v or v == texts.DEFAULTS.get(lang, {}).get(k):
+                mine.pop(k, None)                       # empty / same as built-in = use the built-in text
+                continue
+            problem = texts.check_translation(k, v)
+            if problem:
+                raise ApiError(400, f"{texts.GROUPS[k]} – “{texts.DEFAULTS['en'][k][:40]}…”: {problem}")
+            mine[k] = v
+        over[lang] = mine
+        store.save_translations(over)
+        store.log_event("settings", f"Dashboard: translations for {texts.lang_name(lang)} saved ({len(items)} text(s))",
+                        None, "Dashboard")
+        return web.json_response({"ok": True, "custom": len(mine)})
+
     # ---------------------------------------------------------- suggestions
     def sug_dict(r):
         return {"id": r["id"], "text": r["text"], "status": r["status"], "created_at": r["created_at"],
@@ -813,8 +859,21 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     # ------------------------------------------------------------ data & backups
     @routes.get("/api/data")
     async def data_info(request):
+        import drive
         size = (Path('bugs.db').stat().st_size if Path('bugs.db').exists() else 0)
-        return web.json_response({"db_bytes": size, "storage": store.storage_info(), "backups": store.list_backups()})
+        return web.json_response({"db_bytes": size, "storage": store.storage_info(), "backups": store.list_backups(),
+                                  "drive": drive.status()})
+
+    @routes.post("/api/drive/upload")
+    async def drive_upload(request):
+        import drive
+        if not drive.status()["configured"]:
+            raise ApiError(400, "Google Drive is not set up yet – see the bot guide, “Backups to Google Drive”.")
+        try:
+            name = await hooks["drive_backup"]()
+        except drive.DriveError as exc:
+            raise ApiError(502, str(exc))
+        return web.json_response({"ok": True, "name": name, "drive": drive.status()})
 
     @routes.post("/api/backup")
     async def make_backup(request):
