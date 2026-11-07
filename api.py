@@ -10,8 +10,13 @@ import hmac
 import io
 import re
 import time
+import asyncio
+import shutil
+import platform
 from pathlib import Path
 from collections import defaultdict
+
+STARTED = time.time()   # when the bot process started (for the uptime on the Server status page)
 
 import discord
 from aiohttp import web
@@ -46,9 +51,10 @@ CHANNEL_NEEDS = {
     "backup_channel_id": ("Backup channel", _BASE + ["attach_files"]),
     "digest_channel_id": ("Weekly digest channel", _BASE),
     "bounty_channel_id": ("Monthly leaderboard channel", _BASE),
+    "giftcodes_channel_id": ("Gift codes channel", _BASE + ["read_message_history"]),
 }
 OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id",
-                     "bounty_channel_id")
+                     "bounty_channel_id", "giftcodes_channel_id")
 # accepted suggestions are only posted here; moderators decide in the mod channel
 
 
@@ -422,6 +428,190 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                                        reset_numbers=bool(data.get("all") and data.get("reset_numbers")))
         return web.json_response({"deleted": n})
 
+    # ---------------------------------------------------------- server status
+    def meminfo():
+        try:
+            d = {}
+            for line in Path("/proc/meminfo").read_text().splitlines():
+                k, v = line.split(":", 1)
+                d[k] = int(v.split()[0]) * 1024
+            return {"total": d["MemTotal"], "available": d.get("MemAvailable", d.get("MemFree", 0)),
+                    "swap_total": d.get("SwapTotal", 0), "swap_free": d.get("SwapFree", 0)}
+        except (OSError, KeyError, ValueError):
+            return None
+
+    async def service_state(name):
+        if not shutil.which("systemctl"):
+            return None
+        try:
+            p = await asyncio.create_subprocess_exec("systemctl", "is-active", name, stdout=asyncio.subprocess.PIPE,
+                                                     stderr=asyncio.subprocess.DEVNULL)
+            out, _ = await asyncio.wait_for(p.communicate(), 3)
+            return out.decode().strip() or "unknown"
+        except (OSError, asyncio.TimeoutError):
+            return None
+
+    async def website_check():
+        import aiohttp
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=4)) as s:
+                async with s.get("http://127.0.0.1/public/config") as r:
+                    return r.status == 200 and "enabled" in await r.text()
+        except Exception:  # noqa: BLE001 - no local web server, or the link is down
+            return None
+
+    @routes.get("/api/status")
+    async def server_status(request):
+        g = client.get_guild(guild_id)
+        now = time.time()
+        try:
+            up = float(Path("/proc/uptime").read_text().split()[0])
+        except (OSError, ValueError, IndexError):
+            up = None
+        try:
+            load = os.getloadavg()
+        except OSError:
+            load = None
+        disk = shutil.disk_usage(store.DATA_DIR if store.DATA_DIR.exists() else ".")
+        names = ["wosbot", "nginx", "apache2", "wos-tunnel", "wos-update.timer"]
+        states = dict(zip(names, await asyncio.gather(*(service_state(n) for n in names))))
+        services = [{"name": n, "label": lbl, "state": states[n]} for n, lbl in
+                    (("wosbot", "Discord bot"), ("nginx", "Web server (nginx)"), ("apache2", "Web server (Apache)"),
+                     ("wos-tunnel", "Website ↔ bot link"), ("wos-update.timer", "Update checker"))
+                    if states[n] not in (None, "inactive") or n in ("wosbot",)]
+        site_ok = await website_check() if any(states.get(n) == "active" for n in ("nginx", "apache2")) else None
+        backups = store.list_backups()
+        ver = hooks["version_info"]() if "version_info" in hooks else {"version": "", "changes": ""}
+        try:
+            upd = [x for x in Path("/var/log/wos-update.log").read_text(encoding="utf-8", errors="replace").splitlines() if x.strip()][-6:]
+        except OSError:
+            upd = []
+        since = int(now - 86400)
+        errs = store.db.execute("SELECT ts, text FROM logs WHERE kind='system' AND ts>=? AND (text LIKE 'Could not%' OR text LIKE '%failed%') "
+                                "ORDER BY id DESC LIMIT 5", (since,)).fetchall()
+        lat = client.latency
+        return web.json_response({
+            "checked_at": int(now),
+            "bot": {"online": g is not None and not client.is_closed(), "latency_ms": None if lat is None or lat != lat else round(lat * 1000),
+                    "uptime_s": int(now - STARTED), "version": ver["version"], "changes": ver["changes"],
+                    "members": g.member_count if g else None, "python": platform.python_version()},
+            "system": {"uptime_s": int(up) if up else None, "load": [round(x, 2) for x in load] if load else None,
+                       "cpus": os.cpu_count(), "memory": meminfo(),
+                       "disk": {"total": disk.total, "free": disk.free}},
+            "services": services, "website_ok": site_ok,
+            "data": {"db_bytes": Path("bugs.db").stat().st_size if Path("bugs.db").exists() else 0,
+                     "last_backup": backups[0]["ts"] if backups else None, "backups": len(backups)},
+            "updates": upd,
+            "errors": [{"ts": r["ts"], "text": r["text"]} for r in errs],
+        })
+
+    # ---------------------------------------------------------- gift codes
+    def code_dict(r, now=None):
+        return {"id": r["id"], "code": r["code"], "reward": r["reward"] or "", "created_at": r["created_at"],
+                "expires_at": r["expires_at"], "state": store.gift_code_state(r, now), "by": r["created_by"] or "",
+                "url": jump("giftcodes_channel_id", r["msg_id"])}
+
+    @routes.get("/api/giftcodes")
+    async def list_codes(request):
+        now = int(time.time())
+        return web.json_response({"items": [code_dict(r, now) for r in store.gift_codes()],
+                                  "durations": [{"hours": h, "label": store.gift_duration_label(h)} for h in store.GIFT_DURATIONS]})
+
+    @routes.post("/api/giftcodes")
+    async def post_code(request):
+        data = await body_json(request)
+        hours = data.get("hours")
+        if hours not in (None, "", 0) and not (isinstance(hours, int) or str(hours).isdigit()):
+            raise ApiError(400, "Choose how long the code works.")
+        try:
+            r, warn = await hooks["add_gift_code"](str(data.get("code") or ""), str(data.get("reward") or ""),
+                                                   int(hours) if hours not in (None, "", 0) else None, "Dashboard",
+                                                   announce=bool(data.get("announce", True)))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        return web.json_response({"item": code_dict(r), "warning": warn})
+
+    def code_or_404(cid):
+        r = store.get_gift_code(cid)
+        if r is None:
+            raise ApiError(404, "Gift code not found.")
+        return r
+
+    @routes.put("/api/giftcodes/{id}")
+    async def put_code(request):
+        r = code_or_404(int_param(request, "id"))
+        if (await body_json(request)).get("action") != "end":
+            raise ApiError(400, "Unknown action.")
+        await hooks["end_gift_code"](r["id"], "Dashboard")
+        return web.json_response({"item": code_dict(store.get_gift_code(r["id"]))})
+
+    @routes.delete("/api/giftcodes/{id}")
+    async def delete_code(request):
+        r = code_or_404(int_param(request, "id"))
+        await hooks["remove_gift_code"](r["id"], request.query.get("discord", "1") != "0", "Dashboard")
+        return web.json_response({"ok": True})
+
+    # ---------------------------------------------------------- suggestions
+    def sug_dict(r):
+        return {"id": r["id"], "text": r["text"], "status": r["status"], "created_at": r["created_at"],
+                "author_id": str(r["author_id"]), "author": person(r["author_id"], r["author_name"]) or "Unknown player",
+                "mod_url": jump("mod_channel_id", r["msg_id"]), "public_url": jump("suggestions_channel_id", r["public_msg_id"])}
+
+    @routes.get("/api/suggestions")
+    async def list_suggestions(request):
+        q = request.query
+        status = q.get("status") or None
+        if status and status not in ("new", "accepted", "rejected"):
+            raise ApiError(400, "Unknown status.")
+        try:
+            limit = max(1, min(int(q.get("limit", 25)), 100)); offset = max(0, int(q.get("offset", 0)))
+        except ValueError:
+            raise ApiError(400, "limit and offset must be numbers.")
+        rows, total, counts = store.query_suggestions(status, (q.get("q") or "").strip()[:100] or None, limit, offset)
+        return web.json_response({"items": [sug_dict(r) for r in rows], "total": total, "counts": counts})
+
+    def sug_or_404(sid):
+        r = store.get_suggestion(sid)
+        if r is None:
+            raise ApiError(404, "Suggestion not found.")
+        return r
+
+    @routes.put("/api/suggestions/{id}")
+    async def put_suggestion(request):
+        r = sug_or_404(int_param(request, "id"))
+        status = (await body_json(request)).get("status")
+        if status not in ("accepted", "rejected"):
+            raise ApiError(400, "Status must be accepted or rejected.")
+        if r["status"] != "new":
+            raise ApiError(409, "This suggestion has already been decided.")
+        r = await hooks["decide_suggestion"](r, status, None, "Dashboard")
+        return web.json_response(sug_dict(r))
+
+    @routes.delete("/api/suggestions/{id}")
+    async def delete_suggestion(request):
+        r = sug_or_404(int_param(request, "id"))
+        n = await hooks["delete_suggestions"]([r["id"]], request.query.get("discord", "1") != "0", "Dashboard")
+        return web.json_response({"deleted": n})
+
+    @routes.post("/api/suggestions/delete")
+    async def delete_many_suggestions(request):
+        data = await body_json(request)
+        if data.get("all"):
+            if str(data.get("confirm") or "").strip().upper() != "DELETE":
+                raise ApiError(400, "Type DELETE to confirm.")
+            ids = store.all_suggestion_ids()
+        else:
+            raw = data.get("ids") or []
+            if not isinstance(raw, list) or not raw or len(raw) > 500:
+                raise ApiError(400, "Choose 1–500 suggestions.")
+            try:
+                ids = [int(i) for i in raw]
+            except (TypeError, ValueError):
+                raise ApiError(400, "Suggestion numbers must be numbers.")
+        n = await hooks["delete_suggestions"](ids, bool(data.get("discord", True)), "Dashboard",
+                                              reset_numbers=bool(data.get("all") and data.get("reset_numbers")))
+        return web.json_response({"deleted": n})
+
     @routes.post("/api/bugs/{id}/reply")
     async def reply_bug(request):
         r = bug_or_404(int_param(request, "id"))
@@ -673,6 +863,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         return web.json_response({"enabled": bool(store.cfg("web_form_enabled") and store.cfg("mod_channel_id")),
                                   "known_issues": bool(store.cfg("known_issues_enabled")),
                                   "changelog": bool(store.cfg("changelog_enabled")),
+                                  "giftcodes": bool(store.cfg("giftcodes_enabled")),
                                   "areas": store.area_list(), "version": store.cfg("game_version") or "",
                                   "limits": {"files": MAX_FILES, "file_mb": MAX_FILE // 2**20,
                                              "title": [5, 100], "description": [20, 1800]}},
@@ -788,6 +979,18 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(404, "The known-issues list is switched off.")
         return web.json_response({"items": store.known_issues(), "version": store.cfg("game_version") or ""},
                                  headers={"Cache-Control": "max-age=60"})
+
+    @routes.get("/public/giftcodes")
+    async def public_codes(request):
+        if not store.cfg("giftcodes_enabled"):
+            raise ApiError(404, "Gift codes are switched off.")
+        now = int(time.time())
+        return web.json_response({"new_hours": store.cfg("giftcodes_new_hours"), "now": now,
+                                  "items": [{"id": r["id"], "code": r["code"], "reward": r["reward"] or "",
+                                             "added": r["created_at"], "expires": r["expires_at"],
+                                             "new": store.gift_code_state(r, now) == "new"}
+                                            for r in store.active_gift_codes(now)]},
+                                 headers={"Cache-Control": "max-age=30"})
 
     app = web.Application(middlewares=[cors_mw, error_mw, auth_mw], client_max_size=MAX_TOTAL + 1024 * 1024)
     app.add_routes(routes)

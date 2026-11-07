@@ -63,15 +63,18 @@ refresh_web() {
   sed 's|apiBase: "",|apiBase: "same-origin",|' $SRC/dashboard.html > $WWW/staff/index.html
   chmod -R a+rX $WWW
 }
-deploy() {   # deploy <commit>
+deploy() {   # deploy <commit> [changes text]
   git -C $SRC reset -q --hard "$1" || return 1
   printf '%s (%s)\n' "${1:0:7}" "$(git -C $SRC log -1 --format=%cs "$1")" > $SRC/VERSION
+  printf '%s\n' "${2:-}" > $SRC/CHANGES        # the bot posts this in the admin channel after starting
   WOS_AUTO=1 quiet_or_show bash $SRC/deploy/install.sh update || return 1
   refresh_web
 }
 
 say "Installing ${NEW:0:7} – $TITLE"
-if deploy "$NEW"; then
+CHANGES="$(git -C $SRC log --no-merges --format='%s' ${DEPLOYED:+"$DEPLOYED..$NEW"} -n 20 2>/dev/null || true)"
+[[ -n "$DEPLOYED" ]] || CHANGES="$TITLE"
+if deploy "$NEW" "$CHANGES"; then
   echo "$NEW" > $STATE/deployed; rm -f $STATE/failed
   say "✔ Updated to ${NEW:0:7} – $TITLE"
   exit 0
@@ -81,7 +84,7 @@ echo "$NEW" > $STATE/failed
 say "✘ Version ${NEW:0:7} did not start."
 if [[ -n "$DEPLOYED" ]]; then
   say "Putting back the previous version ${DEPLOYED:0:7}…"
-  if deploy "$DEPLOYED"; then say "✔ Previous version is running again. Tell Claude the update failed (log: $LOG)."
+  if deploy "$DEPLOYED" "ROLLBACK ${NEW:0:7}"; then say "✔ Previous version is running again. Tell Claude the update failed (log: $LOG)."
   else say "✘ The previous version didn't start either – check: sudo journalctl -u wosbot -n 50"; fi
 fi
 exit 1

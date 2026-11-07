@@ -128,6 +128,16 @@ db.executescript(
         leaves INTEGER NOT NULL DEFAULT 0,
         est INTEGER NOT NULL DEFAULT 0           -- 1 = estimated from join dates (before tracking started)
     );
+    CREATE TABLE IF NOT EXISTS gift_codes (    -- in-game gift codes announced in Discord and listed on the website
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT NOT NULL,
+        reward TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,                        -- NULL = permanent
+        msg_id INTEGER,                            -- the announcement in the gift-codes channel
+        created_by TEXT,
+        expired_noted INTEGER NOT NULL DEFAULT 0   -- the announcement was marked "expired"
+    );
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,6 +302,12 @@ SCHEMA = {
     "points_accepted": {"type": "int", "default": 1, "min": 0, "max": 100},
     "points_fixed": {"type": "int", "default": 3, "min": 0, "max": 100},
     "points_suggestion": {"type": "int", "default": 2, "min": 0, "max": 100},
+    "update_notice_enabled": {"type": "bool", "default": True},
+    "giftcodes_enabled": {"type": "bool", "default": False},
+    "giftcodes_channel_id": {"type": "channel", "default": None},
+    "giftcodes_ping": {"type": "choice", "default": "none", "choices": ["none", "here", "everyone", "role"]},
+    "giftcodes_role_id": {"type": "text", "default": "", "min": 0, "max": 25},
+    "giftcodes_new_hours": {"type": "int", "default": 24, "min": 1, "max": 168},
     "bugs_enabled": {"type": "bool", "default": True},
     "suggestions_enabled": {"type": "bool", "default": True},
     "investigate_enabled": {"type": "bool", "default": True},
@@ -1104,3 +1120,101 @@ def delete_bugs(ids, reset_numbers: bool = False) -> list:
 
 def all_bug_ids() -> list:
     return [r[0] for r in db.execute("SELECT id FROM bug_reports")]
+
+
+# ----------------------------------------------------------------- suggestions list / delete
+def query_suggestions(status=None, q=None, limit=50, offset=0):
+    where, args = [], []
+    if status:
+        where.append("status=?"); args.append(status)
+    if q:
+        esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        if q.lstrip("#").isdigit():
+            where.append("(id=? OR text LIKE ? ESCAPE '\\')"); args += [int(q.lstrip("#")), f"%{esc}%"]
+        else:
+            where.append("(text LIKE ? ESCAPE '\\' OR author_name LIKE ? ESCAPE '\\')"); args += [f"%{esc}%"] * 2
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    total = db.execute(f"SELECT COUNT(*) FROM suggestions {clause}", args).fetchone()[0]
+    rows = db.execute(f"SELECT * FROM suggestions {clause} ORDER BY id DESC LIMIT ? OFFSET ?", (*args, limit, offset)).fetchall()
+    counts = {r["status"]: r["n"] for r in db.execute("SELECT status, COUNT(*) AS n FROM suggestions GROUP BY status")}
+    return rows, total, counts
+
+
+def delete_suggestions(ids, reset_numbers: bool = False) -> list:
+    ids = sorted({int(i) for i in ids})
+    rows = [r for r in (get_suggestion(i) for i in ids) if r is not None]
+    for r in rows:
+        db.execute("DELETE FROM points WHERE kind='suggestion' AND ref=?", (r["id"],))
+        db.execute("DELETE FROM actions WHERE kind='suggestion' AND item_id=?", (r["id"],))
+        db.execute("DELETE FROM suggestions WHERE id=?", (r["id"],))
+    if reset_numbers and not db.execute("SELECT 1 FROM suggestions LIMIT 1").fetchone():
+        db.execute("DELETE FROM sqlite_sequence WHERE name='suggestions'")
+    db.commit()
+    return rows
+
+
+def all_suggestion_ids() -> list:
+    return [r[0] for r in db.execute("SELECT id FROM suggestions")]
+
+
+# ----------------------------------------------------------------- gift codes
+GIFT_DURATIONS = [24, 48, 72, 96, 120, 168, 336, 720, None]      # hours; None = permanent
+GIFT_CODE_RE = re.compile(r"^[A-Za-z0-9_\-]{3,40}$")
+
+
+def gift_duration_label(hours) -> str:
+    if hours is None:
+        return "Permanent"
+    return "24 hours" if hours == 24 else (f"{hours // 24} days" if hours % 24 == 0 else f"{hours} hours")
+
+
+def add_gift_code(code: str, reward: str, hours, by_name: str = ""):
+    code = (code or "").strip()
+    if not GIFT_CODE_RE.match(code):
+        raise ValueError("A code is 3–40 letters, numbers, - or _ (no spaces).")
+    if hours is not None and not (1 <= int(hours) <= 24 * 365):
+        raise ValueError("The duration must be between 1 hour and 1 year, or permanent.")
+    now = int(time.time())
+    for r in active_gift_codes(now):
+        if r["code"].lower() == code.lower():
+            raise ValueError(f"The code {code} is already active.")
+    cur = db.execute("INSERT INTO gift_codes (code, reward, created_at, expires_at, created_by) VALUES (?,?,?,?,?)",
+                     (code, (reward or "").strip()[:200] or None, now, now + int(hours) * 3600 if hours else None, by_name))
+    db.commit()
+    return get_gift_code(cur.lastrowid)
+
+
+def get_gift_code(cid: int):
+    return db.execute("SELECT * FROM gift_codes WHERE id=?", (cid,)).fetchone()
+
+
+def set_gift_code(cid: int, **fields):
+    cols = ", ".join(f"{k}=?" for k in fields)
+    db.execute(f"UPDATE gift_codes SET {cols} WHERE id=?", (*fields.values(), cid))
+    db.commit()
+
+
+def delete_gift_code(cid: int):
+    db.execute("DELETE FROM gift_codes WHERE id=?", (cid,))
+    db.commit()
+
+
+def gift_codes(limit: int = 200):
+    return db.execute("SELECT * FROM gift_codes ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+def active_gift_codes(now=None):
+    now = now or int(time.time())
+    return db.execute("SELECT * FROM gift_codes WHERE expires_at IS NULL OR expires_at>? ORDER BY created_at DESC", (now,)).fetchall()
+
+
+def gift_code_state(r, now=None) -> str:
+    now = now or int(time.time())
+    if r["expires_at"] is not None and r["expires_at"] <= now:
+        return "expired"
+    return "new" if now - r["created_at"] < cfg("giftcodes_new_hours") * 3600 else "active"
+
+
+def expired_unnoted_gift_codes(now=None):
+    now = now or int(time.time())
+    return db.execute("SELECT * FROM gift_codes WHERE expires_at IS NOT NULL AND expires_at<=? AND expired_noted=0", (now,)).fetchall()

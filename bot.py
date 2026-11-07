@@ -787,15 +787,24 @@ async def handle_suggestion(payload: discord.RawReactionActionEvent, emoji: str)
     member = payload.member
     if member is None or not is_mod(member) or r["status"] != "new":
         return
-    new = "accepted" if emoji == SUGGEST_ACCEPT_EMOJI else "rejected"
+    await decide_suggestion(r, "accepted" if emoji == SUGGEST_ACCEPT_EMOJI else "rejected", member.id, member.display_name)
+
+
+async def decide_suggestion(r, new: str, actor_id, who: str):
+    """Accept or reject a suggestion (from a reaction or the dashboard): updates Discord, logs and tells the author."""
     set_suggestion(r["id"], status=new)
-    record_action("suggestion", r["id"], new, member.id, member.display_name)
+    record_action("suggestion", r["id"], new, actor_id, who)
     r = get_suggestion(r["id"])
-    who = member.display_name
-    await partial.edit(embed=suggestion_embed(r, f"{new.capitalize()} by {who}"))
-    for e in (SUGGEST_ACCEPT_EMOJI, SUGGEST_REJECT_EMOJI):
+    mod = chan("mod_channel_id")
+    if mod is not None and r["msg_id"]:
+        partial = mod.get_partial_message(r["msg_id"])
         try:
-            await partial.clear_reaction(e)
+            await partial.edit(embed=suggestion_embed(r, f"{new.capitalize()} by {who}"))
+            for e in (SUGGEST_ACCEPT_EMOJI, SUGGEST_REJECT_EMOJI):
+                try:
+                    await partial.clear_reaction(e)
+                except discord.HTTPException:
+                    pass
         except discord.HTTPException:
             pass
     if new == "accepted":
@@ -805,13 +814,30 @@ async def handle_suggestion(payload: discord.RawReactionActionEvent, emoji: str)
                 pub = await target.send(embed=suggestion_embed(r))
                 set_suggestion(r["id"], public_msg_id=pub.id)
             except discord.HTTPException as exc:
-                log_event("system", f"Could not post accepted suggestion #{r['id']}: {exc}",
-                          member.id, who)
-    log_event("mod", f"Suggestion #{r['id']} {new} by {who}", member.id, who)
+                log_event("system", f"Could not post accepted suggestion #{r['id']}: {exc}", actor_id, who)
+    log_event("mod", f"Suggestion #{r['id']} {new} by {who}", actor_id, who)
     await dm(r["author_id"],
              f"💡 Your suggestion **#{r['id']}** was accepted – thank you!" if new == "accepted"
              else f"💡 Your suggestion **#{r['id']}** was reviewed but won't be taken forward this time. "
                   "Thanks for sharing your idea!")
+    return get_suggestion(r["id"])
+
+
+async def delete_suggestions(ids, discord_too: bool, by_name: str, by_id=None, reset_numbers: bool = False) -> int:
+    rows = store.delete_suggestions(ids, reset_numbers)
+    if discord_too:
+        for r in rows:
+            for key, mid in (("mod_channel_id", r["msg_id"]), ("suggestions_channel_id", r["public_msg_id"])):
+                ch = chan(key)
+                if ch is not None and mid:
+                    try:
+                        await ch.get_partial_message(mid).delete()
+                    except discord.HTTPException:
+                        pass
+    if rows:
+        nums = ", ".join(f"#{r['id']}" for r in rows[:15]) + (" …" if len(rows) > 15 else "")
+        log_event("admin", f"Deleted {len(rows)} suggestion{'s' if len(rows) != 1 else ''}: {nums}", by_id, by_name)
+    return len(rows)
 
 
 # ------------------------------------------------------------- welcome message
@@ -1059,7 +1085,9 @@ class WosBot(discord.Client):
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "run_backup": run_backup, "post_digest": post_digest,
-                         "delete_bugs": delete_bugs}
+                         "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
+                         "decide_suggestion": decide_suggestion, "version_info": version_info,
+                         "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
                 self.api_runner = await start_api(self, GUILD_ID, DASHBOARD_API_KEY, DASHBOARD_ORIGINS,
                                                   DASHBOARD_HOST, DASHBOARD_PORT, hooks, roles)
@@ -1074,6 +1102,10 @@ class WosBot(discord.Client):
             self._announced = True
             ver = Path(__file__).with_name("VERSION")
             log_event("system", "Bot started" + (f" – version {ver.read_text().strip()}" if ver.exists() else ""), None, brand())
+            try:
+                await announce_update()
+            except Exception as exc:  # noqa: BLE001 – never stop the bot over a notice
+                print(f"[update notice] {exc!r}")
 
     async def on_member_join(self, member: discord.Member):
         if member.guild.id != GUILD_ID or member.bot:
@@ -1615,6 +1647,134 @@ async def delete_bugs(ids, discord_too: bool, by_name: str, by_id=None, reset_nu
     return len(rows)
 
 
+def version_info() -> dict:
+    """The installed version, written by deploy/update.sh (empty when installed by hand)."""
+    here = Path(__file__).parent
+    read = lambda n: (here / n).read_text(encoding="utf-8").strip() if (here / n).exists() else ""  # noqa: E731
+    return {"version": read("VERSION"), "changes": read("CHANGES")}
+
+
+async def announce_update():
+    """After "Update bugbot": post the new version and what changed in the admin channel (once per version)."""
+    info = version_info()
+    if not info["version"] or get_raw("version_announced") == info["version"]:
+        return
+    put_raw("version_announced", info["version"])
+    ch = chan("admin_channel_id")
+    if not cfg("update_notice_enabled") or ch is None:
+        return
+    lines = [x for x in info["changes"].splitlines() if x.strip()]
+    if lines and lines[0].startswith("ROLLBACK"):
+        e = discord.Embed(title="⚠️ Update failed – previous version restored",
+                          description=f"Version **{lines[0].split(' ', 1)[-1]}** did not start, so the bot went back to "
+                                      f"**{info['version']}**. Nothing was lost. Tell Claude the update failed.",
+                          color=0xF1C40F)
+    else:
+        body = "\n".join(f"• {x.lstrip('•- ').strip()}" for x in lines[:15]) or "Small fixes and improvements."
+        if len(lines) > 15:
+            body += f"\n…and {len(lines) - 15} more"
+        e = discord.Embed(title=f"🔄 {brand()} updated to version {info['version']}", description=body[:4000], color=0x5865F2)
+    e.set_footer(text="Installed with “Update bugbot”")
+    await ch.send(embed=e, allowed_mentions=discord.AllowedMentions.none())
+    log_event("system", f"Update notice posted for version {info['version']}", None, brand())
+
+
+# ------------------------------------------------------------- gift codes
+def gift_embed(r, state: Optional[str] = None) -> discord.Embed:
+    state = state or store.gift_code_state(r)
+    if state == "expired":
+        e = discord.Embed(title="⌛ Gift code expired", description=f"~~`{r['code']}`~~", color=0x5C6370)
+    else:
+        e = discord.Embed(title="🎁 New gift code!", description=f"## `{r['code']}`", color=0xF1C40F)
+    if r["reward"]:
+        e.add_field(name="Reward", value=r["reward"], inline=False)
+    if r["expires_at"]:
+        e.add_field(name="Expired" if state == "expired" else "Valid until",
+                    value=f"<t:{r['expires_at']}:f>" + ("" if state == "expired" else f" (<t:{r['expires_at']}:R>)"), inline=False)
+    else:
+        e.add_field(name="Valid until", value="Never expires", inline=False)
+    e.set_footer(text=f"{brand()} · /codes shows all active codes")
+    return e
+
+
+def gift_ping():
+    """(content, allowed_mentions) for the announcement, from the dashboard setting."""
+    p, role = cfg("giftcodes_ping"), (cfg("giftcodes_role_id") or "").strip()
+    if p == "everyone":
+        return "@everyone", discord.AllowedMentions(everyone=True)
+    if p == "here":
+        return "@here", discord.AllowedMentions(everyone=True)
+    if p == "role" and role.isdigit():
+        return f"<@&{role}>", discord.AllowedMentions(roles=[discord.Object(id=int(role))])
+    return None, discord.AllowedMentions.none()
+
+
+async def add_gift_code(code: str, reward: str, hours, by_name: str, by_id=None, announce: bool = True):
+    """Save a code and announce it. Returns (row, warning or None)."""
+    r = store.add_gift_code(code, reward, hours, by_name)
+    warning = None
+    ch = chan("giftcodes_channel_id")
+    if announce and ch is None:
+        warning = "Saved, but no gift-codes channel is chosen, so it wasn't announced (Channels page)."
+    elif announce:
+        content, mentions = gift_ping()
+        try:
+            msg = await ch.send(content=content, embed=gift_embed(r, "new"), allowed_mentions=mentions)
+            store.set_gift_code(r["id"], msg_id=msg.id)
+        except discord.HTTPException as exc:
+            warning = f"Saved, but Discord refused the announcement: {exc.text or exc}"
+    log_event("admin", f"Gift code {r['code']} added ({store.gift_duration_label(hours)})", by_id, by_name)
+    return store.get_gift_code(r["id"]), warning
+
+
+async def mark_gift_expired(r):
+    ch = chan("giftcodes_channel_id")
+    if ch is not None and r["msg_id"]:
+        try:
+            await ch.get_partial_message(r["msg_id"]).edit(content=None, embed=gift_embed(r, "expired"))
+        except discord.HTTPException:
+            pass
+    store.set_gift_code(r["id"], expired_noted=1)
+
+
+async def expire_gift_codes():
+    for r in store.expired_unnoted_gift_codes():
+        await mark_gift_expired(r)
+        log_event("system", f"Gift code {r['code']} expired", None, brand())
+
+
+async def end_gift_code(cid: int, by_name: str, by_id=None):
+    r = store.get_gift_code(cid)
+    store.set_gift_code(cid, expires_at=int(time.time()))
+    await mark_gift_expired(store.get_gift_code(cid))
+    log_event("admin", f"Gift code {r['code']} ended early", by_id, by_name)
+
+
+async def remove_gift_code(cid: int, discord_too: bool, by_name: str, by_id=None):
+    r = store.get_gift_code(cid)
+    ch = chan("giftcodes_channel_id")
+    if discord_too and ch is not None and r["msg_id"]:
+        try:
+            await ch.get_partial_message(r["msg_id"]).delete()
+        except discord.HTTPException:
+            pass
+    store.delete_gift_code(cid)
+    log_event("admin", f"Gift code {r['code']} deleted", by_id, by_name)
+
+
+def codes_embed() -> discord.Embed:
+    rows = store.active_gift_codes()
+    e = discord.Embed(title="🎁 Active gift codes", color=0xF1C40F)
+    if not rows:
+        e.description = "There are no active gift codes right now."
+    for r in rows[:20]:
+        new = store.gift_code_state(r) == "new"
+        until = f"until <t:{r['expires_at']}:f> (<t:{r['expires_at']}:R>)" if r["expires_at"] else "never expires"
+        e.add_field(name=("🆕 " if new else "") + r["code"], value=(f"{r['reward']}\n" if r["reward"] else "") + until, inline=False)
+    e.set_footer(text=brand())
+    return e
+
+
 async def run_schedules(now=None):
     """Called every few minutes: posts the weekly digest and the monthly leaderboard when they are due.
     Returns the names of what was posted."""
@@ -1666,6 +1826,7 @@ def snapshot_members():
 async def schedule_loop():
     try:
         snapshot_members()
+        await expire_gift_codes()
         await run_schedules()
     except Exception as exc:  # noqa: BLE001
         print(f"[schedule] {exc!r}")
@@ -1890,6 +2051,50 @@ async def patchnotes_publish(interaction: discord.Interaction, title: Optional[s
 
 
 bot.tree.add_command(patchnotes)
+
+
+@bot.tree.command(name="codes", description="Show the active gift codes", guild=_GUILD)
+@app_commands.guild_only()
+async def codes_cmd(interaction: discord.Interaction):
+    if not cfg("giftcodes_enabled"):
+        return await interaction.response.send_message("Gift codes are not switched on.", ephemeral=True)
+    await interaction.response.send_message(embed=codes_embed(), ephemeral=True)
+
+
+giftcode = app_commands.Group(name="giftcode", description="Gift codes (admins only)", guild_ids=[GUILD_ID], guild_only=True,
+                              default_permissions=discord.Permissions(administrator=True))
+_DUR_CHOICES = [app_commands.Choice(name=store.gift_duration_label(h), value=h or 0) for h in store.GIFT_DURATIONS]
+
+
+@giftcode.command(name="add", description="Add and announce a gift code")
+@app_commands.describe(code="The code players type in the game", duration="How long it works",
+                       reward="What players get (optional)")
+@app_commands.choices(duration=_DUR_CHOICES)
+async def giftcode_add(interaction: discord.Interaction, code: str, duration: app_commands.Choice[int],
+                       reward: Optional[str] = None):
+    if not is_admin(interaction.user):
+        return await interaction.response.send_message("Admins only.", ephemeral=True)
+    try:
+        r, warn = await add_gift_code(code, reward or "", duration.value or None, interaction.user.display_name, interaction.user.id)
+    except ValueError as exc:
+        return await interaction.response.send_message(str(exc), ephemeral=True)
+    await interaction.response.send_message(f"✅ Gift code **{r['code']}** added ({duration.name})." + (f"\n⚠️ {warn}" if warn else ""),
+                                            ephemeral=True)
+
+
+@giftcode.command(name="remove", description="Remove a gift code (deletes its announcement)")
+@app_commands.describe(code="The code to remove")
+async def giftcode_remove(interaction: discord.Interaction, code: str):
+    if not is_admin(interaction.user):
+        return await interaction.response.send_message("Admins only.", ephemeral=True)
+    r = next((x for x in store.gift_codes() if x["code"].lower() == code.strip().lower()), None)
+    if r is None:
+        return await interaction.response.send_message("I don't know that code.", ephemeral=True)
+    await remove_gift_code(r["id"], True, interaction.user.display_name, interaction.user.id)
+    await interaction.response.send_message(f"🗑️ Gift code **{r['code']}** removed.", ephemeral=True)
+
+
+bot.tree.add_command(giftcode)
 
 
 # --------------------------------------------------------------- reminders

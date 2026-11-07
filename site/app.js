@@ -2,14 +2,14 @@
 (function () {
   const C = window.WOS_CONFIG || {};
   const T = {
-    en: { nav_home: 'Home', nav_report: 'Report a bug', nav_known: 'Known issues', nav_fixed: "What's fixed", discord: 'Join our Discord', status: 'Server status', menu: 'Menu',
+    en: { nav_home: 'Home', nav_report: 'Report a bug', nav_known: 'Known issues', nav_fixed: "What's fixed", nav_codes: 'Gift codes', newBadge: 'NEW', discord: 'Join our Discord', status: 'Server status', menu: 'Menu',
       skip: 'Skip to content', rights: 'Made for the players of', netErr: 'Could not reach the server. Please try again later.' },
-    pl: { nav_home: 'Start', nav_report: 'Zgłoś błąd', nav_known: 'Znane problemy', nav_fixed: 'Co naprawiono', discord: 'Dołącz do Discorda', status: 'Status serwera', menu: 'Menu',
+    pl: { nav_home: 'Start', nav_report: 'Zgłoś błąd', nav_known: 'Znane problemy', nav_fixed: 'Co naprawiono', nav_codes: 'Kody', newBadge: 'NOWE', discord: 'Dołącz do Discorda', status: 'Status serwera', menu: 'Menu',
       skip: 'Przejdź do treści', rights: 'Stworzone dla graczy', netErr: 'Nie można połączyć się z serwerem. Spróbuj później.' }
   };
   let lang = 'en';
   try { lang = localStorage.getItem('wos.lang') || ((navigator.language || '').toLowerCase().startsWith('pl') ? 'pl' : 'en'); } catch (e) { /* ignore */ }
-  const pages = [['index.html', 'home'], ['report.html', 'report'], ['known-issues.html', 'known'], ['changelog.html', 'fixed']];
+  const pages = [['index.html', 'home'], ['report.html', 'report'], ['known-issues.html', 'known'], ['changelog.html', 'fixed'], ['codes.html', 'codes']];
   const W = window.WOS = { cfg: {}, lang, strings: {}, onLang: [] };
   W.t = k => (W.strings[W.lang] && W.strings[W.lang][k]) || (T[W.lang] && T[W.lang][k]) || (W.strings.en && W.strings.en[k]) || T.en[k] || k;
   W.api = async (path, opts) => {
@@ -42,11 +42,24 @@
     document.getElementById('lang-btn').onclick = () => { W.lang = W.lang === 'en' ? 'pl' : 'en'; try { localStorage.setItem('wos.lang', W.lang); } catch (e) { /* ignore */ } W.apply(); };
     const m = document.querySelector('main'); if (m) m.id = 'main';
   }
+  // A "NEW" mark on the Gift codes link when a code was added since the visitor last opened that page.
+  W.seenCodes = () => { try { return parseInt(localStorage.getItem('wos.codesSeen') || '0', 10); } catch (e) { return 0; } };
+  W.markCodesSeen = ts => { try { localStorage.setItem('wos.codesSeen', String(ts)); } catch (e) { /* ignore */ } };
+  W.codesBadge = async function () {
+    try {
+      const d = await W.api('/public/giftcodes'), seen = W.seenCodes();
+      if (d.items.some(c => c.added > seen)) {
+        document.getElementById('nav-codes').dataset.new = '1';
+      }
+    } catch (e) { /* codes off or offline */ }
+  };
   W.init = async function (strings) {
     W.strings = strings || {}; chrome(); W.apply();
     try { W.cfg = await W.api('/public/config'); } catch (e) { W.cfg = {}; }
     if (W.cfg.known_issues === false) document.getElementById('nav-known').hidden = true;
     if (W.cfg.changelog === false) document.getElementById('nav-fixed').hidden = true;
+    if (!W.cfg.giftcodes) document.getElementById('nav-codes').hidden = true;
+    else if (!/codes\.html$/.test(location.pathname)) W.codesBadge();
     return W.cfg;
   };
 })();

@@ -267,6 +267,25 @@
 .w-btn.danger:hover{background:var(--w-bad-soft)}
 .w-danger{border-color:color-mix(in srgb,var(--w-bad) 35%,var(--w-border))}
 .w-sect.w-danger{border-top-color:color-mix(in srgb,var(--w-bad) 40%,var(--w-border))}
+.w-sugrow{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border:1px solid var(--w-border);border-radius:14px;margin-bottom:8px;background:var(--w-surface-2)}
+.w-sugrow.picked{border-color:var(--w-bad);background:var(--w-bad-soft)}
+.w-sugpick{width:18px;height:18px;margin-top:3px;accent-color:var(--w-bad);flex:none}
+.w-sugbody{flex:1;min-width:0}
+.w-sughead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
+.w-sughead .w-badge{margin-left:auto}
+.w-sugtext{white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:10px;max-height:9.5em;overflow:auto}
+.w-meter{margin-bottom:14px}
+.w-meter-top{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-bottom:6px}
+.w-meter-top span{color:var(--w-muted);font-size:13px}
+.w-meter-bar{height:10px;border-radius:999px;background:var(--w-surface-2);overflow:hidden}
+.w-meter-bar i{display:block;height:100%;border-radius:999px;background:var(--w-ok);transition:width .4s}
+.w-meter-bar.warn i{background:var(--w-warn)}.w-meter-bar.bad i{background:var(--w-bad)}
+.w-coderow{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid var(--w-border)}
+.w-sec-head + .w-coderow{border-top:0}
+.w-coderow.expired{opacity:.6}
+.w-codebody{min-width:0;flex:1}
+.w-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:16px;font-weight:700;letter-spacing:.04em;padding:4px 10px;border-radius:9px;background:var(--w-surface-2);border:1px dashed var(--w-border);overflow-wrap:anywhere}
+.w-coderow.new .w-code{border-color:var(--w-accent);color:var(--w-accent)}
 .w-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border-radius:14px;background:var(--w-bad-soft);border:1px solid color-mix(in srgb,var(--w-bad) 35%,transparent)}
 .w-bugrow.sel[aria-pressed="true"]{border-color:var(--w-bad);background:var(--w-bad-soft)}
 .w-form2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
@@ -428,7 +447,10 @@ const ICON = {
   bug: '<rect x="8" y="7" width="8" height="12" rx="4"/><path d="M12 7V4M8 11H4M16 11h4M8 16H5M16 16h3M9 4l1.5 1.5M15 4l-1.5 1.5"/>',
   chart: '<path d="M3 3v18h18"/><path d="M7 15v3M12 9v9M17 12v6"/>',
   wrench: '<path d="M14.7 6.3a4 4 0 0 0-5 5L3 18l3 3 6.7-6.7a4 4 0 0 0 5-5l-2.4 2.4-2.6-.6-.6-2.6z"/>',
-  shield: '<path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6z"/>'
+  shield: '<path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6z"/>',
+  pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
 };
 const icon = n => raw(`<svg class="w-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`);
 
@@ -439,12 +461,13 @@ const S = {
   bot: null, botDraft: null, panelDraft: null,
   log: { items: [], total: 0, kind: '', q: '', loading: false, auto: true },
   bugs: { items: [], total: 0, counts: {}, status: '', q: '', area: '', version: '', severity: '', loading: false, selecting: false, sel: [] },
+  sugs: { items: [], total: 0, counts: {}, status: '', q: '', loading: false, selecting: false, sel: [] },
   data: null,
   detail: null, insights: null, patch: null, replies: null, blocks: null, replyEdit: null,
   timer: null, mock: null
 };
 const NAV = [
-  ['overview', 'Overview', 'grid'], ['bugs', 'Bugs', 'bug'], ['insights', 'Insights', 'chart'],
+  ['overview', 'Overview', 'grid'], ['status', 'Server status', 'pulse'], ['bugs', 'Bugs', 'bug'], ['suggestions', 'Suggestions', 'bulb'], ['codes', 'Gift codes', 'gift'], ['insights', 'Insights', 'chart'],
   ['panel', 'Panel message', 'message'], ['channels', 'Channels', 'hash'], ['features', 'Features', 'sliders'],
   ['welcome', 'Welcome', 'userplus'], ['patch', 'Patch notes', 'wrench'], ['mod', 'Moderation', 'shield'],
   ['bot', 'Bot profile', 'bot'], ['data', 'Data', 'db'], ['log', 'Activity log', 'list']
@@ -457,6 +480,7 @@ const CHANNELS = [
   ['patchnotes_channel_id', 'Patch notes channel', 'Where the list of fixed bugs is announced (/patchnotes publish or the Patch notes page). Optional.'],
   ['backup_channel_id', 'Backup channel', 'Optional. A copy of the database is posted here every day. It contains player data – make it admin-only.'],
   ['digest_channel_id', 'Weekly digest channel', 'Optional. Where the Monday summary is posted. Empty = the admin channel.'],
+  ['giftcodes_channel_id', 'Gift codes channel', 'Optional. New gift codes are announced here. Give the bot “Mention @everyone” if you ping @everyone or @here.'],
   ['bounty_channel_id', 'Monthly leaderboard channel', 'Optional. On the 1st of each month the top bug hunters of last month are announced here.']
 ];
 const CHANNEL_KEYS = CHANNELS.map(c => c[0]);
@@ -465,7 +489,8 @@ const FEATURE_KEYS = ['bugs_enabled', 'suggestions_enabled', 'investigate_enable
   'reminders_enabled', 'reminder_mod_hours', 'reminder_admin_hours', 'reminder_critical_hours',
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
-  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'bounty_enabled', 'points_accepted', 'points_fixed', 'points_suggestion'];
+  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'bounty_enabled', 'points_accepted', 'points_fixed', 'points_suggestion', 'update_notice_enabled',
+  'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours'];
 const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'];
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
 const PLACEHOLDERS = [['{user}', 'Tags the new member'], ['{username}', 'Their name'], ['{server}', 'Server name'], ['{member_count}', 'Number of members']];
@@ -687,6 +712,7 @@ function viewFeatures() {
     <section class="w-card w-pad"><div class="w-group-title">Moderation & messages</div>
       ${toggleRow('investigate_enabled', 'Investigate tickets (🔍)', 'Lets moderators open a private ticket with the reporter to ask for more information.')}
       ${toggleRow('dm_notifications', 'Send status updates by DM', 'Tell players by DM when their bug or suggestion is handled.')}
+      ${toggleRow('update_notice_enabled', 'Announce updates', 'After “Update bugbot”, post the new version and what changed in the admin channel.')}
     </section>
     <section class="w-card w-pad"><div class="w-group-title">Reminders</div>
       ${toggleRow('reminders_enabled', 'Remind staff about waiting items', 'The bot posts one digest in the mod and admin channels (tagging the role) when items wait too long.')}
@@ -700,6 +726,12 @@ function viewFeatures() {
       ${numberRow('digest_hour', 'Hour', '…at this hour (0–23) in the time zone below.', 0, 23, 'o\u2019clock')}
       ${textRow('timezone', 'Time zone', 'A name such as Europe/Copenhagen or Europe/Warsaw. Used for the digest and the monthly leaderboard.', 'Europe/Copenhagen', 40)}
       <div class="w-actions" style="margin-top:10px"><button class="w-btn small" data-act="sendDigest">Send the digest now</button></div>
+    </section>
+    <section class="w-card w-pad"><div class="w-group-title">Gift codes</div>
+      ${toggleRow('giftcodes_enabled', 'Gift codes', 'Shows the Gift codes page on the website and lets players use /codes. Add codes on the Gift codes page.')}
+      ${selectRow('giftcodes_ping', 'Notify players', 'Who is tagged when a new code is announced.', ['none', 'here', 'everyone', 'role'])}
+      ${textRow('giftcodes_role_id', 'Role to tag', 'Only when “Notify players” is “role”: the role ID (right-click the role → Copy Role ID).', '123456789012345678', 25)}
+      ${numberRow('giftcodes_new_hours', 'Show as “New” for', 'New codes are highlighted at the top of the website list for this long, then move into the normal list.', 1, 168, 'hours')}
     </section>
     <section class="w-card w-pad"><div class="w-group-title">Bug-hunter points</div>
       ${toggleRow('bounty_enabled', 'Give points to reporters', 'Players see them with /points and /leaderboard. Bugs and suggestions are rewarded once each.')}
@@ -951,6 +983,159 @@ async function changeBug(body, okMsg, btn) {
   } catch (e) { busy(btn, false); toast(e.message, 'err'); }
 }
 
+/* ---- server status ---- */
+const fmtSize = n => n >= 1073741824 ? (n / 1073741824).toFixed(1) + ' GB' : fmtBytes(n);
+function fmtDur(s) {
+  if (s == null) return '–';
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? d + ' d ' + h + ' h' : h ? h + ' h ' + m + ' min' : m + ' min';
+}
+function meter(label, used, total, detail) {
+  const pct = total ? Math.round(used / total * 100) : 0, cls = pct >= 90 ? 'bad' : pct >= 75 ? 'warn' : 'ok';
+  return html`<div class="w-meter"><div class="w-meter-top"><b>${label}</b><span>${detail}</span></div>
+    <div class="w-meter-bar ${cls}"><i style="width:${Math.min(100, pct)}%"></i></div><div class="w-hint">${pct}% used</div></div>`;
+}
+function viewStatus() {
+  const T = S.status;
+  if (!T) return html`<div class="w-pagehead"><h2>Server status</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  const B = T.bot, Y = T.system, M = Y.memory, svcBad = T.services.filter(x => x.state !== 'active');
+  const problems = svcBad.length + (T.website_ok === false ? 1 : 0) + (B.online ? 0 : 1);
+  const load = Y.load ? Math.round(Y.load[0] / (Y.cpus || 1) * 100) : null;
+  const stIc = { active: ['ok', 'check'], failed: ['bad', 'alert'] };
+  return html`
+    <div class="w-pagehead"><h2>Server status</h2><p>How the bot and its server are doing right now. Updates every 10 seconds.</p></div>
+    <div class="w-card w-banner ${problems ? 'warn' : 'ok'}">${icon(problems ? 'alert' : 'check')}
+      <div><b>${problems ? problems + (problems === 1 ? ' thing needs' : ' things need') + ' attention' : 'Everything is running'}</b>
+      <div class="w-sub">Checked ${ago(T.checked_at)}${B.version ? ' · version ' + B.version : ''}</div></div></div>
+    <div class="w-tiles w-tiles4">
+      <div class="w-card w-tile ${B.online ? 'ok' : 'bad'}"><i class="w-tic">${icon('bot')}</i><b>${B.online ? 'Online' : 'Offline'}</b><span>Discord bot${B.latency_ms != null ? ' · ' + B.latency_ms + ' ms' : ''}</span></div>
+      <div class="w-card w-tile"><i class="w-tic">${icon('refresh')}</i><b>${fmtDur(B.uptime_s)}</b><span>Bot running since restart</span></div>
+      <div class="w-card w-tile"><i class="w-tic">${icon('pulse')}</i><b>${fmtDur(Y.uptime_s)}</b><span>Server running since reboot</span></div>
+      <div class="w-card w-tile ${T.website_ok === false ? 'bad' : T.website_ok ? 'ok' : ''}"><i class="w-tic">${icon('message')}</i><b>${T.website_ok == null ? '–' : T.website_ok ? 'OK' : 'Down'}</b><span>Website ↔ bot</span></div>
+    </div>
+    <div class="w-grid2">
+      <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:12px">Server load</h3>
+        ${load != null ? meter('CPU', Math.min(load, 100), 100, 'load ' + Number(Y.load[0]).toFixed(2) + ' on ' + Y.cpus + ' CPU' + (Y.cpus === 1 ? '' : 's')) : ''}
+        ${M ? meter('Memory', M.total - M.available, M.total, fmtSize(M.total - M.available) + ' of ' + fmtSize(M.total)) : ''}
+        ${M && M.swap_total ? meter('Swap', M.swap_total - M.swap_free, M.swap_total, fmtSize(M.swap_total - M.swap_free) + ' of ' + fmtSize(M.swap_total)) : ''}
+        ${meter('Disk', Y.disk.total - Y.disk.free, Y.disk.total, fmtSize(Y.disk.free) + ' free of ' + fmtSize(Y.disk.total))}
+      </section>
+      <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:6px">Services</h3>
+        ${T.services.map(x => { const st = stIc[x.state] || ['warn', 'alert']; return html`<div class="w-check"><div class="w-check-ic ${st[0]}">${icon(st[1])}</div>
+          <div><div class="w-check-label">${x.label}</div><div class="w-check-detail">${x.state === 'active' ? 'Running' : x.state || 'unknown'}</div></div></div>`; })}
+        <div class="w-check"><div class="w-check-ic ${T.data.last_backup && Date.now() / 1000 - T.data.last_backup < 2 * 86400 ? 'ok' : 'warn'}">${icon('db')}</div>
+          <div><div class="w-check-label">Backups</div><div class="w-check-detail">${T.data.last_backup ? 'Last one ' + ago(T.data.last_backup) + ' · ' + T.data.backups + ' kept' : 'No backup yet'} · database ${fmtBytes(T.data.db_bytes)}</div></div></div>
+      </section>
+    </div>
+    <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:6px">Updates</h3>
+      ${T.updates.length ? html`<div class="w-hist">${T.updates.slice().reverse().map(l => html`<div>${l}</div>`)}</div>` : html`<div class="w-empty" style="padding:14px">No updates installed yet. Write “Update bugbot” to Claude to install a released version.</div>`}
+    </section>
+    <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:6px">Problems in the last 24 hours</h3>
+      ${T.errors.length ? T.errors.map(x => html`<div class="w-logrow"><time>${ago(x.ts)}</time><span class="w-kind" style="--k:#e5534b">system</span><div class="w-logtext">${x.text}</div></div>`)
+        : html`<div class="w-empty" style="padding:14px">No problems recorded. 🎉</div>`}
+    </section>`;
+}
+
+/* ---- gift codes ---- */
+const CODE_BADGE = { new: ['info', 'New'], active: ['ok', 'Active'], expired: ['todo', 'Expired'] };
+function timeLeft(ts) {
+  if (!ts) return 'Never expires';
+  const s = ts - Date.now() / 1000;
+  if (s <= 0) return 'Expired ' + ago(ts);
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return 'Expires in ' + (d ? d + ' d ' + h + ' h' : h ? h + ' h ' + m + ' min' : m + ' min');
+}
+function viewCodes() {
+  const C = S.codes;
+  if (!C) return html`<div class="w-pagehead"><h2>Gift codes</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  const on = S.settings.giftcodes_enabled, ch = chanName(S.settings.giftcodes_channel_id);
+  const live = C.items.filter(x => x.state !== 'expired'), old = C.items.filter(x => x.state === 'expired');
+  const row = x => html`<div class="w-coderow ${x.state}"><div class="w-codebody"><div class="w-inline" style="gap:10px"><code class="w-code">${x.code}</code>
+      <span class="w-badge ${CODE_BADGE[x.state][0]}">${CODE_BADGE[x.state][1]}</span></div>
+      <div class="w-sub">${x.reward ? x.reward + ' · ' : ''}${timeLeft(x.expires_at)} · added ${ago(x.created_at)}${x.by ? ' by ' + x.by : ''}</div></div>
+    <div class="w-inline">${x.url ? html`<a class="w-btn small" href="${x.url}" target="_blank" rel="noopener">Discord</a>` : ''}
+      ${x.state !== 'expired' ? html`<button class="w-btn small" data-act="codeEnd" data-id="${x.id}">End now</button>` : ''}
+      <button class="w-btn small danger" data-act="codeDelete" data-id="${x.id}">Delete</button></div></div>`;
+  return html`
+    <div class="w-pagehead"><h2>Gift codes</h2><p>Add a code here: it is announced in Discord at once, shown as “New” on the website, and listed until it expires.</p></div>
+    ${!on || !ch ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>${!on ? 'Gift codes are switched off' : 'No gift-codes channel chosen'}</b>
+      <div class="w-sub">${!on ? 'Turn them on under Features → Gift codes, so players see them on the website and with /codes.' : 'Choose one on the Channels page, otherwise new codes are not announced.'}</div></div>
+      <button class="w-btn small" data-act="goto" data-tab="${!on ? 'features' : 'channels'}">Fix</button></div>` : ''}
+    <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:12px">Add a gift code</h3>
+      <div class="w-form2">
+        <div class="w-field"><label class="w-label" for="gc-code">Code</label><input class="w-input" id="gc-code" maxlength="40" placeholder="e.g. WOSEU1GIFT" autocomplete="off" style="font-family:ui-monospace,monospace;text-transform:none"></div>
+        <div class="w-field"><label class="w-label" for="gc-dur">Works for</label><select class="w-select" id="gc-dur">${C.durations.map(d => html`<option value="${d.hours == null ? '' : d.hours}" ${d.hours === 24 ? 'selected' : ''}>${d.label}</option>`)}</select></div>
+      </div>
+      <div class="w-field"><label class="w-label" for="gc-reward">Reward <span class="w-hint">(optional)</span></label><input class="w-input" id="gc-reward" maxlength="200" placeholder="e.g. 500 gems, 2× speed-up 1h"></div>
+      <div class="w-inline"><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="gc-announce" checked> Announce in ${ch || 'Discord'}${S.settings.giftcodes_ping !== 'none' ? ' and tag ' + (S.settings.giftcodes_ping === 'role' ? 'the role' : '@' + S.settings.giftcodes_ping) : ''}</label>
+        <div class="w-spacer"></div><button class="w-btn primary" data-act="codeAdd">${icon('gift')} Add code</button></div>
+    </section>
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Active codes (${live.length})</h3></div>
+      ${live.length ? live.map(row) : html`<div class="w-empty">No active codes.</div>`}</section>
+    ${old.length ? html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Expired (${old.length})</h3></div>${old.slice(0, 30).map(row)}</section>` : ''}`;
+}
+
+/* ---- suggestions ---- */
+const SUG_LABEL = { new: 'Open', accepted: 'Accepted', rejected: 'Rejected' };
+const SUG_BADGE = { new: 'todo', accepted: 'ok', rejected: 'bad' };
+function sugChips() {
+  const G = S.sugs, total = Object.values(G.counts).reduce((a, b) => a + b, 0);
+  return html`<button class="w-chip" data-act="sugStatus" data-s="" aria-pressed="${String(G.status === '')}">All ${total}</button>
+    ${Object.keys(SUG_LABEL).map(k => html`<button class="w-chip" data-act="sugStatus" data-s="${k}" aria-pressed="${String(G.status === k)}">${SUG_LABEL[k]} ${G.counts[k] || 0}</button>`)}`;
+}
+function sugList() {
+  const G = S.sugs;
+  if (!G.items.length) return html`<div class="w-empty">${G.loading ? 'Loading…' : 'No suggestions match.'}</div>`;
+  return html`${G.items.map(x => html`<div class="w-sugrow${G.selecting && G.sel.includes(x.id) ? ' picked' : ''}" data-id="${x.id}">
+    ${G.selecting ? html`<input type="checkbox" class="w-sugpick" data-act="sugPick" data-id="${x.id}" ${G.sel.includes(x.id) ? 'checked' : ''} aria-label="Select suggestion #${x.id}">` : ''}
+    <div class="w-sugbody"><div class="w-sughead"><b>#${x.id}</b> <span class="w-sub">${x.author} · <time title="${full(x.created_at)}">${ago(x.created_at)}</time></span>
+      <span class="w-badge ${SUG_BADGE[x.status]}">${SUG_LABEL[x.status]}</span></div>
+      <p class="w-sugtext">${x.text}</p>
+      <div class="w-inline">${x.status === 'new' ? html`<button class="w-btn small" data-act="sugDecide" data-id="${x.id}" data-s="accepted">${icon('check')} Accept</button>
+        <button class="w-btn small" data-act="sugDecide" data-id="${x.id}" data-s="rejected">Reject</button>` : ''}
+        ${x.mod_url ? html`<a class="w-btn small" href="${x.mod_url}" target="_blank" rel="noopener">Open in Discord</a>` : ''}
+        <div class="w-spacer"></div><button class="w-btn small danger" data-act="sugDelete" data-id="${x.id}">Delete</button></div></div></div>`)}`;
+}
+function sugSelBar() {
+  const G = S.sugs; if (!G.selecting) return '';
+  return html`<div class="w-selbar"><b>${G.sel.length} selected</b><div class="w-spacer"></div>
+    <button class="w-btn small" data-act="sugSelAll">Select all shown</button>
+    <label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="sug-discord" checked> Also delete their Discord messages</label>
+    <button class="w-btn small danger" data-act="sugDelSel" ${G.sel.length ? '' : 'disabled'}>Delete ${G.sel.length || ''} selected</button></div>`;
+}
+function viewSuggestions() {
+  const G = S.sugs;
+  return html`
+    <div class="w-pagehead"><h2>Suggestions</h2><p>Ideas from players. Accept or reject them here or with ✅ / ❌ in the mod channel.</p></div>
+    <section class="w-card w-pad">
+      <div class="w-toolbar"><div class="w-chips" id="sugchips" role="group" aria-label="Filter by status">${sugChips()}</div></div>
+      <div class="w-toolbar">
+        <input class="w-input w-search" id="sugq" type="search" placeholder="Search text, player or #number…" value="${G.q}" aria-label="Search suggestions">
+        <button class="w-btn small" data-act="sugRefresh">${icon('refresh')} Refresh</button><div class="w-spacer"></div>
+        <button class="w-btn small" data-act="sugSelect" id="sugselbtn">${G.selecting ? 'Cancel selecting' : 'Select to delete'}</button>
+      </div>
+      <div id="sugselbar">${sugSelBar()}</div>
+      <div id="suglist">${sugList()}</div>
+      <div class="w-actions" style="justify-content:center"><button class="w-btn" id="sugmore" data-act="sugMore" ${G.items.length >= G.total ? 'hidden' : ''}>Load more</button></div>
+    </section>`;
+}
+function renderSugList() {
+  const l = $('#suglist'); if (!l) return;
+  l.innerHTML = String(sugList()); $('#sugchips').innerHTML = String(sugChips()); $('#sugselbar').innerHTML = String(sugSelBar());
+  $('#sugselbtn').textContent = S.sugs.selecting ? 'Cancel selecting' : 'Select to delete';
+  const m = $('#sugmore'); if (m) m.hidden = S.sugs.items.length >= S.sugs.total;
+}
+async function loadSugs(reset) {
+  const G = S.sugs; if (G.loading) return; G.loading = true;
+  try {
+    const qs = new URLSearchParams({ limit: '25', offset: String(reset ? 0 : G.items.length) });
+    if (G.status) qs.set('status', G.status); if (G.q) qs.set('q', G.q);
+    const r = await call('GET', '/api/suggestions?' + qs);
+    G.items = reset ? r.items : G.items.concat(r.items); G.total = r.total; G.counts = r.counts;
+  } catch (e) { toast(e.message, 'err'); }
+  G.loading = false; renderSugList();
+}
+
 /* ---- insights ---- */
 function weeklyChart(weeks) {
   const W = 640, H = 230, L = 34, R = 8, T = 16, Bt = 30, pw = W - L - R, ph = H - T - Bt;
@@ -1065,13 +1250,15 @@ function viewData() {
       ${D.backups.length ? D.backups.map(x => html`<div class="w-item"><div><b>${x.name}</b><p>${full(x.ts)} · ${fmtBytes(x.size)}</p></div>
         <button class="w-btn small" data-act="dlBackup" data-n="${x.name}">${icon('upload')} Download</button></div>`) : html`<div class="w-empty">No backups yet.</div>`}
     </section>
-    <section class="w-card w-pad w-danger"><h3 class="w-h3">Delete all bugs (end of testing)</h3>
-      <p class="w-sub" style="margin-bottom:12px">Removes <b>every</b> bug report, with screenshots, history and points. Suggestions, settings and the log are kept.
+    <section class="w-card w-pad w-danger"><h3 class="w-h3">Delete test data (end of testing)</h3>
+      <p class="w-sub" style="margin-bottom:12px">Removes <b>every</b> report of the chosen kind, with screenshots, history and points. Settings and the log are kept.
         A backup is made first, so you can undo it. Use it once, when testing is over.</p>
-      <label class="w-inline w-hint" style="gap:6px;margin-bottom:6px"><input type="checkbox" id="da-discord" checked> Also delete the bug messages and info tickets in Discord</label>
+      <div class="w-field" style="max-width:260px"><label class="w-label" for="da-what">Delete all</label>
+        <select class="w-select" id="da-what"><option value="bugs">Bugs</option><option value="suggestions">Suggestions</option><option value="both">Bugs and suggestions</option></select></div>
+      <label class="w-inline w-hint" style="gap:6px;margin-bottom:6px"><input type="checkbox" id="da-discord" checked> Also delete their messages and info tickets in Discord</label>
       <label class="w-inline w-hint" style="gap:6px;margin-bottom:12px"><input type="checkbox" id="da-reset" checked> Start numbering at #1 again</label>
       <div class="w-inline"><input class="w-input" id="da-confirm" placeholder="Type DELETE to confirm" autocomplete="off" style="max-width:240px">
-        <button class="w-btn danger" data-act="bugDelAll">Delete all bugs</button></div>
+        <button class="w-btn danger" data-act="bugDelAll">Delete all</button></div>
     </section>`;
 }
 
@@ -1196,10 +1383,13 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { overview: viewOverview, bugs: viewBugs, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+const VIEWS = { overview: viewOverview, status: viewStatus, codes: viewCodes, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
   features: viewFeatures, welcome: viewWelcome, patch: viewPatch, mod: viewMod, bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
+  status: async () => { S.status = await call('GET', '/api/status'); },
+  codes: async () => { S.codes = await call('GET', '/api/giftcodes'); },
   bugs: () => loadBugs(true),
+  suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
   insights: async () => { const [i, l] = await Promise.all([call('GET', '/api/insights'), call('GET', '/api/leaderboard?period=' + ((S.lb && S.lb.period) || 'all'))]); S.insights = i; S.lb = l; },
   patch: async () => { S.patch = await call('GET', '/api/patchnotes'); },
@@ -1208,7 +1398,7 @@ const LOADERS = {
 async function loadTab(t) {
   const f = LOADERS[t]; if (!f) return;
   try { await f(); } catch (e) { toast(e.message, 'err'); }
-  if (S.tab === t && t !== 'bugs') { const main = $('#wosd-main'); if (main) main.innerHTML = String(VIEWS[t]()); }
+  if (S.tab === t && t !== 'bugs' && t !== 'suggestions') { const main = $('#wosd-main'); if (main) main.innerHTML = String(VIEWS[t]()); }
 }
 
 function renderTab() {
@@ -1296,6 +1486,7 @@ function startPolling() {
     try {
       if (S.tab === 'log' && S.log.auto && S.log.items.length <= 50) loadLogs(true, true);
       else if (S.tab === 'overview') { await refreshLive(); if (S.tab === 'overview') renderTab(); }
+      else if (S.tab === 'status') { S.status = await call('GET', '/api/status'); if (S.tab === 'status') renderMain(); }
     } catch (e) { /* ignore polling errors */ }
   }, CFG.pollMs);
 }
@@ -1385,6 +1576,56 @@ root.addEventListener('click', async e => {
     else if (act === 'bugsRefresh') loadBugs(true);
     else if (act === 'bugsMore') loadBugs(false);
     else if (act === 'bugOpen') await openBug(parseInt(el.dataset.id, 10));
+    else if (act === 'codeAdd') {
+      const code = $('#gc-code').value.trim(), dur = $('#gc-dur').value;
+      if (!code) return toast('Type the code first.', 'err');
+      busy(el, true, 'Adding…');
+      try {
+        const r = await call('POST', '/api/giftcodes', { code, reward: $('#gc-reward').value.trim(), hours: dur ? parseInt(dur, 10) : null, announce: $('#gc-announce').checked });
+        toast(r.warning || 'Gift code ' + r.item.code + ' added.', r.warning ? 'warn' : undefined);
+        S.codes = await call('GET', '/api/giftcodes'); renderMain();
+      } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'codeEnd' || act === 'codeDelete') {
+      const lbl = act === 'codeEnd' ? 'End now' : 'Delete';
+      if (!el.dataset.armed) { el.dataset.armed = '1'; el.textContent = 'Click again';
+        setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = lbl; } }, 3500); return; }
+      busy(el, true, '…');
+      try {
+        if (act === 'codeEnd') await call('PUT', '/api/giftcodes/' + el.dataset.id, { action: 'end' });
+        else await call('DELETE', '/api/giftcodes/' + el.dataset.id);
+        toast(act === 'codeEnd' ? 'Code ended – the announcement now says “expired”.' : 'Code deleted.');
+        S.codes = await call('GET', '/api/giftcodes'); renderMain();
+      } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'sugStatus') { S.sugs.status = el.dataset.s; loadSugs(true); }
+    else if (act === 'sugRefresh') loadSugs(true);
+    else if (act === 'sugMore') loadSugs(false);
+    else if (act === 'sugSelect') { S.sugs.selecting = !S.sugs.selecting; S.sugs.sel = []; renderSugList(); }
+    else if (act === 'sugPick') { const id = parseInt(el.dataset.id, 10), L = S.sugs.sel, i = L.indexOf(id); if (i >= 0) L.splice(i, 1); else L.push(id); renderSugList(); }
+    else if (act === 'sugSelAll') { S.sugs.sel = S.sugs.items.map(x => x.id); renderSugList(); }
+    else if (act === 'sugDecide') {
+      busy(el, true, 'Working…');
+      try { await call('PUT', '/api/suggestions/' + el.dataset.id, { status: el.dataset.s }); toast('Suggestion #' + el.dataset.id + ' ' + el.dataset.s + '.'); loadSugs(true); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'sugDelete') {
+      if (!el.dataset.armed) { el.dataset.armed = '1'; el.textContent = 'Click again to delete';
+        setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = 'Delete'; } }, 4000); return; }
+      busy(el, true, 'Deleting…');
+      try { await call('DELETE', '/api/suggestions/' + el.dataset.id); toast('Suggestion #' + el.dataset.id + ' deleted.'); loadSugs(true); }
+      catch (err) { busy(el, false); delete el.dataset.armed; toast(err.message, 'err'); }
+    }
+    else if (act === 'sugDelSel') {
+      const n = S.sugs.sel.length; if (!n) return;
+      if (!el.dataset.armed) { el.dataset.armed = '1'; el.textContent = 'Click again to delete ' + n;
+        setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = 'Delete ' + n + ' selected'; } }, 4000); return; }
+      busy(el, true, 'Deleting…');
+      try {
+        const r = await call('POST', '/api/suggestions/delete', { ids: S.sugs.sel, discord: $('#sug-discord').checked });
+        toast('Deleted ' + r.deleted + ' suggestion' + (r.deleted === 1 ? '' : 's') + '.'); S.sugs.selecting = false; S.sugs.sel = []; loadSugs(true);
+      } catch (err) { busy(el, false); delete el.dataset.armed; toast(err.message, 'err'); }
+    }
     else if (act === 'bugSelect') { S.bugs.selecting = !S.bugs.selecting; S.bugs.sel = []; renderBugList(); }
     else if (act === 'bugPick') { const id = parseInt(el.dataset.id, 10), L = S.bugs.sel, i = L.indexOf(id); if (i >= 0) L.splice(i, 1); else L.push(id); renderBugList(); }
     else if (act === 'bugSelAll') { S.bugs.sel = S.bugs.items.map(b => b.id); renderBugList(); }
@@ -1413,8 +1654,10 @@ root.addEventListener('click', async e => {
       busy(el, true, 'Backing up and deleting…');
       try {
         try { await call('POST', '/api/backup'); } catch (err) { /* backup channel may be unset – the file backup still counts */ }
-        const r = await call('POST', '/api/bugs/delete', { all: true, confirm: 'DELETE', discord: $('#da-discord').checked, reset_numbers: $('#da-reset').checked });
-        toast('Deleted ' + r.deleted + ' bug' + (r.deleted === 1 ? '' : 's') + '.'); S.data = await call('GET', '/api/data'); S.bugs.items = []; renderMain();
+        const what = $('#da-what').value, opts = { all: true, confirm: 'DELETE', discord: $('#da-discord').checked, reset_numbers: $('#da-reset').checked }, done = [];
+        if (what !== 'suggestions') { const r = await call('POST', '/api/bugs/delete', opts); done.push(r.deleted + ' bug' + (r.deleted === 1 ? '' : 's')); }
+        if (what !== 'bugs') { const r = await call('POST', '/api/suggestions/delete', opts); done.push(r.deleted + ' suggestion' + (r.deleted === 1 ? '' : 's')); }
+        toast('Deleted ' + done.join(' and ') + '.'); S.data = await call('GET', '/api/data'); S.bugs.items = []; S.sugs.items = []; renderMain();
       } catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'bugSummary') changeBug({ summary: $('#m-sum').value }, 'Title saved.', el);
@@ -1559,6 +1802,8 @@ function onInput(e) {
     clearTimeout(logTimer); logTimer = setTimeout(() => { S.log.q = el.value.trim(); loadLogs(true); }, 300);
   } else if (el.id === 'bugq') {
     clearTimeout(logTimer); logTimer = setTimeout(() => { S.bugs.q = el.value.trim(); loadBugs(true); }, 300);
+  } else if (el.id === 'sugq') {
+    clearTimeout(logTimer); logTimer = setTimeout(() => { S.sugs.q = el.value.trim(); loadSugs(true); }, 300);
   } else if (el.id === 'bugarea' || el.id === 'bugsev') {
     S.bugs[el.id === 'bugarea' ? 'area' : 'severity'] = el.value; loadBugs(true);
   } else if (el.id === 'bugver') {
@@ -1578,13 +1823,13 @@ root.addEventListener('change', onInput);
 function makeMock() {
   const now = Math.floor(Date.now() / 1000);
   const CH = [['Support', 'report-here', '1001'], ['Support', 'help', '1002'], ['Staff', 'bug-reports', '1003'],
-    ['Staff', 'admin-bugs', '1004'], ['Community', 'suggestions', '1005'], ['Community', 'general', '1006'], [null, 'rules', '1007']]
+    ['Staff', 'admin-bugs', '1004'], ['Community', 'suggestions', '1005'], ['Community', 'general', '1006'], ['Community', 'gift-codes', '1008'], [null, 'rules', '1007']]
     .map(c => ({ category: c[0], name: c[1], id: c[2] }));
   const avatar = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="#4f46e5"/><text x="48" y="60" font-family="Arial" font-weight="800" font-size="34" fill="#fff" text-anchor="middle">WOS</text></svg>');
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
     backup_channel_id: null, bug_areas: 'City\nAlliance\nCombat\nHeroes\nEvents\nShop & payments\nChat\nLogin & connection\nUI & display\nOther',
@@ -1630,6 +1875,12 @@ function makeMock() {
     status: settings.bot_status, activity_type: settings.activity_type, activity_text: settings.activity_text });
 
   const NAMES = ['Mira', 'Jonas', 'Anders', 'Lærke', 'Sofie', 'Lars', 'Freja', 'Mikkel'];
+  const codes = [['WOSEU1WEEKEND', '300 gems + 2× 1h speed-up', 3600 * 5, 86400 * 2], ['HAPPYHALLOWEEN', 'Pumpkin frame', 86400 * 3, 86400 * 4], ['WELCOME2026', 'Starter pack', 86400 * 20, null], ['LAUNCHDAY', '1000 gems', 86400 * 9, 86400 * 2]]
+    .map((c, i) => ({ id: i + 1, code: c[0], reward: c[1], created_at: now - c[2], expires_at: c[3] ? now - c[2] + c[3] : null, by: 'Kasper', url: 'https://discord.com/channels/1/2/3' }));
+  const SUGT = ['Add a guild chat translation button', 'Let us rename pets', 'More daily quests on weekends', 'Show the event timer on the map',
+    'Dark mode for the shop', 'Trade window with confirmation', 'Bigger inventory for new players', 'Auto-collect resources at night'];
+  const sugs = SUGT.map((t, i) => ({ id: 23 - i, text: t + (i % 3 === 0 ? '\nIt would really help players in EU1 because we play at different times.' : ''), status: i < 6 ? (i % 3 === 0 ? 'accepted' : i % 3 === 1 ? 'new' : 'rejected') : 'new',
+    created_at: now - i * 30000, author_id: String(300 + i), author: ['Mira', 'Jonas', 'Anders', 'Freja', 'Mikkel', 'Lars', 'Sofie', 'Emil'][i], mod_url: 'https://discord.com/channels/1/2/3', public_url: null }));
   const SUM = ['Horse sinks when mounted near water', 'Quest "Old Mill" cannot be completed', 'Shop shows the wrong price for iron ingots',
     'Chat freezes after teleporting', 'Guild bank deposit loses items', 'Fishing rod breaks after one cast', 'Map marker shows wrong village',
     'Dragon boss resets at 10% health', 'Mailbox does not open on mobile', 'Crafting table ignores the second recipe'];
@@ -1696,6 +1947,45 @@ function makeMock() {
       const counts = {}; bugs.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
       return { items: f.slice(off, off + lim).map(briefBug), total: f.length, counts };
     }
+    if (p === '/api/giftcodes' && method === 'GET') {
+      const t = Math.floor(Date.now() / 1000);
+      return { items: codes.map(c => Object.assign({}, c, { state: c.expires_at && c.expires_at <= t ? 'expired' : (t - c.created_at < 86400 ? 'new' : 'active') })),
+        durations: [24, 48, 72, 96, 120, 168, 336, 720, null].map(h => ({ hours: h, label: h == null ? 'Permanent' : h === 24 ? '24 hours' : (h / 24) + ' days' })) };
+    }
+    if (p === '/api/giftcodes') {
+      if (!/^[A-Za-z0-9_-]{3,40}$/.test(body.code)) throw new Error('A code is 3–40 letters, numbers, - or _ (no spaces).');
+      const t = Math.floor(Date.now() / 1000), c = { id: codes.length + 10, code: body.code, reward: body.reward, created_at: t, expires_at: body.hours ? t + body.hours * 3600 : null, by: 'Dashboard', url: 'https://discord.com/channels/1/2/3' };
+      codes.unshift(c); addLog('admin', 'Gift code ' + c.code + ' added'); return { item: Object.assign({ state: 'new' }, c), warning: null };
+    }
+    { const mc = p.match(/^\/api\/giftcodes\/(\d+)$/);
+      if (mc) { const i = codes.findIndex(c => c.id === +mc[1]); if (i < 0) throw new Error('Gift code not found.');
+        if (method === 'DELETE') { codes.splice(i, 1); return { ok: true }; }
+        codes[i].expires_at = Math.floor(Date.now() / 1000) - 1; return { item: codes[i] }; } }
+    if (p === '/api/status') {
+      const t = Date.now() / 1000;
+      return { checked_at: Math.floor(t), bot: { online: true, latency_ms: 38 + Math.round(Math.random() * 10), uptime_s: 3 * 3600 + 1240, version: 'dc9c9cf (2026-11-07)', changes: '', members: 364, python: '3.12.3' },
+        system: { uptime_s: 6 * 86400 + 5400, load: [0.12 + Math.random() * 0.1, 0.09, 0.08], cpus: 2, memory: { total: 1004 * 1048576, available: 412 * 1048576, swap_total: 1024 * 1048576, swap_free: 980 * 1048576 }, disk: { total: 29 * 1073741824, free: 21.4 * 1073741824 } },
+        services: [{ name: 'wosbot', label: 'Discord bot', state: 'active' }, { name: 'nginx', label: 'Web server (nginx)', state: 'active' }, { name: 'wos-tunnel', label: 'Website ↔ bot link', state: 'active' }, { name: 'wos-update.timer', label: 'Update checker', state: 'active' }],
+        website_ok: true, data: { db_bytes: 482304, last_backup: now - 5 * 3600, backups: 7 },
+        updates: ['2026-11-07 20:55 Installing 3946ab7 – Updates: use HTTPS for a public repository', '2026-11-07 20:57 ✔ Updated to 3946ab7 – Updates: use HTTPS for a public repository'],
+        errors: [] };
+    }
+    if (p === '/api/suggestions' && method === 'GET') {
+      const off = parseInt(q.get('offset') || '0', 10), lim = parseInt(q.get('limit') || '25', 10), st = q.get('status'), t = (q.get('q') || '').toLowerCase().replace(/^#/, '');
+      const f = sugs.filter(x => (!st || x.status === st) && (!t || String(x.id) === t || (x.text + ' ' + x.author).toLowerCase().includes(t)));
+      const counts = {}; sugs.forEach(x => { counts[x.status] = (counts[x.status] || 0) + 1; });
+      return { items: f.slice(off, off + lim).map(x => Object.assign({}, x)), total: f.length, counts };
+    }
+    if (p === '/api/suggestions/delete') {
+      const ids = body.all ? sugs.map(x => x.id) : body.ids.map(Number); let n = 0;
+      ids.forEach(id => { const i = sugs.findIndex(x => x.id === id); if (i >= 0) { sugs.splice(i, 1); n++; } });
+      addLog('admin', 'Deleted ' + n + ' suggestion' + (n === 1 ? '' : 's')); return { deleted: n };
+    }
+    { const ms = p.match(/^\/api\/suggestions\/(\d+)$/);
+      if (ms) { const i = sugs.findIndex(x => x.id === +ms[1]); if (i < 0) throw new Error('Suggestion not found.');
+        if (method === 'DELETE') { sugs.splice(i, 1); addLog('admin', 'Deleted suggestion #' + ms[1]); return { deleted: 1 }; }
+        if (sugs[i].status !== 'new') throw new Error('This suggestion has already been decided.');
+        sugs[i].status = body.status; addLog('mod', 'Suggestion #' + ms[1] + ' ' + body.status + ' by Dashboard'); return Object.assign({}, sugs[i]); } }
     if (p === '/api/bugs/delete') {
       const ids = body.all ? bugs.map(b => b.id) : body.ids.map(Number); let n = 0;
       ids.forEach(id => { const i = bugs.findIndex(b => b.id === id); if (i >= 0) { bugs.splice(i, 1); n++; } });
