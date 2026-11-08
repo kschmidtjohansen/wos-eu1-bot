@@ -54,7 +54,7 @@ Then create these channels (the names are up to you):
 | `#mod-bugs` | Moderators only | Mods need *Add Reactions*, *Read Message History*, *Send Messages in Threads*. |
 | `#admin-bugs` | Admins only | |
 | `#suggestions` | everyone (read-only) | Accepted suggestions are shown here. |
-| `#welcome`, `#patch-notes`, `#top-bug-hunters` | everyone (read-only) | Optional. |
+| `#welcome`, `#patch-notes`, `#gift-codes` | everyone (read-only) | Optional. |
 | `#weekly-digest`, `#bot-backups` | **Admins only** | Optional. Backups contain player data – keep them private. |
 
 In every channel, also give the **WOS EU1** role: *View Channel, Send Messages, Send Messages in Threads, Create Private Threads, Manage Threads, Embed Links, Attach Files, Read Message History, Add Reactions, Manage Messages*.

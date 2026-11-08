@@ -128,14 +128,7 @@ db.executescript(
         reason TEXT,
         ts INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS points (       -- bug-bounty points, one row per reward (never given twice)
-        kind TEXT NOT NULL,                    -- bug_accepted | bug_fixed | suggestion
-        ref INTEGER NOT NULL,                  -- bug / suggestion number
-        user_id INTEGER NOT NULL,
-        pts INTEGER NOT NULL,
-        ts INTEGER NOT NULL,
-        PRIMARY KEY (kind, ref)
-    );
+    DROP TABLE IF EXISTS points;               -- bug-hunter points were removed
     CREATE TABLE IF NOT EXISTS member_log (   -- one row per local day: member count at the end of the day
         day TEXT PRIMARY KEY,
         members INTEGER NOT NULL,
@@ -209,6 +202,8 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "severity TEXT"), ("bug_reports", "fixed_version TEXT"),
                      ("bug_reports", "public INTEGER NOT NULL DEFAULT 0"),
                      ("bug_reports", "ip_hash TEXT"),
+                     ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
+                     ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
                      ("tickets", "area TEXT"), ("tickets", "title TEXT"), ("tickets", "chief_name TEXT"),
                      ("tickets", "player_uid TEXT"), ("tickets", "game_version TEXT")):   # upgrade older databases
     try:
@@ -231,10 +226,6 @@ def set_bug(bug_id: int, **fields):
     cols = ", ".join(f"{k}=?" for k in fields)
     db.execute(f"UPDATE bug_reports SET {cols} WHERE id=?", (*fields.values(), bug_id))
     db.commit()
-    if fields.get("status") in ("passed", "being_investigated", "fixed"):
-        r = get_bug(bug_id)
-        if r is not None:
-            award_bug(r)
     if fields.get("status") in ("rejected", "admin_rejected") and not fields.get("duplicate_of"):
         r = get_bug(bug_id)
         if r is not None and r["source"] == "web":
@@ -257,10 +248,6 @@ def set_suggestion(sid: int, **fields):
     cols = ", ".join(f"{k}=?" for k in fields)
     db.execute(f"UPDATE suggestions SET {cols} WHERE id=?", (*fields.values(), sid))
     db.commit()
-    if fields.get("status") == "accepted":
-        r = get_suggestion(sid)
-        if r is not None:
-            award_suggestion(r)
 
 
 def get_ticket(thread_id: int):
@@ -343,11 +330,6 @@ SCHEMA = {
     "digest_weekday": {"type": "choice", "default": "monday",
                        "choices": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
     "digest_hour": {"type": "int", "default": 9, "min": 0, "max": 23},
-    "bounty_enabled": {"type": "bool", "default": True},
-    "bounty_channel_id": {"type": "channel", "default": None},
-    "points_accepted": {"type": "int", "default": 1, "min": 0, "max": 100},
-    "points_fixed": {"type": "int", "default": 3, "min": 0, "max": 100},
-    "points_suggestion": {"type": "int", "default": 2, "min": 0, "max": 100},
     "update_notice_enabled": {"type": "bool", "default": True},
     "report_style": {"type": "choice", "default": "form", "choices": ["form", "ticket"]},
     "info_remind_hours": {"type": "int", "default": 48, "min": 0, "max": 720},
@@ -1183,76 +1165,6 @@ def previous_month() -> str:
     return f"{n.year - (n.month == 1):04d}-{(n.month - 2) % 12 + 1:02d}"
 
 
-# --------------------------------------------------------- bug-bounty points
-def award(kind: str, ref: int, user_id: int, pts: int, ts: Optional[int] = None) -> bool:
-    """Give points once per (kind, ref). Returns True when points were newly given."""
-    if not user_id or pts <= 0 or not cfg("bounty_enabled"):
-        return False
-    cur = db.execute("INSERT OR IGNORE INTO points (kind, ref, user_id, pts, ts) VALUES (?,?,?,?,?)",
-                     (kind, ref, user_id, pts, ts or int(time.time())))
-    db.commit()
-    return cur.rowcount > 0
-
-
-def award_bug(r, ts: Optional[int] = None):
-    """Called whenever a bug reaches 'passed' / 'being_investigated' / 'fixed': 1 reward for the first two
-    (accepted by the moderators), another when it is fixed."""
-    if not r["reporter_id"]:
-        return
-    award("bug_accepted", r["id"], r["reporter_id"], cfg("points_accepted"), ts)
-    if r["status"] == "fixed":
-        award("bug_fixed", r["id"], r["reporter_id"], cfg("points_fixed"), ts)
-
-
-def award_suggestion(r, ts: Optional[int] = None):
-    if r["status"] == "accepted" and r["author_id"]:
-        award("suggestion", r["id"], r["author_id"], cfg("points_suggestion"), ts)
-
-
-def backfill_points():
-    """Reward reports/suggestions that were handled before points existed (runs at start, safe to repeat)."""
-    if not cfg("bounty_enabled"):
-        return
-    for r in db.execute("SELECT * FROM bug_reports WHERE reporter_id<>0 AND status IN "
-                        "('passed','being_investigated','fixed')").fetchall():
-        fixed_ts = db.execute("SELECT MAX(ts) FROM actions WHERE kind='bug' AND action='fixed' AND item_id=?",
-                              (r["id"],)).fetchone()[0]
-        award_bug(r, fixed_ts or r["created_at"])
-    for r in db.execute("SELECT * FROM suggestions WHERE status='accepted'").fetchall():
-        award_suggestion(r, r["created_at"])
-
-
-def bug_points(bug_id: int) -> int:
-    return db.execute("SELECT COALESCE(SUM(pts),0) FROM points WHERE kind IN ('bug_accepted','bug_fixed') AND ref=?",
-                      (bug_id,)).fetchone()[0]
-
-
-def leaderboard(period: str = "all", limit: int = 10, month: Optional[str] = None) -> list:
-    """[{user_id, points, accepted, fixed, suggestions}] best first. period: 'all' | 'month' (month = 'YYYY-MM')."""
-    where, args = "", []
-    if period == "month":
-        a, b, _ = month_range(month)
-        where, args = "WHERE ts>=? AND ts<?", [a, b]
-    rows = db.execute(f"SELECT user_id, SUM(pts) AS p, SUM(kind='bug_accepted') AS a, SUM(kind='bug_fixed') AS f, "
-                      f"SUM(kind='suggestion') AS s, MAX(ts) AS last FROM points {where} GROUP BY user_id "
-                      f"ORDER BY p DESC, last ASC LIMIT ?", (*args, limit)).fetchall()
-    return [{"user_id": r["user_id"], "points": r["p"], "accepted": r["a"] or 0, "fixed": r["f"] or 0,
-             "suggestions": r["s"] or 0} for r in rows]
-
-
-def points_of(user_id: int) -> dict:
-    a, b, _ = month_range()
-    one = lambda sql, *x: db.execute(sql, x).fetchone()[0] or 0
-    total = one("SELECT SUM(pts) FROM points WHERE user_id=?", user_id)
-    rank = None
-    if total:
-        rank = 1 + one("SELECT COUNT(*) FROM (SELECT user_id FROM points GROUP BY user_id HAVING SUM(pts)>?)", total)
-    return {"total": total, "month": one("SELECT SUM(pts) FROM points WHERE user_id=? AND ts>=? AND ts<?", user_id, a, b),
-            "rank": rank, "accepted": one("SELECT COUNT(*) FROM points WHERE user_id=? AND kind='bug_accepted'", user_id),
-            "fixed": one("SELECT COUNT(*) FROM points WHERE user_id=? AND kind='bug_fixed'", user_id),
-            "suggestions": one("SELECT COUNT(*) FROM points WHERE user_id=? AND kind='suggestion'", user_id)}
-
-
 # ------------------------------------------------------------- weekly digest
 def digest_data(days: int = 7, now: Optional[int] = None) -> dict:
     now = now or int(time.time())
@@ -1296,7 +1208,6 @@ def digest_data(days: int = 7, now: Optional[int] = None) -> dict:
     }
 
 
-backfill_points()
 
 
 # ----------------------------------------------------------------- member growth
@@ -1364,7 +1275,7 @@ def member_growth(days: int = 90) -> dict:
 
 # ----------------------------------------------------------------- deleting bugs (e.g. test reports)
 def delete_bugs(ids, reset_numbers: bool = False) -> list:
-    """Deletes bugs completely: the report, its files, history, points and duplicate links.
+    """Deletes bugs completely: the report, its files, history and duplicate links.
     Returns the deleted rows (so the bot can also remove the Discord messages)."""
     import shutil
     ids = sorted({int(i) for i in ids})
@@ -1374,7 +1285,6 @@ def delete_bugs(ids, reset_numbers: bool = False) -> list:
         shutil.rmtree(ATTACH_DIR / str(i), ignore_errors=True)
         db.execute("DELETE FROM bug_files WHERE bug_id=?", (i,))
         db.execute("DELETE FROM bug_votes WHERE bug_id=?", (i,))
-        db.execute("DELETE FROM points WHERE kind IN ('bug_accepted','bug_fixed') AND ref=?", (i,))
         db.execute("DELETE FROM actions WHERE kind='bug' AND item_id=?", (i,))
         db.execute("UPDATE bug_reports SET duplicate_of=NULL WHERE duplicate_of=?", (i,))
         if r["ticket_thread_id"]:
@@ -1412,7 +1322,6 @@ def delete_suggestions(ids, reset_numbers: bool = False) -> list:
     ids = sorted({int(i) for i in ids})
     rows = [r for r in (get_suggestion(i) for i in ids) if r is not None]
     for r in rows:
-        db.execute("DELETE FROM points WHERE kind='suggestion' AND ref=?", (r["id"],))
         db.execute("DELETE FROM actions WHERE kind='suggestion' AND item_id=?", (r["id"],))
         db.execute("DELETE FROM suggestions WHERE id=?", (r["id"],))
     if reset_numbers and not db.execute("SELECT 1 FROM suggestions LIMIT 1").fetchone():

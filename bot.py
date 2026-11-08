@@ -8,7 +8,7 @@ Players:   react 🐛 (Report a bug) or 💡 (Create a suggestion) on the panel 
            💡  -> a private ticket thread opens; the player writes the suggestion freehand,
                   gets the same preview (Submit / Edit / Delete) and it goes to the MOD channel.
 Players:   /mybugs shows the status of their own reports.
-Everyone:  /members, /mybugs, /points, /leaderboard, /link, /unlink
+Everyone:  /members, /mybugs, /codes, /link, /unlink
 Admins:    /digest (weekly summary now)
 Mods:      /duplicate, /reply, /block, /unblock, /blocklist; react on a bug report:  ✅ Pass  |  🔍 Investigate  |  ❌ Duplicate/Reject
            react on a suggestion (mod channel):  ✅ Accept (also posted in the suggestions channel)  |  ❌ Reject
@@ -173,12 +173,12 @@ def ilang(interaction: discord.Interaction) -> str:
     return lang_for(interaction.user.id)
 
 
-async def dm_t(user_id: int, key: str, points_bug: Optional[int] = None, **kw):
+async def dm_t(user_id: int, key: str, **kw):
     """DM a player in their own language (texts.py / the dashboard's Translations page)."""
     if not user_id:
         return
     lg = lang_for(user_id)
-    await dm(user_id, T(key, lg, **kw) + (points_note(points_bug, lg) if points_bug else ""))
+    await dm(user_id, T(key, lg, **kw))
 
 
 # ------------------------------------------- player: bug ticket (private thread)
@@ -885,7 +885,7 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
         log_event("mod", f"Bug #{r['id']} passed to admins by {who}", member.id, who)
         if r["severity"] == "critical":
             await ping_critical(r, who)
-        await dm_t(r["reporter_id"], "dm.passed", points_bug=r["id"], id=r["id"])
+        await dm_t(r["reporter_id"], "dm.passed", id=r["id"])
 
     elif emoji == REJECT_EMOJI:
         set_bug(r["id"], status="rejected")
@@ -972,7 +972,7 @@ async def handle_admin(payload: discord.RawReactionActionEvent, emoji: str):
             pass
     label = STATUS[new][0]
     log_event("admin", f"Bug #{r['id']} marked “{label.split(' ', 1)[1]}” by {who}", member.id, who)
-    await dm_t(r["reporter_id"], "dm." + new, points_bug=r["id"] if new == "fixed" else None, id=r["id"])
+    await dm_t(r["reporter_id"], "dm." + new, id=r["id"])
     if new == "fixed":
         await notify_followers(r)
 
@@ -982,9 +982,60 @@ def suggestion_embed(r, note: Optional[str] = None) -> discord.Embed:
                     "rejected": ("❌ Rejected", 0xED4245)}[r["status"]]
     e = discord.Embed(title=f"Suggestion #{r['id']}", description=r["text"], color=color)
     e.add_field(name="From", value=f"<@{r['author_id']}>", inline=True)
-    e.add_field(name="Status", value=label, inline=True)
+    e.add_field(name="Status", value="🛠️ Added – see what changed" if r["changes"] else label, inline=True)
+    if r["changes"]:
+        e.add_field(name="🛠️ What we changed", value=r["changes"][:1024], inline=False)
+        e.color = 0x9B59B6
     e.set_footer(text=brand() + (f" · {note}" if note else ""))
     return e
+
+
+async def post_suggestion_changes(sid: int, text: str, actor_id, who: str):
+    """An accepted suggestion was put into the game: save what changed, show it on the Discord posts,
+    reply under the public post and tell the author. Saving again updates the same reply."""
+    r = get_suggestion(sid)
+    if r is None:
+        raise ValueError("Suggestion not found.")
+    if r["status"] != "accepted":
+        raise ValueError("Only accepted suggestions can get a “what we changed” update.")
+    text = (text or "").strip()
+    if len(text) < 3:
+        raise ValueError("Write what you changed (at least a few words).")
+    if len(text) > 1000:
+        raise ValueError("Keep it under 1,000 characters.")
+    first = not r["changes"]
+    set_suggestion(sid, changes=text, changed_at=int(time.time()), changed_by=who)
+    record_action("suggestion", sid, "changed", actor_id, who)
+    r = get_suggestion(sid)
+    for key, mid in (("mod_channel_id", r["msg_id"]), ("suggestions_channel_id", r["public_msg_id"])):
+        ch = chan(key)
+        if ch is not None and mid:
+            try:
+                await ch.get_partial_message(mid).edit(embed=suggestion_embed(r))
+            except discord.HTTPException:
+                pass
+    pub = chan("suggestions_channel_id")
+    if pub is not None:
+        e = discord.Embed(title=f"🛠️ Suggestion #{r['id']} is in the game!", description=text, color=0x9B59B6)
+        e.add_field(name="The idea", value=(r["text"][:300] + ("…" if len(r["text"]) > 300 else "")), inline=False)
+        e.set_footer(text=f"{brand()} · thanks for the idea!")
+        content = f"<@{r['author_id']}>"
+        try:
+            if r["changes_msg_id"]:
+                await pub.get_partial_message(r["changes_msg_id"]).edit(content=content, embed=e,
+                                                                         allowed_mentions=discord.AllowedMentions.none())
+            else:
+                ref = (discord.MessageReference(message_id=r["public_msg_id"], channel_id=pub.id, fail_if_not_exists=False)
+                       if r["public_msg_id"] else None)
+                msg = await pub.send(content=content, embed=e, reference=ref,
+                                     allowed_mentions=discord.AllowedMentions(users=True, replied_user=False))
+                set_suggestion(sid, changes_msg_id=msg.id)
+        except discord.HTTPException as exc:
+            log_event("system", f"Could not post the update for suggestion #{sid}: {exc}", actor_id, who)
+    if first:
+        await dm_t(r["author_id"], "dm.sug_changed", id=r["id"], changes=text)
+    log_event("mod", f"Suggestion #{sid}: “what we changed” {'posted' if first else 'updated'} by {who}", actor_id, who)
+    return get_suggestion(sid)
 
 
 async def handle_suggestion(payload: discord.RawReactionActionEvent, emoji: str):
@@ -1192,8 +1243,6 @@ async def publish_panel(title: str, text: str, channel_id: int,
 PLAYER_COMMANDS = [
     ("/mybugs", "See the status of your bug reports and ideas"),
     ("/codes", "Show the active gift codes"),
-    ("/points", "Your bug-hunter points"),
-    ("/leaderboard", "The best bug hunters"),
     ("/link", "Link your in-game account (chief name + UID) – fills in your bug reports and lets the bot redeem gift codes for you"),
     ("/unlink", "Remove that link"),
     ("/language", "Choose the language the bot uses with you"),
@@ -1214,8 +1263,7 @@ def info_embeds() -> list:
         "3️⃣ Fill in the short form – where it happened, a short title, what happened, and a screenshot if you have one\n"
         "4️⃣ Press **Submit** – done ✅\n\n"
         "Only you can see the form. If the bug is already known, the bot tells you straight away.\n"
-        "📬 Keep your DMs open: the bot tells you when your report is accepted, investigated or fixed.\n"
-        "🏆 Accepted reports earn bug-hunter points!"))
+        "📬 Keep your DMs open: the bot tells you when your report is accepted, investigated or fixed."))
     for e in (rules, cmds, how):
         e.set_footer(text=brand())
     return [rules, cmds, how]
@@ -1411,7 +1459,7 @@ class WosBot(discord.Client):
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
                          "drive_backup": drive_backup, "fill_translations": fill_translations,
-                         "publish_info": publish_info, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
+                         "publish_info": publish_info, "suggestion_changes": post_suggestion_changes, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
                          "refresh_board": safe_refresh_board, "redeem_one": redeem_one, "start_redeem": start_redeem,
                          "redeem_ready": redeem_ready}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
@@ -1619,7 +1667,7 @@ async def apply_bug_status(r, new: str, actor_name: str, actor_id: Optional[int]
         await dm_t(r["reporter_id"], "dm.duplicate", id=r["id"], original=dup["id"],
                    status=T("st." + dup["status"], lg).split(" ", 1)[-1])
     else:
-        await dm_t(r["reporter_id"], "dm." + new, points_bug=r["id"] if new in ("passed", "fixed") else None, id=r["id"])
+        await dm_t(r["reporter_id"], "dm." + new, id=r["id"])
     if dup:
         await sync_bug_messages(dup)             # the original now shows how many others hit the same bug
     if new == "fixed":
@@ -1898,62 +1946,7 @@ async def members_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(embed=e)
 
 
-# ============================================================ points, leaderboard, weekly digest
-def points_note(bug_id: int, lang: Optional[str] = None) -> str:
-    p = store.bug_points(bug_id) if cfg("bounty_enabled") else 0
-    return T("dm.points", lang, points=p) if p else ""
-
-
-def _medal(i: int) -> str:
-    return ("🥇", "🥈", "🥉")[i] if i < 3 else f"**{i + 1}.**"
-
-
-def leaderboard_embed(period: str, month: Optional[str] = None, limit: int = 10) -> discord.Embed:
-    rows = store.leaderboard(period, limit, month)
-    title = "🏆 Bug hunters – all time" if period == "all" else f"🏆 Bug hunters – {store.month_range(month)[2]}"
-    e = discord.Embed(title=title, color=0xF1C40F)
-    if not rows:
-        e.description = "No points yet. Report a bug with the 🐛 reaction to get on the list!"
-    else:
-        e.description = "\n".join(f"{_medal(i)} <@{r['user_id']}> – **{r['points']}** pts"
-                                  f" · {r['accepted']} accepted · {r['fixed']} fixed"
-                                  + (f" · {r['suggestions']} ideas" if r["suggestions"] else "")
-                                  for i, r in enumerate(rows))
-    e.set_footer(text=f"{cfg('points_accepted')} pt accepted · {cfg('points_fixed')} pts fixed · "
-                      f"{cfg('points_suggestion')} pts accepted suggestion")
-    return e
-
-
-@bot.tree.command(name="points", description="See your bug-hunter points", guild=_GUILD)
-@app_commands.describe(user="Look at someone else (optional)")
-@app_commands.guild_only()
-async def points_cmd(interaction: discord.Interaction, user: Optional[discord.Member] = None):
-    if not cfg("bounty_enabled"):
-        return await interaction.response.send_message("Points are switched off on this server.", ephemeral=True)
-    who = user or interaction.user
-    p = store.points_of(who.id)
-    if not p["total"]:
-        text = (f"{who.mention} has no points yet. You get points when a moderator accepts your bug report, "
-                f"more when it is fixed (**{cfg('points_accepted')}** / **{cfg('points_fixed')}** pts), "
-                f"and **{cfg('points_suggestion')}** for an accepted suggestion.")
-    else:
-        text = (f"🏆 {who.mention}: **{p['total']}** points (rank **#{p['rank']}**) · {p['month']} this month\n"
-                f"{p['accepted']} accepted · {p['fixed']} fixed · {p['suggestions']} accepted suggestions")
-    await interaction.response.send_message(text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
-
-
-@bot.tree.command(name="leaderboard", description="The best bug hunters", guild=_GUILD)
-@app_commands.describe(period="This month or all time")
-@app_commands.choices(period=[app_commands.Choice(name="This month", value="month"),
-                              app_commands.Choice(name="All time", value="all")])
-@app_commands.guild_only()
-async def leaderboard_cmd(interaction: discord.Interaction, period: Optional[app_commands.Choice[str]] = None):
-    if not cfg("bounty_enabled"):
-        return await interaction.response.send_message("Points are switched off on this server.", ephemeral=True)
-    await interaction.response.send_message(embed=leaderboard_embed(period.value if period else "month"),
-                                            allowed_mentions=discord.AllowedMentions.none())
-
-
+# ============================================================ weekly digest
 def digest_embed(d: dict) -> discord.Embed:
     diff = d["reported"] - d["reported_prev"]
     trend = f" ({'+' if diff >= 0 else ''}{diff} vs last week)" if d["reported_prev"] or diff else ""
@@ -2855,8 +2848,23 @@ async def modstats_cmd(interaction: discord.Interaction, days: Optional[app_comm
     await interaction.response.send_message(embed=modstats_embed(days or 30), ephemeral=True)
 
 
+@bot.tree.command(name="changed", description="Tell players what you changed for an accepted suggestion (moderators)", guild=_GUILD)
+@app_commands.describe(suggestion="The suggestion number", text="What you actually changed in the game")
+@app_commands.guild_only()
+async def changed_cmd(interaction: discord.Interaction, suggestion: int, text: app_commands.Range[str, 3, 1000]):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+    try:
+        await post_suggestion_changes(suggestion, text, interaction.user.id, interaction.user.display_name)
+    except ValueError as exc:
+        return await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
+    await interaction.followup.send(f"✅ Suggestion #{suggestion}: update posted in the suggestions channel and sent to the author.",
+                                    ephemeral=True)
+
+
 async def run_schedules(now=None):
-    """Called every few minutes: posts the weekly digest and the monthly leaderboard when they are due.
+    """Called every few minutes: posts the weekly digest when it is due.
     Returns the names of what was posted."""
     from datetime import datetime, timedelta
     now = now or datetime.now(store.tz())
@@ -2874,20 +2882,6 @@ async def run_schedules(now=None):
             except (ValueError, discord.HTTPException) as exc:
                 put_raw("digest_last", week)               # don't retry every 10 minutes
                 log_event("system", f"Could not post the weekly digest: {exc}", None, brand())
-    ch = chan("bounty_channel_id")
-    if cfg("bounty_enabled") and ch is not None and now.day <= 3 and now.hour >= 10:
-        month = store.previous_month()
-        if get_raw("leaderboard_last") != month:
-            put_raw("leaderboard_last", month)
-            if store.leaderboard("month", 1, month):
-                try:
-                    await ch.send(f"🎉 **Top bug hunters of {month}** – thank you all!",
-                                  embed=leaderboard_embed("month", month, 5),
-                                  allowed_mentions=discord.AllowedMentions.none())
-                    log_event("system", f"Monthly leaderboard for {month} posted", None, brand())
-                    done.append("leaderboard")
-                except discord.HTTPException as exc:
-                    log_event("system", f"Could not post the monthly leaderboard: {exc}", None, brand())
     return done
 
 

@@ -162,18 +162,12 @@ title, description, contact`, files as `file`).
   "Also reported by N more" (a quick sign of how many players hit it), and when the original is marked **Fixed**
   every player whose report was closed as its duplicate gets a message too.
 
-## Weekly digest and bug-hunter points
+## Weekly digest
 - **Weekly digest:** every Monday at 09:00 (day, hour and time zone are set under Features) the bot posts a summary in
   the admin channel (or a digest channel): new / fixed / closed bugs and the change vs last week, average time to fix,
   what is waiting at the moderators and admins, critical bugs still open, the bugs waiting longest, busiest areas and
   top reporters. `/digest` (admins) or the dashboard button posts it right now. If the bot was offline at the scheduled
   time it catches up within 36 hours, otherwise it skips that week.
-- **Points:** a reporter gets **1** point when a moderator accepts a bug, **+3** when it is fixed and **2** for an accepted
-  suggestion (all changeable). Each bug/suggestion pays out once, website reports earn nothing (no Discord account),
-  and points are never taken away. `/points` shows your own total and rank, `/leaderboard` the top 10 (this month or all
-  time). Set a *Monthly leaderboard channel* and on the 1st of every month the previous month's top 5 are announced.
-  Points are also in the DMs players get ("you have earned 4 points"), and on the dashboard's Insights page. Older bugs
-  are rewarded automatically the first time the new version starts.
 
 ## What the dashboard does
 - **Bugs:** all reports with search, status filter, a detail window (read, rename, change status, close as

@@ -126,6 +126,9 @@
 .w-pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--w-surface-2);border:1px solid var(--w-border);color:var(--w-muted);white-space:nowrap}
 .w-dot{width:8px;height:8px;border-radius:50%;background:var(--w-ok);flex:none}
 .w-demo{background:var(--w-warn-soft);color:var(--w-warn);border-color:transparent}
+.w-changes{margin:10px 0;padding:12px;border:1px dashed var(--w-border);border-radius:12px}
+.w-changes.done{border-style:solid;border-color:color-mix(in srgb,#9b59b6 45%,var(--w-border));background:color-mix(in srgb,#9b59b6 7%,transparent)}
+.w-changes .w-textarea{min-height:70px;margin-top:6px}
 .w-badge{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;padding:2px 9px;border-radius:999px}
 .w-badge.ok{background:var(--w-ok-soft);color:var(--w-ok)}
 .w-badge.warn{background:var(--w-warn-soft);color:var(--w-warn)}
@@ -520,7 +523,6 @@ const CHANNELS = [
   ['backup_channel_id', 'Backup channel', 'Optional. A copy of the database is posted here every day. It contains player data – make it admin-only.'],
   ['digest_channel_id', 'Weekly digest channel', 'Optional. Where the Monday summary is posted. Empty = the admin channel.'],
   ['giftcodes_channel_id', 'Gift codes channel', 'Optional. New gift codes are announced here. Give the bot “Mention @everyone” if you ping @everyone or @here.'],
-  ['bounty_channel_id', 'Monthly leaderboard channel', 'Optional. On the 1st of each month the top bug hunters of last month are announced here.'],
   ['board_channel_id', 'Known issues board channel', 'Optional. One message lists the open known issues (bugs you put on the public list). Players pick “I have this too” and get a DM when it is fixed.']
 ];
 const CHANNEL_KEYS = CHANNELS.map(c => c[0]);
@@ -529,7 +531,7 @@ const FEATURE_KEYS = ['bugs_enabled', 'suggestions_enabled', 'investigate_enable
   'reminders_enabled', 'reminder_mod_hours', 'reminder_admin_hours', 'reminder_critical_hours',
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
-  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'bounty_enabled', 'points_accepted', 'points_fixed', 'points_suggestion', 'update_notice_enabled',
+  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'update_notice_enabled',
   'report_style', 'info_remind_hours', 'info_close_hours', 'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'giftcodes_delete_expired', 'giftcodes_list', 'giftcodes_site_url', 'drive_enabled', 'drive_every_days', 'drive_keep'];
 const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'];
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
@@ -768,7 +770,7 @@ function viewFeatures() {
       ${toggleRow('digest_enabled', 'Post a weekly summary', 'New, fixed and closed bugs, what is waiting longest, critical bugs and the busiest areas.')}
       ${selectRow('digest_weekday', 'Day', 'The digest is posted on this day…', ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])}
       ${numberRow('digest_hour', 'Hour', '…at this hour (0–23) in the time zone below.', 0, 23, 'o\u2019clock')}
-      ${textRow('timezone', 'Time zone', 'A name such as Europe/Copenhagen or Europe/Warsaw. Used for the digest and the monthly leaderboard.', 'Europe/Copenhagen', 40)}
+      ${textRow('timezone', 'Time zone', 'A name such as Europe/Copenhagen or Europe/Warsaw. Used for the weekly digest.', 'Europe/Copenhagen', 40)}
       <div class="w-actions" style="margin-top:10px"><button class="w-btn small" data-act="sendDigest">Send the digest now</button></div>
     </section>
     <section class="w-card w-pad"><div class="w-group-title">Gift codes</div>
@@ -779,13 +781,6 @@ function viewFeatures() {
       ${numberRow('giftcodes_new_hours', 'New codes stay on their own for', 'New codes get their own announcement in Discord and the “New” section on the website for this long. Then they move into the list with the other codes.', 1, 168, 'hours')}
       ${toggleRow('giftcodes_delete_expired', 'Delete expired codes here too', 'Expired codes always disappear from Discord and the website. On = they are also deleted from this dashboard. Off = they stay under “Expired” here as history.')}
       ${textRow('giftcodes_site_url', 'Website gift-codes page', 'Optional. The address of the Gift codes page on your website – Discord gets an “All codes on the website” button.', 'http://…/bugs/codes.html', 300)}
-    </section>
-    <section class="w-card w-pad"><div class="w-group-title">Bug-hunter points</div>
-      ${toggleRow('bounty_enabled', 'Give points to reporters', 'Players see them with /points and /leaderboard. Bugs and suggestions are rewarded once each.')}
-      ${numberRow('points_accepted', 'Bug accepted by a moderator', 'Given when the report is passed on to the admins.', 0, 100, 'points')}
-      ${numberRow('points_fixed', 'Bug fixed', 'Extra points when the bug is marked fixed.', 0, 100, 'points')}
-      ${numberRow('points_suggestion', 'Suggestion accepted', 'Given when a moderator accepts the suggestion.', 0, 100, 'points')}
-      <div class="w-hint">Changing the numbers only affects points given from now on. Website reports have no Discord account, so they earn no points.</div>
     </section>
     <section class="w-card w-pad"><div class="w-group-title">Screenshots & backups</div>
       ${toggleRow('keep_attachments', 'Keep screenshots and videos', 'Saves a copy on the bot’s computer, because Discord links stop working after a while.')}
@@ -1036,7 +1031,7 @@ function bugModal() {
       <div class="w-hist">${b.history.length ? b.history.map(h => html`<div><b>${ACTION_LABEL[h.action] || h.action}</b> · ${h.actor} · ${full(h.ts)}</div>`) : html`<div>No actions recorded yet.</div>`}</div></div>
 
     <div class="w-sect w-danger"><span class="w-label">Delete this bug</span>
-      <p class="w-hint" style="margin-bottom:8px">Removes the report, its screenshots, history and points for good – for test reports and spam. To close a real bug, use Reject instead.</p>
+      <p class="w-hint" style="margin-bottom:8px">Removes the report, its screenshots and history for good – for test reports and spam. To close a real bug, use Reject instead.</p>
       <div class="w-inline"><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="m-deldiscord" checked> Also delete its messages and info ticket in Discord</label>
         <div class="w-spacer"></div><button class="w-btn danger" data-act="bugDelete">Delete bug #${b.id}</button></div></div>
   </div></div>`;
@@ -1348,8 +1343,8 @@ async function setLanguages(langs, def) {
 }
 
 /* ---- info channel ---- */
-const PLAYER_COMMANDS = [['/mybugs', 'See the status of your bug reports and ideas'], ['/codes', 'Show the active gift codes'], ['/points', 'Your bug-hunter points'],
-  ['/leaderboard', 'The best bug hunters'], ['/link', 'Link your in-game account (chief name + UID) – it fills in your bug reports'], ['/unlink', 'Remove that link'],
+const PLAYER_COMMANDS = [['/mybugs', 'See the status of your bug reports and ideas'], ['/codes', 'Show the active gift codes'],
+  ['/link', 'Link your in-game account (chief name + UID) – it fills in your bug reports'], ['/unlink', 'Remove that link'],
   ['/language', 'Choose the language the bot uses with you'], ['/members', 'How many members the server has'],
   ['Translate', 'Right-click (or long-press) any message → Apps → Translate, to read it in your language']];
 function viewInfo() {
@@ -1371,7 +1366,7 @@ function viewInfo() {
         <div class="w-dp" id="in-pv"><div class="w-dp-head"><img src="${b.avatar_url}" alt=""><div><span class="w-dp-name">${b.name}</span><span class="w-dp-tag">BOT</span></div></div>
           ${emb('#e67e22', '📜 Server rules', md(rules || ' '))}
           ${emb('#5865f2', '⌨️ Commands you can use', PLAYER_COMMANDS.map(c => c[0][0] === '/' ? '<code>' + esc(c[0]) + '</code> – ' + esc(c[1]) : '<b>' + esc(c[0]) + '</b> – ' + esc(c[1])).join('<br>'))}
-          ${emb('#2ecc71', '🐛 How to report a bug or suggest an idea', md('1️⃣ Go to ' + rep + '\n2️⃣ Press **🐛 Report a bug** – or **💡 Suggest an idea**\n3️⃣ Fill in the short form – where it happened, a short title, what happened, and a screenshot if you have one\n4️⃣ Press **Submit** – done ✅\n\nOnly you can see the form. If the bug is already known, the bot tells you straight away.\n📬 Keep your DMs open: the bot tells you when your report is accepted, investigated or fixed.\n🏆 Accepted reports earn bug-hunter points!'))}
+          ${emb('#2ecc71', '🐛 How to report a bug or suggest an idea', md('1️⃣ Go to ' + rep + '\n2️⃣ Press **🐛 Report a bug** – or **💡 Suggest an idea**\n3️⃣ Fill in the short form – where it happened, a short title, what happened, and a screenshot if you have one\n4️⃣ Press **Submit** – done ✅\n\nOnly you can see the form. If the bug is already known, the bot tells you straight away.\n📬 Keep your DMs open: the bot tells you when your report is accepted, investigated or fixed.'))}
         </div></section>
     </div>`;
 }
@@ -1392,6 +1387,11 @@ function sugList() {
     <div class="w-sugbody"><div class="w-sughead"><b>#${x.id}</b> <span class="w-sub">${x.author} · <time title="${full(x.created_at)}">${ago(x.created_at)}</time></span>
       <span class="w-badge ${SUG_BADGE[x.status]}">${SUG_LABEL[x.status]}</span></div>
       <p class="w-sugtext">${x.text}</p>
+      ${x.status === 'accepted' ? html`<div class="w-changes${x.changes ? ' done' : ''}">
+        <label class="w-label" for="chg-${x.id}">🛠️ What we changed ${x.changes ? html`<span class="w-hint">· posted ${ago(x.changed_at)}${x.changed_by ? ' by ' + x.changed_by : ''}${x.changes_url ? html` · <a href="${x.changes_url}" target="_blank" rel="noopener">see in Discord</a>` : ''}</span>` : html`<span class="w-hint">– tell players what you actually changed</span>`}</label>
+        <textarea class="w-textarea" id="chg-${x.id}" maxlength="1000" placeholder="e.g. Bear Trap now has a 10-minute warning in alliance chat (from version 1.34).">${x.changes || ''}</textarea>
+        <div class="w-inline" style="margin-top:8px"><span class="w-hint">Posted as a reply under the suggestion in Discord${x.changes ? ' (updated in place)' : ' and sent to the player by DM'}.</span><div class="w-spacer"></div>
+          <button class="w-btn small primary" data-act="sugChanges" data-id="${x.id}">${icon('send')} ${x.changes ? 'Update' : 'Post update'}</button></div></div>` : ''}
       <div class="w-inline">${x.status === 'new' ? html`<button class="w-btn small" data-act="sugDecide" data-id="${x.id}" data-s="accepted">${icon('check')} Accept</button>
         <button class="w-btn small" data-act="sugDecide" data-id="${x.id}" data-s="rejected">Reject</button>` : ''}
         ${x.mod_url ? html`<a class="w-btn small" href="${x.mod_url}" target="_blank" rel="noopener">Open in Discord</a>` : ''}
@@ -1518,11 +1518,6 @@ function viewInsights() {
       ${I.versions && I.versions.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Version</th><th>Reports</th><th>Fixed</th></tr></thead><tbody>
         ${I.versions.map(v => html`<tr><td>${v.name}</td><td>${v.total}</td><td>${v.fixed}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">No versions recorded yet. Set the current version under Features.</div>`}
     </section>
-    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Bug-hunter points</h3>
-      <div class="w-chips"><button class="w-chip" data-act="lbPeriod" data-p="all" aria-pressed="${String(!S.lb || S.lb.period === 'all')}">All time</button><button class="w-chip" data-act="lbPeriod" data-p="month" aria-pressed="${String(!!S.lb && S.lb.period === 'month')}">This month</button></div></div>
-      ${S.lb && S.lb.items.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>#</th><th>Player</th><th>Points</th><th>Accepted</th><th>Fixed</th></tr></thead><tbody>
-        ${S.lb.items.map((x, i) => html`<tr><td>${i + 1}</td><td>${x.name}</td><td><b>${x.points}</b></td><td>${x.accepted}</td><td>${x.fixed}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">No points yet.</div>`}
-    </section>
     <section class="w-card w-pad"><h3 class="w-h3">Top reporters</h3><p class="w-sub" style="margin-bottom:8px">“Accepted” = a moderator passed the bug on to the admins. A high share means useful reports.</p>
       ${I.reporters.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Player</th><th>Reports</th><th>Accepted</th><th>Fixed</th><th>Rejected</th><th>Quality</th></tr></thead><tbody>
         ${I.reporters.map(r => html`<tr><td>${r.name}</td><td>${r.total}</td><td>${r.accepted}</td><td>${r.fixed}</td><td>${r.rejected}</td><td>${r.total ? Math.round(r.accepted / r.total * 100) + '%' : '–'}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">No reports yet.</div>`}
@@ -1566,7 +1561,7 @@ function viewData() {
     </section>
     ${driveCard(D.drive)}
     <section class="w-card w-pad w-danger"><h3 class="w-h3">Delete test data (end of testing)</h3>
-      <p class="w-sub" style="margin-bottom:12px">Removes <b>every</b> report of the chosen kind, with screenshots, history and points. Settings and the log are kept.
+      <p class="w-sub" style="margin-bottom:12px">Removes <b>every</b> report of the chosen kind, with screenshots and history. Settings and the log are kept.
         A backup is made first, so you can undo it. Use it once, when testing is over.</p>
       <div class="w-field" style="max-width:260px"><label class="w-label" for="da-what">Delete all</label>
         <select class="w-select" id="da-what"><option value="bugs">Bugs</option><option value="suggestions">Suggestions</option><option value="both">Bugs and suggestions</option></select></div>
@@ -1710,7 +1705,7 @@ const LOADERS = {
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
-  insights: async () => { const [i, l] = await Promise.all([call('GET', '/api/insights'), call('GET', '/api/leaderboard?period=' + ((S.lb && S.lb.period) || 'all'))]); S.insights = i; S.lb = l; },
+  insights: async () => { S.insights = await call('GET', '/api/insights'); },
   patch: async () => { S.patch = await call('GET', '/api/patchnotes'); },
   mod: async () => { const [r, b] = await Promise.all([call('GET', '/api/replies'), call('GET', '/api/blocklist')]); S.replies = r.items; S.blocks = b.items; S.webblocks = (await call('GET', '/api/webblocks')).items; }
 };
@@ -2053,6 +2048,13 @@ root.addEventListener('click', async e => {
       try { await call('PUT', '/api/suggestions/' + el.dataset.id, { status: el.dataset.s }); toast('Suggestion #' + el.dataset.id + ' ' + el.dataset.s + '.'); loadSugs(true); }
       catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
+    else if (act === 'sugChanges') {
+      const t = $('#chg-' + el.dataset.id).value.trim();
+      if (t.length < 3) return toast('Write what you changed first.', 'err');
+      busy(el, true, 'Posting…');
+      try { await call('PUT', '/api/suggestions/' + el.dataset.id, { changes: t }); toast('Update for suggestion #' + el.dataset.id + ' posted in Discord.'); loadSugs(true); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
     else if (act === 'sugDelete') {
       if (!el.dataset.armed) { el.dataset.armed = '1'; el.textContent = 'Click again to delete';
         setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = 'Delete'; } }, 4000); return; }
@@ -2190,7 +2192,6 @@ root.addEventListener('click', async e => {
       try { const r = await call('POST', '/api/digest'); toast('Digest posted in #' + r.channel + '.'); } catch (err) { toast(err.message, 'err'); }
       busy(el, false);
     }
-    else if (act === 'lbPeriod') { S.lb = (await call('GET', '/api/leaderboard?period=' + el.dataset.p)); renderMain(); }
     else if (act === 'webUnblock') {
       await call('DELETE', '/api/webblocks?key=' + encodeURIComponent(el.dataset.key));
       S.webblocks = (await call('GET', '/api/webblocks')).items; toast('Pause lifted.'); renderMain();
@@ -2310,7 +2311,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
     backup_channel_id: null, bug_areas: 'City\nAlliance\nCombat\nHeroes\nEvents\nShop & payments\nChat\nLogin & connection\nUI & display\nOther',
@@ -2341,12 +2342,12 @@ function makeMock() {
   }));
   const logs = rows.map((l, i) => ({ id: 1000 - i, ts: now - l[3] * 60, kind: l[0], text: l[1], actor: l[2], actor_id: null }));
   const addLog = (kind, text) => logs.unshift({ id: logs[0].id + 1, ts: Math.floor(Date.now() / 1000), kind, text, actor: 'Dashboard', actor_id: null });
-  const labels = { report_channel_id: 'Bug report channel', mod_channel_id: 'Mod channel', suggestions_channel_id: 'Suggestions channel', admin_channel_id: 'Admin channel', welcome_channel_id: 'Welcome channel', patchnotes_channel_id: 'Patch notes channel', backup_channel_id: 'Backup channel', digest_channel_id: 'Weekly digest channel', bounty_channel_id: 'Monthly leaderboard channel' };
+  const labels = { report_channel_id: 'Bug report channel', mod_channel_id: 'Mod channel', suggestions_channel_id: 'Suggestions channel', admin_channel_id: 'Admin channel', welcome_channel_id: 'Welcome channel', patchnotes_channel_id: 'Patch notes channel', backup_channel_id: 'Backup channel', digest_channel_id: 'Weekly digest channel' };
   const health = () => ({
     channels: Object.keys(labels).map(k => {
       const ch = CH.find(c => c.id === settings[k]);
       const missing = ch && k === 'mod_channel_id' ? ['Manage Threads'] : [];
-      return { key: k, label: labels[k], optional: ['welcome_channel_id', 'patchnotes_channel_id', 'backup_channel_id', 'digest_channel_id', 'bounty_channel_id'].includes(k), enabled: k === 'welcome_channel_id' ? settings.welcome_enabled : k === 'patchnotes_channel_id' || k === 'backup_channel_id' || k === 'digest_channel_id' || k === 'bounty_channel_id' ? !!settings[k] : true,
+      return { key: k, label: labels[k], optional: ['welcome_channel_id', 'patchnotes_channel_id', 'backup_channel_id', 'digest_channel_id'].includes(k), enabled: k === 'welcome_channel_id' ? settings.welcome_enabled : k === 'patchnotes_channel_id' || k === 'backup_channel_id' || k === 'digest_channel_id' || k === 'bounty_channel_id' ? !!settings[k] : true,
         configured: !!settings[k], found: !!ch, name: ch && ch.name, missing, ok: !!ch && !missing.length };
     }),
     roles: [{ label: 'Moderator role', found: true, name: 'Moderator' }, { label: 'Admin role', found: true, name: 'Admin' }],
@@ -2366,7 +2367,8 @@ function makeMock() {
   const SUGT = ['Add a guild chat translation button', 'Let us rename pets', 'More daily quests on weekends', 'Show the event timer on the map',
     'Dark mode for the shop', 'Trade window with confirmation', 'Bigger inventory for new players', 'Auto-collect resources at night'];
   const sugs = SUGT.map((t, i) => ({ id: 23 - i, text: t + (i % 3 === 0 ? '\nIt would really help players in EU1 because we play at different times.' : ''), status: i < 6 ? (i % 3 === 0 ? 'accepted' : i % 3 === 1 ? 'new' : 'rejected') : 'new',
-    created_at: now - i * 30000, author_id: String(300 + i), author: ['Mira', 'Jonas', 'Anders', 'Freja', 'Mikkel', 'Lars', 'Sofie', 'Emil'][i], mod_url: 'https://discord.com/channels/1/2/3', public_url: null }));
+    created_at: now - i * 30000, author_id: String(300 + i), author: ['Mira', 'Jonas', 'Anders', 'Freja', 'Mikkel', 'Lars', 'Sofie', 'Emil'][i], mod_url: 'https://discord.com/channels/1/2/3', public_url: null,
+    changes: i === 3 ? 'Added a 10-minute Bear Trap warning in alliance chat (version 1.34).' : '', changed_at: i === 3 ? now - 7200 : null, changed_by: i === 3 ? 'Kasper' : '', changes_url: i === 3 ? '#' : null }));
   const SUM = ['Horse sinks when mounted near water', 'Quest "Old Mill" cannot be completed', 'Shop shows the wrong price for iron ingots',
     'Chat freezes after teleporting', 'Guild bank deposit loses items', 'Fishing rod breaks after one cast', 'Map marker shows wrong village',
     'Dragon boss resets at 10% health', 'Mailbox does not open on mobile', 'Crafting table ignores the second recipe'];
@@ -2514,6 +2516,8 @@ function makeMock() {
     { const ms = p.match(/^\/api\/suggestions\/(\d+)$/);
       if (ms) { const i = sugs.findIndex(x => x.id === +ms[1]); if (i < 0) throw new Error('Suggestion not found.');
         if (method === 'DELETE') { sugs.splice(i, 1); addLog('admin', 'Deleted suggestion #' + ms[1]); return { deleted: 1 }; }
+        if ('changes' in body) { if (sugs[i].status !== 'accepted') throw new Error('Only accepted suggestions can get a “what we changed” update.');
+          Object.assign(sugs[i], { changes: body.changes, changed_at: Math.floor(Date.now() / 1000), changed_by: 'Dashboard', changes_url: '#' }); return Object.assign({}, sugs[i]); }
         if (sugs[i].status !== 'new') throw new Error('This suggestion has already been decided.');
         sugs[i].status = body.status; addLog('mod', 'Suggestion #' + ms[1] + ' ' + body.status + ' by Dashboard'); return Object.assign({}, sugs[i]); } }
     if (p === '/api/bugs/delete') {
@@ -2557,8 +2561,6 @@ function makeMock() {
     if (p === '/api/replies') { replies.push({ id: nextReply++, title: body.title, text: body.text }); return { id: nextReply - 1 }; }
     m = p.match(/^\/api\/replies\/(\d+)$/);
     if (m) { const i = replies.findIndex(r => r.id === +m[1]); if (method === 'DELETE') { if (i >= 0) replies.splice(i, 1); } else if (i >= 0) Object.assign(replies[i], { title: body.title, text: body.text }); return { ok: true }; }
-    if (p === '/api/leaderboard') { const all = [['Mikkel', 19, 7, 4], ['Freja', 14, 6, 2], ['Sofie', 9, 3, 2], ['Lars', 5, 2, 1], ['Mira', 2, 2, 0]]; const mo = q.get('period') === 'month';
-      return { period: q.get('period') || 'all', items: all.slice(0, mo ? 3 : 5).map(a => ({ user_id: '1', name: a[0], points: mo ? Math.ceil(a[1] / 3) : a[1], accepted: a[2], fixed: a[3], suggestions: 0 })) }; }
     if (p === '/api/digest') { addLog('system', 'Weekly digest posted (sent manually)'); return { ok: true, channel: 'admin-bugs' }; }
     if (p === '/api/webblocks' && method === 'GET') return { items: webBlocks.map(x => Object.assign({}, x)) };
     if (p === '/api/webblocks') { webBlocks = webBlocks.filter(x => x.key !== q.get('key')); addLog('block', 'Website pause lifted from the dashboard'); return { ok: true }; }

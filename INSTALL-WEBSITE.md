@@ -127,7 +127,7 @@ Open these (use your own address):
    - set the **current game version** (e.g. `V5 · 1.33.9`) and check the **Areas** list,
    - turn on **Accept bug reports from the website**,
    - turn on **Public known-issues list** and **Public changelog** when you're ready,
-   - set your **time zone** (`Europe/Copenhagen`) for the weekly digest, and the points for bug hunters.
+   - set your **time zone** (`Europe/Copenhagen`) for the weekly digest.
 4. **Welcome** → write a welcome message (optional).
 5. **Gift codes** (optional) → on **Channels** choose a gift-codes channel, on **Features → Gift codes** switch them on and pick who is tagged.
    Then add codes on the **Gift codes** page: each one is announced in Discord at once, shown as **New** at the top of `/bugs/codes.html`

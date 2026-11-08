@@ -143,7 +143,6 @@ _EN = [
     ("dm.admin_rejected", "Direct messages", "❌ After a closer look, the admins closed your bug report **#{id}**. Thanks for reporting it!"),
     ("dm.duplicate", "Direct messages", "❌ Your bug report **#{id}** is a duplicate of **#{original}** ({status}). We already have it on our list – thanks for reporting!"),
     ("dm.follow_fixed", "Direct messages", "✔️ Good news! The problem from your report **#{id}** (same as **#{original}**) has been fixed. Thank you for reporting it!"),
-    ("dm.points", "Direct messages", "\n🏆 You have earned **{points} point(s)** for this report – see `/points`."),
     ("dm.sug_accepted", "Direct messages", "💡 Your suggestion **#{id}** was accepted – thank you!"),
     ("dm.sug_rejected", "Direct messages", "💡 Your suggestion **#{id}** was reviewed but won't be taken forward this time. Thanks for sharing your idea!"),
     ("dm.reply_head", "Direct messages", "💬 **Message from the moderators about your bug report #{id}:**"),
@@ -211,6 +210,7 @@ _EN = [
     ("form.metoo", "Report forms", "That's my problem – add me instead (+1)"),
     ("dm.vote_fixed", "Direct messages", "✔️ Good news! Bug **#{id}** – “{title}” – that you also had has been fixed. Thanks for letting us know!"),
     # automatic gift-code redeem
+    ("dm.sug_changed", "Direct messages", "🛠️ Your suggestion **#{id}** is now in the game! Here is what we changed:\n\n{changes}\n\nThank you for the idea!"),
     ("dm.redeemed", "Direct messages", "🎁 Gift code **{code}** was redeemed for your account automatically."),
     ("gift.redeemed_note", "Gift codes", "✅ = already redeemed for your account"),
     # /language
@@ -330,7 +330,6 @@ _PL = {
     "dm.admin_rejected": "❌ Po dokładniejszym sprawdzeniu administratorzy zamknęli Twoje zgłoszenie **#{id}**. Dziękujemy za zgłoszenie!",
     "dm.duplicate": "❌ Twoje zgłoszenie **#{id}** to duplikat **#{original}** ({status}). Mamy je już na liście – dzięki za zgłoszenie!",
     "dm.follow_fixed": "✔️ Dobra wiadomość! Problem z Twojego zgłoszenia **#{id}** (taki sam jak **#{original}**) został naprawiony. Dziękujemy!",
-    "dm.points": "\n🏆 Za to zgłoszenie zdobywasz **{points} pkt** – zobacz `/points`.",
     "dm.sug_accepted": "💡 Twoja sugestia **#{id}** została przyjęta – dziękujemy!",
     "dm.sug_rejected": "💡 Twoja sugestia **#{id}** została rozpatrzona, ale tym razem nie zostanie wdrożona. Dzięki za pomysł!",
     "dm.reply_head": "💬 **Wiadomość od moderatorów w sprawie Twojego zgłoszenia #{id}:**",
@@ -394,6 +393,7 @@ _PL = {
     "board.affected": "{n} dotkniętych",
     "form.metoo": "To mój problem – dodaj mnie zamiast tego (+1)",
     "dm.vote_fixed": "✔️ Dobra wiadomość! Błąd **#{id}** – „{title}” – który też miałeś, został naprawiony. Dziękujemy za zgłoszenie!",
+    "dm.sug_changed": "🛠️ Twoja sugestia **#{id}** jest już w grze! Oto co zmieniliśmy:\n\n{changes}\n\nDziękujemy za pomysł!",
     "dm.redeemed": "🎁 Kod prezentowy **{code}** został automatycznie wykorzystany dla Twojego konta.",
     "gift.redeemed_note": "✅ = już wykorzystany dla Twojego konta",
 }

@@ -51,12 +51,11 @@ CHANNEL_NEEDS = {
     "patchnotes_channel_id": ("Patch notes channel", list(_BASE)),
     "backup_channel_id": ("Backup channel", _BASE + ["attach_files"]),
     "digest_channel_id": ("Weekly digest channel", _BASE),
-    "bounty_channel_id": ("Monthly leaderboard channel", _BASE),
     "giftcodes_channel_id": ("Gift codes channel", _BASE + ["read_message_history"]),
     "board_channel_id": ("Known issues board channel", _BASE + ["read_message_history"]),
 }
 OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id",
-                     "bounty_channel_id", "giftcodes_channel_id", "board_channel_id")
+                     "giftcodes_channel_id", "board_channel_id")
 # accepted suggestions are only posted here; moderators decide in the mod channel
 
 
@@ -222,7 +221,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             optional = key in OPTIONAL_CHANNELS
             enabled = {"welcome_channel_id": bool(store.cfg("welcome_enabled")),
                        "patchnotes_channel_id": bool(cid), "backup_channel_id": bool(cid),
-                       "digest_channel_id": bool(cid), "bounty_channel_id": bool(cid)}.get(key, True)
+                       "digest_channel_id": bool(cid)}.get(key, True)
             chans.append({"key": key, "label": label, "optional": optional,
                           "enabled": enabled,
                           "configured": bool(cid), "found": ch is not None,
@@ -979,7 +978,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     def sug_dict(r):
         return {"id": r["id"], "text": r["text"], "status": r["status"], "created_at": r["created_at"],
                 "author_id": str(r["author_id"]), "author": person(r["author_id"], r["author_name"]) or "Unknown player",
-                "mod_url": jump("mod_channel_id", r["msg_id"]), "public_url": jump("suggestions_channel_id", r["public_msg_id"])}
+                "mod_url": jump("mod_channel_id", r["msg_id"]), "public_url": jump("suggestions_channel_id", r["public_msg_id"]),
+                "changes": r["changes"] or "", "changed_at": r["changed_at"], "changed_by": r["changed_by"] or "",
+                "changes_url": jump("suggestions_channel_id", r["changes_msg_id"])}
 
     @routes.get("/api/suggestions")
     async def list_suggestions(request):
@@ -1003,7 +1004,14 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     @routes.put("/api/suggestions/{id}")
     async def put_suggestion(request):
         r = sug_or_404(int_param(request, "id"))
-        status = (await body_json(request)).get("status")
+        data = await body_json(request)
+        if "changes" in data:
+            try:
+                r = await hooks["suggestion_changes"](r["id"], str(data.get("changes") or ""), who_id(request), who(request))
+            except discord.HTTPException as exc:
+                raise ApiError(502, f"Discord refused: {exc.text or exc}")
+            return web.json_response(sug_dict(r))
+        status = data.get("status")
         if status not in ("accepted", "rejected"):
             raise ApiError(400, "Status must be accepted or rejected.")
         if r["status"] != "new":
@@ -1198,20 +1206,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         return web.FileResponse(path, headers={"X-Content-Type-Options": "nosniff", "Content-Type": ctype,
                                                "Content-Security-Policy": "sandbox", "Cache-Control": "private, max-age=3600"})
 
-    # ------------------------------------------------ points and weekly digest
-    @routes.get("/api/leaderboard")
-    async def leaderboard(request):
-        period = request.query.get("period", "all")
-        if period not in ("all", "month"):
-            raise ApiError(400, "period must be all or month.")
-        g = get_guild()
-        out = []
-        for r in store.leaderboard(period, 10):
-            m = g.get_member(r["user_id"])
-            out.append({**r, "user_id": str(r["user_id"]), "name": person(r["user_id"]) or (m.display_name if m else None)
-                        or f"User …{str(r['user_id'])[-4:]}"})
-        return web.json_response({"period": period, "items": out})
-
+    # ------------------------------------------------ weekly digest
     @routes.post("/api/digest")
     async def send_digest(request):
         try:
