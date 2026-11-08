@@ -858,6 +858,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         hours = int(hours) if str(hours or "").isdigit() and int(hours) > 0 else None
         added, skipped = store.import_gift_codes(lines, who(request), hours, backdate=not data.get("as_new"))
         store.log_event("admin", f"Added {len(added)} gift codes at once", who_id(request), who(request))
+        if "refresh_gift_list" in hooks:
+            await hooks["refresh_gift_list"]()
         return web.json_response({"added": added, "skipped": skipped})
 
     @routes.post("/api/info")

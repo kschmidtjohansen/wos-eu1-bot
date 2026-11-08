@@ -350,6 +350,7 @@ SCHEMA = {
     "giftcodes_role_id": {"type": "text", "default": "", "min": 0, "max": 25},
     "giftcodes_new_hours": {"type": "int", "default": 24, "min": 1, "max": 168},
     "giftcodes_delete_expired": {"type": "bool", "default": True},
+    "giftcodes_list": {"type": "bool", "default": True},
     "info_channel_id": {"type": "channel", "default": None},
     "info_rules": {"type": "text", "default": DEFAULT_RULES, "min": 1, "max": 4000},
     "bugs_enabled": {"type": "bool", "default": True},

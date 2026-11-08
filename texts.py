@@ -174,6 +174,8 @@ _EN = [
     ("gift.none", "Gift codes", "There are no active gift codes right now."),
     ("gift.until", "Gift codes", "until {time} ({relative})"),
     ("gift.off", "Gift codes", "Gift codes are not switched on."),
+    ("gift.copy_btn", "Gift codes", "Copy code"),
+    ("gift.list_footer", "Gift codes", "Tap a code to copy it · updates by itself"),
     # message translation
     ("tr.from", "Message translation", "🌐 Translated from {language}"),
     ("tr.same", "Message translation", "This message is already in {language}."),
@@ -326,6 +328,8 @@ _PL = {
     "gift.none": "Obecnie nie ma aktywnych kodów prezentowych.",
     "gift.until": "do {time} ({relative})",
     "gift.off": "Kody prezentowe nie są włączone.",
+    "gift.copy_btn": "Kopiuj kod",
+    "gift.list_footer": "Dotknij kodu, aby go skopiować · aktualizuje się samo",
     "tr.from": "🌐 Przetłumaczono z: {language}",
     "tr.same": "Ta wiadomość jest już w języku: {language}.",
     "tr.empty": "W tej wiadomości nie ma tekstu do przetłumaczenia.",
