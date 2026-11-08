@@ -147,7 +147,10 @@ tar -C "$SRC" --exclude=./.git --exclude=./.env --exclude=./bugs.db --exclude=./
 chown -R $SVC:$SVC $APP
 [[ -x $APP/venv/bin/python ]] || sudo -u $SVC python3 -m venv $APP/venv
 info "Installing the bot's libraries (1–3 minutes)…"
-sudo -u $SVC $APP/venv/bin/pip install -q --disable-pip-version-check -r $APP/requirements.txt
+free_mb="$(df -Pm $APP | awk 'NR==2{print $4}')"
+[[ -n "$free_mb" && "$free_mb" -lt 300 ]] && die "The disk is almost full (${free_mb} MB free). Free up space and run this again."
+pip_log="$(sudo -u $SVC $APP/venv/bin/pip install -q --disable-pip-version-check -r $APP/requirements.txt 2>&1)" || {
+  printf '%s\n' "$pip_log" | tail -8 | sed 's/^/    ! /'; die "Installing the bot's libraries failed – the lines above say why."; }
 ok "Bot files and libraries installed"
 
 # ----------------------------------------------------------------- 4 settings
@@ -250,7 +253,7 @@ if ((ready)); then
   ok "The bot is online in Discord"
 else
   log="$(journalctl -u $SVC --since "$since" --no-pager -n 40 2>/dev/null || true)"
-  printf '%s\n' "$log" | tail -15 | sed 's/^/    /'
+  printf '%s\n' "$log" | tail -15 | sed 's/^/    ! /'
   if grep -q "PrivilegedIntentsRequired" <<<"$log"; then die "Discord refused the intents. Turn on SERVER MEMBERS and MESSAGE CONTENT intents (bot manual, step 2) and run this again."
   elif grep -qi "LoginFailure\|Improper token" <<<"$log"; then die "The token is wrong. Run this again and choose 'n' to enter a new one."
   else die "The bot didn't start. The lines above say why – send them to whoever helps you."; fi
