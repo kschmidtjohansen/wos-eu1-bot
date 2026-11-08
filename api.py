@@ -53,9 +53,10 @@ CHANNEL_NEEDS = {
     "digest_channel_id": ("Weekly digest channel", _BASE),
     "bounty_channel_id": ("Monthly leaderboard channel", _BASE),
     "giftcodes_channel_id": ("Gift codes channel", _BASE + ["read_message_history"]),
+    "board_channel_id": ("Known issues board channel", _BASE + ["read_message_history"]),
 }
 OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id",
-                     "bounty_channel_id", "giftcodes_channel_id")
+                     "bounty_channel_id", "giftcodes_channel_id", "board_channel_id")
 # accepted suggestions are only posted here; moderators decide in the mod channel
 
 
@@ -119,7 +120,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout"}
     MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("PUT", r"/api/suggestions/\d+"),
                  (None, r"/api/replies(/\d+)?"), (None, r"/api/blocklist(/\d+)?"), ("DELETE", r"/api/webblocks")]
-    MOD_HIDDEN = [r"/api/backups/.*", r"/api/auth/settings", r"/api/translate", r"/api/drive/.*"]
+    MOD_HIDDEN = [r"/api/backups/.*", r"/api/auth/settings", r"/api/translate", r"/api/drive/.*", r"/api/redeem.*",
+                  r"/api/modstats"]
 
     async def staff_role(user_id: int):
         """'admin', 'mod' or None – checked live against the member's Discord roles."""
@@ -358,7 +360,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
              "area": r["area"] or "", "version": r["game_version"] or "", "severity": r["severity"] or "",
              "source": r["source"] or "discord", "public": bool(r["public"]),
              "fixed_version": r["fixed_version"] or "",
-             "duplicates": [d["id"] for d in store.duplicates_of(r["id"])]}
+             "duplicates": [d["id"] for d in store.duplicates_of(r["id"])], "votes": store.vote_count(r["id"])}
         if full:
             linked = [] if not r["player_uid"] else [
                 {"id": str(x["discord_id"]), "name": person(x["discord_id"]) or f"User …{str(x['discord_id'])[-4:]}"}
@@ -453,6 +455,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                                                   duplicate_of=dup, log_kind="admin")
             except discord.HTTPException as exc:
                 raise ApiError(502, f"Discord refused: {exc.text or exc}")
+        if "public" in data and "refresh_board" in hooks:
+            await hooks["refresh_board"]()
         return web.json_response(bug_dict(r, full=True))
 
     @routes.delete("/api/bugs/{id}")
@@ -860,7 +864,96 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         store.log_event("admin", f"Added {len(added)} gift codes at once", who_id(request), who(request))
         if "refresh_gift_list" in hooks:
             await hooks["refresh_gift_list"]()
+        if "start_redeem" in hooks:
+            hooks["start_redeem"]()
         return web.json_response({"added": added, "skipped": skipped})
+
+    # ---------------------------------------------------------- linked players
+    @routes.get("/api/links")
+    async def get_links(request):
+        rows = store.all_links((request.query.get("q") or "")[:50])
+        return web.json_response({"total": store.link_count(), "items": [
+            {"discord_id": str(r["discord_id"]), "name": person(r["discord_id"]) or None, "uid": r["player_uid"],
+             "chief": r["chief_name"] or "", "ts": r["ts"], "bugs": r["bugs"], "redeemed": r["redeemed"]} for r in rows]})
+
+    @routes.delete("/api/links/{id}")
+    async def delete_link(request):
+        did = int_param(request, "id")
+        lk = store.get_link(did)
+        if lk is None or not store.delete_link(did):
+            raise ApiError(404, "That link doesn't exist.")
+        store.log_event("link", f"Link to UID {lk['player_uid']} removed from the dashboard", who_id(request), who(request))
+        return web.json_response({"ok": True})
+
+    # ---------------------------------------------------------- automatic gift-code redeem
+    REDEEM_KEYS = ("redeem_enabled", "redeem_url", "redeem_method", "redeem_body", "redeem_ok_text",
+                   "redeem_already_text", "redeem_delay", "redeem_dm")
+
+    def redeem_payload():
+        summary = store.redemption_summary()
+        codes = [{"code": r["code"], **summary.get(r["code"], {"ok": 0, "already": 0, "failed": 0})}
+                 for r in store.active_gift_codes()]
+        return {"settings": {k: store.cfg(k) for k in REDEEM_KEYS}, "header_set": bool(store.get_raw("redeem_header")),
+                "linked": store.link_count(), "codes": codes,
+                "failures": [{"code": f["code"], "uid": f["uid"], "chief": f["chief_name"] or "", "message": f["message"] or "",
+                              "ts": f["ts"]} for f in store.redemption_failures()]}
+
+    @routes.get("/api/redeem")
+    async def get_redeem(request):
+        return web.json_response(redeem_payload())
+
+    @routes.put("/api/redeem")
+    async def put_redeem(request):
+        data = await body_json(request)
+        url = str(data.get("redeem_url", store.cfg("redeem_url")) or "").strip()
+        if url and not re.match(r"https?://", url, re.I):
+            raise ApiError(400, "The redeem address must start with https:// (or http://).")
+        if data.get("redeem_enabled") and not url:
+            raise ApiError(400, "Type the redeem address before turning automatic redeem on.")
+        for k in REDEEM_KEYS:
+            if k in data:
+                store.set_cfg(k, data[k])
+        if "header" in data:
+            h = str(data["header"] or "").strip()
+            if len(h) > 1000:
+                raise ApiError(400, "The secret header is too long.")
+            store.put_raw("redeem_header", h)
+        store.log_event("settings", "Dashboard: automatic gift-code redeem settings saved"
+                        + (" (on)" if store.cfg("redeem_enabled") else " (off)"), who_id(request), who(request))
+        if hooks.get("start_redeem"):
+            hooks["start_redeem"]()
+        return web.json_response(redeem_payload())
+
+    @routes.post("/api/redeem/test")
+    async def test_redeem(request):
+        data = await body_json(request)
+        uid, code = str(data.get("uid") or "").strip(), str(data.get("code") or "").strip()
+        if not uid or not code:
+            raise ApiError(400, "Type a player UID and a code to test with.")
+        if not (store.cfg("redeem_url") or "").strip():
+            raise ApiError(400, "Save the redeem address first.")
+        status, message = await hooks["redeem_one"](code, uid)
+        return web.json_response({"status": status, "message": message})
+
+    @routes.post("/api/redeem/retry")
+    async def retry_redeem(request):
+        n = store.db.execute("DELETE FROM redemptions WHERE status='failed'").rowcount
+        store.db.commit()
+        if hooks.get("start_redeem"):
+            hooks["start_redeem"]()
+        return web.json_response({"retrying": n})
+
+    # ---------------------------------------------------------- moderator stats
+    @routes.get("/api/modstats")
+    async def modstats(request):
+        try:
+            days = int(request.query.get("days", 30))
+        except ValueError:
+            raise ApiError(400, "days must be a number.")
+        s = store.mod_stats(max(0, min(days, 3650)))
+        for p in s["staff"]:
+            p["name"] = (person(int(p["id"]), p["name"]) if p["id"] and p["id"].isdigit() else None) or p["name"]
+        return web.json_response(s)
 
     @routes.post("/api/info")
     async def post_info(request):

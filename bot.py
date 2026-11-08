@@ -126,6 +126,9 @@ def bug_embed(r, note: Optional[str] = None) -> discord.Embed:
         e.add_field(name="Contact", value=r["contact"][:200], inline=True)
     if r["duplicate_of"]:
         e.add_field(name="Duplicate of", value=f"Bug #{r['duplicate_of']}", inline=True)
+    votes = store.vote_count(r["id"])
+    if votes:
+        e.add_field(name="👥 Players affected", value=f"{votes} more said “I have this too”", inline=True)
     dups = store.duplicates_of(r["id"])
     if dups:
         shown = ", ".join(f"#{d['id']}" for d in dups[:8]) + (f" +{len(dups) - 8}" if len(dups) > 8 else "")
@@ -607,7 +610,7 @@ class BugFormModal(discord.ui.Modal):
             text = (T("form.similar", lg) + "\n" + "\n".join(
                 f"• {s['title']} – *{T('st.' + s['status'], lg)}*" + (T("modal.similar_fixed", lg, version=s["fixed_in"]) if s["fixed_in"] else "")
                 for s in similar) + "\n\n" + T("form.similar_tail", lg))
-            return await interaction.response.send_message(text, view=SimilarView(lg, report), ephemeral=True)
+            return await interaction.response.send_message(text, view=SimilarView(lg, report, similar), ephemeral=True)
         await interaction.response.send_message(T("form.sending", lg), ephemeral=True)
         await send_form_report(interaction, report, lg)
 
@@ -624,16 +627,28 @@ async def send_form_report(interaction: discord.Interaction, report: dict, lg: O
         log_event("system", f"Could not deliver a bug report from {member.display_name}: {exc}", member.id, member.display_name)
         return await interaction.edit_original_response(content=T("sub.bug_fail", lg).replace("**Submit**", "**" + T("form.bug_btn", lg) + "**"), view=None)
     log_event("bug", f"Bug #{r['id']} submitted by {member.display_name} (form)", member.id, member.display_name)
-    await interaction.edit_original_response(content=T("form.bug_done", lg, id=r["id"]), view=None)
+    done = T("form.bug_done", lg, id=r["id"])
+    if report.get("player_uid") and store.get_link(member.id) is None:
+        try:
+            store.set_link(member.id, report["player_uid"], report.get("chief_name") or "")
+            log_event("link", f"{member.display_name} linked to UID {report['player_uid']} (from a bug report)",
+                      member.id, member.display_name)
+            done += "\n" + T("link.saved", lg)
+            start_redeem()
+        except ValueError:
+            pass
+    await interaction.edit_original_response(content=done, view=None)
 
 
 class SimilarView(discord.ui.View):
     """'This may already be reported' – send anyway or drop it."""
 
-    def __init__(self, lg, report):
+    def __init__(self, lg, report, similar=None):
         super().__init__(timeout=900)
         self.lg, self.report = lg, report
         self.send.label, self.drop.label = T("form.send_anyway", lg)[:80], T("form.cancel", lg)[:80]
+        if any(s["status"] in ("passed", "being_investigated") for s in (similar or [])):
+            self.add_item(SimilarVoteSelect(lg, similar, self))
 
     @discord.ui.button(style=discord.ButtonStyle.primary, label="Send anyway")
     async def send(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1179,7 +1194,7 @@ PLAYER_COMMANDS = [
     ("/codes", "Show the active gift codes"),
     ("/points", "Your bug-hunter points"),
     ("/leaderboard", "The best bug hunters"),
-    ("/link", "Link your in-game account (chief name + UID) – it fills in your bug reports"),
+    ("/link", "Link your in-game account (chief name + UID) – fills in your bug reports and lets the bot redeem gift codes for you"),
     ("/unlink", "Remove that link"),
     ("/language", "Choose the language the bot uses with you"),
     ("/members", "How many members the server has"),
@@ -1369,6 +1384,8 @@ class WosBot(discord.Client):
         self.add_view(LangView())      # ...and the language menu in suggestion tickets
         self.add_view(PanelView())     # ...and the Report a bug / Suggest an idea buttons
         self.add_view(GiftCopyView())  # ...and the Copy button under gift codes
+        self.add_view(GiftListView())  # ...and the Link button under the gift-codes list
+        self.add_view(BoardView())     # ...and the Known issues menu
         await self.tree.sync(guild=discord.Object(id=GUILD_ID))
         if not reminder_loop.is_running():
             reminder_loop.start()
@@ -1392,7 +1409,9 @@ class WosBot(discord.Client):
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
                          "drive_backup": drive_backup, "fill_translations": fill_translations,
-                         "publish_info": publish_info, "refresh_gift_list": safe_refresh_gift_list}
+                         "publish_info": publish_info, "refresh_gift_list": safe_refresh_gift_list,
+                         "refresh_board": safe_refresh_board, "redeem_one": redeem_one, "start_redeem": start_redeem,
+                         "redeem_ready": redeem_ready}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
                 self.api_runner = await start_api(self, GUILD_ID, DASHBOARD_API_KEY, DASHBOARD_ORIGINS,
                                                   DASHBOARD_HOST, DASHBOARD_PORT, hooks, roles)
@@ -1413,6 +1432,8 @@ class WosBot(discord.Client):
             except Exception as exc:  # noqa: BLE001
                 print(f"[codes] {exc!r}")
             await safe_refresh_gift_list()
+            await safe_refresh_board()
+            start_redeem()
             try:
                 await refresh_panel_buttons()
             except Exception as exc:  # noqa: BLE001
@@ -1601,6 +1622,7 @@ async def apply_bug_status(r, new: str, actor_name: str, actor_id: Optional[int]
         await sync_bug_messages(dup)             # the original now shows how many others hit the same bug
     if new == "fixed":
         await notify_followers(r)
+    await safe_refresh_board()
     return r
 
 
@@ -1614,6 +1636,14 @@ async def notify_followers(r):
     if len(told) > 1:
         log_event("system", f"Told {len(told) - 1} player(s) who reported duplicates that bug #{r['id']} is fixed",
                   None, brand())
+    n = 0
+    for uid in store.voters(r["id"]):
+        if uid not in told:
+            told.add(uid)
+            n += 1
+            await dm_t(uid, "dm.vote_fixed", id=r["id"], title=store.bug_summary(r)[:100])
+    if n:
+        log_event("system", f"Told {n} player(s) who also had bug #{r['id']} that it is fixed", None, brand())
 
 
 async def send_bug_reply(bug_id: int, text: str, actor_name: str, actor_id: Optional[int] = None) -> bool:
@@ -1703,15 +1733,7 @@ async def severity_cmd(interaction: discord.Interaction, bug: int, level: app_co
 @app_commands.describe(uid="Your player UID (numbers only)", chief_name="Your chief name in the game")
 @app_commands.guild_only()
 async def link_cmd(interaction: discord.Interaction, uid: str, chief_name: str):
-    try:
-        store.set_link(interaction.user.id, uid, chief_name)
-    except ValueError as exc:
-        return await interaction.response.send_message(f"⚠️ {exc}", ephemeral=True)
-    log_event("link", f"{interaction.user.display_name} linked to UID {store.clean_uid(uid)} ({chief_name.strip()[:50]})",
-              interaction.user.id, interaction.user.display_name)
-    await interaction.response.send_message(
-        "✅ Linked. Your chief name and UID are now filled in automatically when you report a bug. "
-        "Use `/unlink` to remove it.", ephemeral=True)
+    await interaction.response.send_message(await do_link(interaction.user, uid, chief_name, ilang(interaction)), ephemeral=True)
 
 
 @bot.tree.command(name="unlink", description="Remove the link to your in-game account", guild=_GUILD)
@@ -2206,6 +2228,7 @@ async def add_gift_code(code: str, reward: str, hours, by_name: str, by_id=None,
             warning = f"Saved, but Discord refused the announcement: {exc.text or exc}"
     log_event("admin", f"Gift code {r['code']} added ({store.gift_duration_label(hours)})", by_id, by_name)
     await safe_refresh_gift_list()
+    start_redeem()
     return store.get_gift_code(r["id"]), warning
 
 
@@ -2331,12 +2354,12 @@ async def refresh_gift_list():
         if get_raw("gift_list_sig") == sig:
             return
         try:
-            await ch.get_partial_message(int(mid)).edit(embed=e)
+            await ch.get_partial_message(int(mid)).edit(embed=e, view=GiftListView())
             put_raw("gift_list_sig", sig)
             return
         except discord.NotFound:
             pass                                            # someone deleted it – post a new one
-    msg = await ch.send(embed=e, allowed_mentions=discord.AllowedMentions.none())
+    msg = await ch.send(embed=e, view=GiftListView(), allowed_mentions=discord.AllowedMentions.none())
     put_raw("gift_list_msg_id", str(msg.id))
     put_raw("gift_list_chan", str(ch.id))
     put_raw("gift_list_sig", sig)
@@ -2349,8 +2372,9 @@ async def safe_refresh_gift_list():
         print(f"[gift list] {exc!r}")
 
 
-def codes_embed(lang: Optional[str] = None) -> discord.Embed:
+def codes_embed(lang: Optional[str] = None, uid: Optional[str] = None) -> discord.Embed:
     rows = store.active_gift_codes()
+    mine = store.redeemed_codes_for(uid) if uid else set()
     e = discord.Embed(title=T("gift.list", lang), color=0xF1C40F)
     if not rows:
         e.description = T("gift.none", lang)
@@ -2358,9 +2382,325 @@ def codes_embed(lang: Optional[str] = None) -> discord.Embed:
         new = store.gift_code_state(r) == "new"
         until = (T("gift.until", lang, time=f"<t:{r['expires_at']}:f>", relative=f"<t:{r['expires_at']}:R>")
                  if r["expires_at"] else T("gift.never", lang))
-        e.add_field(name=("🆕 " if new else "") + r["code"], value=(f"{r['reward']}\n" if r["reward"] else "") + until, inline=False)
+        e.add_field(name=("✅ " if r["code"] in mine else "🆕 " if new else "") + r["code"], value=(f"{r['reward']}\n" if r["reward"] else "") + until, inline=False)
+    e.set_footer(text=brand() + (f" · {T('gift.redeemed_note', lang)}" if mine else ""))
+    return e
+
+
+# ------------------------------------------------------- linking the game account (button + form)
+class LinkModal(discord.ui.Modal):
+    """Chief name + UID. Opened from the Link button under the gift-codes list (or anywhere else)."""
+
+    def __init__(self, lg: Optional[str], link=None):
+        super().__init__(title=T("link.title", lg)[:45], timeout=900)
+        self.lg = lg
+        self.uid = discord.ui.TextInput(max_length=24, min_length=4, default=(link["player_uid"] if link else None))
+        self.name = discord.ui.TextInput(max_length=50, required=False, default=(link["chief_name"] if link else None) or None)
+        self.add_item(discord.ui.Label(text=T("link.uid", self.lg)[:45], component=self.uid))
+        self.add_item(discord.ui.Label(text=T("link.name", self.lg)[:45], component=self.name))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.send_message(await do_link(interaction.user, str(self.uid.value), str(self.name.value or ""), self.lg),
+                                                ephemeral=True)
+
+
+async def do_link(user, uid: str, chief: str, lg: Optional[str]) -> str:
+    """Save the link, start redeeming active codes for the player, return the reply text."""
+    try:
+        store.set_link(user.id, uid, chief)
+    except ValueError:
+        return T("link.bad", lg)
+    lk = store.get_link(user.id)
+    log_event("link", f"{user.display_name} linked to UID {lk['player_uid']} ({lk['chief_name'] or '?'})", user.id, user.display_name)
+    text = T("link.done", lg, name=lk["chief_name"] or user.display_name, uid=lk["player_uid"])
+    if redeem_ready():
+        text += "\n" + T("link.done_redeem", lg)
+        start_redeem()
+    return text
+
+
+class GiftListView(discord.ui.View):
+    """Under the "Active gift codes" list: link your game account (for auto-redeem and bug reports)."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.link.label = T("link.btn")[:80]
+
+    @discord.ui.button(label="Link my game account", emoji="🔗", style=discord.ButtonStyle.secondary, custom_id="gift:link")
+    async def link(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(LinkModal(ilang(interaction), store.get_link(interaction.user.id)))
+
+
+# ------------------------------------------------------------ known issues board + "I have this too"
+def board_embed() -> discord.Embed:
+    rows = store.board_bugs(25)
+    e = discord.Embed(title=T("board.title"), color=0x5865F2)
+    lines = []
+    for r in rows:
+        st = T("st." + r["status"]).split(" ", 1)
+        votes = f" · 👥 {r['votes']}" if r["votes"] else ""
+        lines.append(f"{st[0]} **#{r['id']}** {store.bug_summary(r)[:90]}{votes}")
+    e.description = "\n".join(lines)[:3800] if lines else T("board.empty")
+    fixed = store.recently_fixed_public(7, 8)
+    if fixed:
+        e.add_field(name=T("board.fixed"), value="\n".join(
+            f"✔️ **#{r['id']}** {store.bug_summary(r)[:80]}" + (f" ({r['fixed_version']})" if r["fixed_version"] else "")
+            for r in fixed)[:1024], inline=False)
+    e.set_footer(text=f"{brand()} · {T('board.footer')}"[:2048])
+    return e
+
+
+class BoardSelect(discord.ui.Select):
+    def __init__(self, rows):
+        opts = [discord.SelectOption(label=f"#{r['id']} {store.bug_summary(r)}"[:100], value=str(r["id"]),
+                                     description=(T("board.affected", n=r["votes"]) if r["votes"] else None))
+                for r in rows[:25]] or [discord.SelectOption(label="–", value="0")]
+        super().__init__(custom_id="board:metoo", placeholder=T("board.pick")[:150], min_values=1, max_values=1,
+                         options=opts, disabled=not rows)
+
+    async def callback(self, interaction: discord.Interaction):
+        lg = ilang(interaction)
+        bug_id = int(self.values[0]) if self.values and self.values[0].isdigit() else 0
+        r = get_bug(bug_id) if bug_id else None
+        if r is None or not r["public"] or r["status"] not in ("passed", "being_investigated"):
+            return await interaction.response.send_message(T("board.gone", lg), ephemeral=True)
+        on = store.toggle_vote(bug_id, interaction.user.id)
+        n = store.vote_count(bug_id)
+        await interaction.response.send_message(
+            T("board.voted", lg, n=n, id=bug_id) if on else T("board.unvoted", lg, id=bug_id), ephemeral=True)
+        log_event("bug", f"{interaction.user.display_name} {'also has' if on else 'no longer has'} bug #{bug_id} ({n} affected)",
+                  interaction.user.id, interaction.user.display_name)
+        await sync_bug_messages(get_bug(bug_id))
+        await safe_refresh_board(force=True)       # also resets the menu
+
+
+class BoardView(discord.ui.View):
+    def __init__(self, rows=None):
+        super().__init__(timeout=None)
+        self.add_item(BoardSelect(store.board_bugs(25) if rows is None else rows))
+        self.report.label = T("board.report")[:80]
+
+    @discord.ui.button(label="Report a new bug", emoji=BUG_EMOJI, style=discord.ButtonStyle.secondary, custom_id="board:report")
+    async def report(self, interaction: discord.Interaction, button: discord.ui.Button):
+        lg = ilang(interaction)
+        why = report_gate(interaction.user, "bug", lg)
+        if why:
+            return await interaction.response.send_message(_cap(why), ephemeral=True)
+        await interaction.response.send_modal(BugFormModal(lg, store.get_link(interaction.user.id)))
+
+
+async def refresh_board(force: bool = False):
+    """Create or update the Known issues board message. Only edits Discord when something changed."""
+    ch = chan("board_channel_id")
+    if ch is None:
+        return
+    rows = store.board_bugs(25)
+    e = board_embed()
+    sig = hashlib.sha1((json.dumps(e.to_dict(), sort_keys=True) + T("board.pick")).encode()).hexdigest()
+    mid, where = get_raw("board_msg_id"), get_raw("board_chan")
+    if mid and where == str(ch.id):
+        if get_raw("board_sig") == sig and not force:
+            return
+        try:
+            await ch.get_partial_message(int(mid)).edit(embed=e, view=BoardView(rows))
+            put_raw("board_sig", sig)
+            return
+        except discord.NotFound:
+            pass
+    msg = await ch.send(embed=e, view=BoardView(rows), allowed_mentions=discord.AllowedMentions.none())
+    put_raw("board_msg_id", str(msg.id))
+    put_raw("board_chan", str(ch.id))
+    put_raw("board_sig", sig)
+
+
+async def safe_refresh_board(force: bool = False):
+    try:
+        await refresh_board(force)
+    except Exception as exc:  # noqa: BLE001 – the board must never break a status change
+        print(f"[board] {exc!r}")
+
+
+class SimilarVoteSelect(discord.ui.Select):
+    """In the "this may already be reported" answer: pick the matching bug instead of sending a new report."""
+
+    def __init__(self, lg, similar, parent):
+        opts = [discord.SelectOption(label=f"#{s['id']} {s['title']}"[:100], value=str(s["id"]))
+                for s in similar if s["status"] in ("passed", "being_investigated")][:25]
+        super().__init__(placeholder=T("form.metoo", lg)[:150], options=opts or [discord.SelectOption(label="–", value="0")],
+                         disabled=not opts, row=1)
+        self.lg, self.owner = lg, parent
+
+    async def callback(self, interaction: discord.Interaction):
+        bug_id = int(self.values[0])
+        r = get_bug(bug_id) if bug_id else None
+        if r is None or r["status"] not in ("passed", "being_investigated"):
+            return await interaction.response.edit_message(content=T("board.gone", self.lg), view=self.owner)
+        store.add_vote(bug_id, interaction.user.id)
+        n = store.vote_count(bug_id)
+        await interaction.response.edit_message(content=T("board.voted", self.lg, n=n, id=bug_id), view=None)
+        log_event("bug", f"{interaction.user.display_name} also has bug #{bug_id} (from the report form, {n} affected)",
+                  interaction.user.id, interaction.user.display_name)
+        self.owner.stop()
+        await sync_bug_messages(r)
+        await safe_refresh_board()
+
+
+# ------------------------------------------------------------ automatic gift-code redeem
+_redeem_lock = asyncio.Lock()
+_redeem_task = None
+
+
+def redeem_ready() -> bool:
+    return bool(cfg("redeem_enabled") and (cfg("redeem_url") or "").strip())
+
+
+def _redeem_headers() -> dict:
+    h = {}
+    for line in (get_raw("redeem_header") or "").splitlines():
+        if ":" in line:
+            k, v = line.split(":", 1)
+            if k.strip():
+                h[k.strip()] = v.strip()
+    return h
+
+
+async def redeem_one(code: str, uid: str, session=None):
+    """Ask the game server to redeem one code for one player. Returns (status, message):
+    ok | already | failed."""
+    import aiohttp
+    from urllib.parse import quote
+    url = (cfg("redeem_url") or "").strip().replace("{uid}", quote(uid)).replace("{code}", quote(code))
+    if not url.lower().startswith(("http://", "https://")):
+        return "failed", "The redeem address must start with http:// or https://"
+    esc = lambda v: json.dumps(v)[1:-1]
+    body = (cfg("redeem_body") or "").replace("{uid}", esc(uid)).replace("{code}", esc(code))
+    headers = _redeem_headers()
+    method = cfg("redeem_method")
+    kw = {}
+    if method == "POST" and body.strip():
+        try:
+            kw["json"] = json.loads(body)
+        except ValueError:
+            kw["data"] = body
+            headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
+    own = session is None
+    session = session or aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20))
+    try:
+        async with session.request(method, url, headers=headers, **kw) as resp:
+            text = (await resp.text(errors="replace"))[:2000]
+            status = resp.status
+    except Exception as exc:  # noqa: BLE001 – network trouble is a normal "failed"
+        return "failed", f"Could not reach the game server: {exc.__class__.__name__}"
+    finally:
+        if own:
+            await session.close()
+    low = text.lower()
+    already, ok_text = (cfg("redeem_already_text") or "").strip().lower(), (cfg("redeem_ok_text") or "").strip().lower()
+    if already and already in low:
+        return "already", text[:200]
+    if 200 <= status < 300 and (not ok_text or ok_text in low):
+        return "ok", text[:200]
+    return "failed", f"HTTP {status}: {text[:200]}"
+
+
+def redeem_queue(limit: int = 250) -> list:
+    """(code, uid, discord_id) pairs still to do: every active code × every linked player.
+    Failed tries are retried after 6 hours."""
+    codes = [r["code"] for r in store.active_gift_codes()]
+    if not codes:
+        return []
+    links = db.execute("SELECT discord_id, player_uid FROM links").fetchall()
+    retry_before = int(time.time()) - 6 * 3600
+    done = {(r[0], r[1]) for r in db.execute(
+        "SELECT code, uid FROM redemptions WHERE status IN ('ok','already') OR ts>?", (retry_before,))}
+    out = []
+    for lk in links:
+        for c in codes:
+            if (c, lk["player_uid"]) not in done:
+                out.append((c, lk["player_uid"], lk["discord_id"]))
+                if len(out) >= limit:
+                    return out
+    return out
+
+
+async def run_redeem(limit: int = 250) -> dict:
+    """Work through the queue (one at a time, with the delay from the dashboard). Returns counts."""
+    import aiohttp
+    counts = {"ok": 0, "already": 0, "failed": 0}
+    if not redeem_ready() or _redeem_lock.locked():
+        return counts
+    async with _redeem_lock:
+        todo = redeem_queue(limit)
+        if not todo:
+            return counts
+        per_code = {}
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
+            for i, (code, uid, did) in enumerate(todo):
+                if not redeem_ready():
+                    break
+                if i:
+                    await asyncio.sleep(cfg("redeem_delay"))
+                status, msg = await redeem_one(code, uid, session)
+                store.save_redemption(code, uid, did, status, msg)
+                counts[status] += 1
+                per_code.setdefault(code, {"ok": 0, "already": 0, "failed": 0})[status] += 1
+                if status == "ok" and cfg("redeem_dm") and did:
+                    await dm_t(did, "dm.redeemed", code=code)
+        for code, c in per_code.items():
+            log_event("system", f"Gift code {code} auto-redeemed: {c['ok']} done, {c['already']} already had it"
+                      + (f", {c['failed']} failed" if c["failed"] else ""), None, brand())
+    return counts
+
+
+def start_redeem():
+    """Kick off a redeem run in the background (no-op if one is running)."""
+    global _redeem_task
+    if not redeem_ready() or (_redeem_task is not None and not _redeem_task.done()):
+        return
+    _redeem_task = asyncio.get_running_loop().create_task(_redeem_bg())
+
+
+async def _redeem_bg():
+    try:
+        await run_redeem()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[redeem] {exc!r}")
+
+
+# ------------------------------------------------------------ moderator stats
+def fmt_hours(h) -> str:
+    if h is None:
+        return "–"
+    return f"{h / 24:.1f} days" if h >= 48 else (f"{h:g} h" if h >= 1 else f"{round(h * 60)} min")
+
+
+def modstats_embed(days: int = 30) -> discord.Embed:
+    s = store.mod_stats(days)
+    e = discord.Embed(title=f"🛡️ Moderator stats – last {days} days", color=0x5865F2)
+    e.add_field(name="First answer (mods)", value=f"{fmt_hours(s['mod_hours'])} median · {s['mod_count']} bugs", inline=True)
+    e.add_field(name="Admin answer", value=f"{fmt_hours(s['admin_hours'])} median · {s['admin_count']} bugs", inline=True)
+    e.add_field(name="Answered within 24 h", value=f"{s['within_day']}%" if s["within_day"] is not None else "–", inline=True)
+    if s["staff"]:
+        e.add_field(name="Who did the work", value="\n".join(
+            f"**{p['name']}** – {p['handled']} handled" + (f" · first answer {fmt_hours(p['first_hours'])}" if p["first_count"] else "")
+            for p in s["staff"][:10])[:1024], inline=False)
+    if s["waiting"]:
+        e.add_field(name=f"⏰ Waiting over {s['wait_hours']} h ({s['waiting_total']})", value="\n".join(
+            f"{'🐛' if w['kind'] == 'bug' else '💡'} #{w['id']} {w['title'][:50]} – {w['who']}, <t:{w['since']}:R>"
+            for w in s["waiting"][:10])[:1024], inline=False)
+    else:
+        e.add_field(name="⏰ Waiting", value="Nothing has waited over 24 h. 🎉", inline=False)
     e.set_footer(text=brand())
     return e
+
+
+@bot.tree.command(name="modstats", description="How fast reports are answered and who handles them (admins)", guild=_GUILD)
+@app_commands.describe(days="How many days back (default 30)")
+@app_commands.guild_only()
+async def modstats_cmd(interaction: discord.Interaction, days: Optional[app_commands.Range[int, 1, 365]] = 30):
+    if not is_admin(interaction.user):
+        return await interaction.response.send_message("Admins only.", ephemeral=True)
+    await interaction.response.send_message(embed=modstats_embed(days or 30), ephemeral=True)
 
 
 async def run_schedules(now=None):
@@ -2416,6 +2756,8 @@ async def schedule_loop():
         snapshot_members()
         await expire_gift_codes()
         await safe_refresh_gift_list()
+        await safe_refresh_board()
+        start_redeem()
         await check_info_tickets()
         await run_schedules()
     except Exception as exc:  # noqa: BLE001
@@ -2648,7 +2990,8 @@ async def codes_cmd(interaction: discord.Interaction):
     lg = ilang(interaction)
     if not cfg("giftcodes_enabled"):
         return await interaction.response.send_message(T("gift.off", lg), ephemeral=True)
-    await interaction.response.send_message(embed=codes_embed(lg), ephemeral=True)
+    lk = store.get_link(interaction.user.id) if redeem_ready() else None
+    await interaction.response.send_message(embed=codes_embed(lg, lk["player_uid"] if lk else None), ephemeral=True)
 
 
 giftcode = app_commands.Group(name="giftcode", description="Gift codes (admins only)", guild_ids=[GUILD_ID], guild_only=True,

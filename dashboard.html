@@ -482,6 +482,8 @@ const ICON = {
   wrench: '<path d="M14.7 6.3a4 4 0 0 0-5 5L3 18l3 3 6.7-6.7a4 4 0 0 0 5-5l-2.4 2.4-2.6-.6-.6-2.6z"/>',
   shield: '<path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6z"/>',
   pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',
   gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
@@ -501,13 +503,13 @@ const S = {
   timer: null, mock: null
 };
 const NAV = [
-  ['overview', 'Overview', 'grid'], ['status', 'Server status', 'pulse'], ['bugs', 'Bugs', 'bug'], ['suggestions', 'Suggestions', 'bulb'], ['codes', 'Gift codes', 'gift'], ['insights', 'Insights', 'chart'],
+  ['overview', 'Overview', 'grid'], ['status', 'Server status', 'pulse'], ['bugs', 'Bugs', 'bug'], ['suggestions', 'Suggestions', 'bulb'], ['codes', 'Gift codes', 'gift'], ['players', 'Players', 'users'], ['insights', 'Insights', 'chart'], ['moderators', 'Moderators', 'timer'],
   ['panel', 'Panel message', 'message'], ['channels', 'Channels', 'hash'], ['features', 'Features', 'sliders'],
   ['welcome', 'Welcome', 'userplus'], ['info', 'Info channel', 'list'], ['translations', 'Translations', 'globe'], ['patch', 'Patch notes', 'wrench'], ['mod', 'Moderation', 'shield'],
   ['bot', 'Bot profile', 'bot'], ['data', 'Data', 'db'], ['log', 'Activity log', 'list']
 ];
 // Moderators who log in with Discord see these pages; admins see everything.
-const MOD_TABS = ['overview', 'status', 'bugs', 'suggestions', 'insights', 'mod', 'log'];
+const MOD_TABS = ['overview', 'status', 'bugs', 'suggestions', 'players', 'insights', 'mod', 'log'];
 const isMod = () => !!(S.user && S.user.role !== 'admin');
 const CHANNELS = [
   ['report_channel_id', 'Bug report channel', 'Where the panel message lives and where players open their private tickets.'],
@@ -518,7 +520,8 @@ const CHANNELS = [
   ['backup_channel_id', 'Backup channel', 'Optional. A copy of the database is posted here every day. It contains player data – make it admin-only.'],
   ['digest_channel_id', 'Weekly digest channel', 'Optional. Where the Monday summary is posted. Empty = the admin channel.'],
   ['giftcodes_channel_id', 'Gift codes channel', 'Optional. New gift codes are announced here. Give the bot “Mention @everyone” if you ping @everyone or @here.'],
-  ['bounty_channel_id', 'Monthly leaderboard channel', 'Optional. On the 1st of each month the top bug hunters of last month are announced here.']
+  ['bounty_channel_id', 'Monthly leaderboard channel', 'Optional. On the 1st of each month the top bug hunters of last month are announced here.'],
+  ['board_channel_id', 'Known issues board channel', 'Optional. One message lists the open known issues (bugs you put on the public list). Players pick “I have this too” and get a DM when it is fixed.']
 ];
 const CHANNEL_KEYS = CHANNELS.map(c => c[0]);
 const FEATURE_KEYS = ['bugs_enabled', 'suggestions_enabled', 'investigate_enabled', 'dm_notifications',
@@ -927,7 +930,7 @@ function bugList() {
   if (!B.items.length) return html`<div class="w-empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`;
   return html`${B.items.map(b => html`<div class="w-bugrow${B.selecting ? ' sel' : ''}" role="button" tabindex="0" data-act="${B.selecting ? 'bugPick' : 'bugOpen'}" data-id="${b.id}" data-sev="${b.severity || ''}"${B.selecting ? html` aria-pressed="${String(B.sel.includes(b.id))}"` : ''}>
     <b>${B.selecting ? (B.sel.includes(b.id) ? '☑' : '☐') : ''} #${b.id}</b>
-    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}</div></div>
+    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}</div></div>
     ${bugBadge(b.status)}${B.selecting ? html`<span></span>` : quickBtns(b)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}`;
 }
 // The same choices as the reaction buttons in Discord: mod channel (new bugs) and admin channel (passed bugs).
@@ -997,7 +1000,7 @@ function bugModal() {
   const b = S.detail; if (!b) return '';
   const replies = S.replies || [];
   return html`<div class="w-modal" id="wmodal" data-act="modalBg"><div class="w-modal-card" role="dialog" aria-modal="true" aria-label="Bug #${b.id}">
-    <div class="w-modal-head"><h3>Bug #${b.id}</h3>${bugBadge(b.status)}<button class="w-btn small" data-act="closeModal" id="m-close">Close</button></div>
+    <div class="w-modal-head"><h3>Bug #${b.id}</h3>${bugBadge(b.status)}${b.votes ? html`<span class="w-badge info" title="Players who picked “I have this too”">👥 ${b.votes} affected</span>` : ''}<button class="w-btn small" data-act="closeModal" id="m-close">Close</button></div>
     <div class="w-sub" style="margin-bottom:10px">Reported by <b>${b.reporter || (b.source === 'web' ? (b.chief_name || 'a player') + ' (website)' : 'unknown')}</b> · ${full(b.created_at)}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}${b.announced ? ' · announced in patch notes' : ''}</div>
     <div class="w-pre">${b.text}</div>
     ${(b.chief_name || b.uid || b.contact) ? html`<div class="w-sub" style="margin-top:8px">In-game: <b>${b.chief_name || '–'}</b> · UID <b>${b.uid || '–'}</b>${b.contact ? ' · Contact: ' + b.contact : ''}${b.linked && b.linked.length ? ' · Discord: ' + b.linked.map(l => l.name).join(', ') : ''}</div>` : ''}
@@ -1165,7 +1168,97 @@ function viewCodes() {
         <div class="w-spacer"></div><button class="w-btn primary" data-act="codeBulk">Add codes</button></div></details>
     <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Active codes (${live.length})</h3></div>
       ${live.length ? live.map(row) : html`<div class="w-empty">No active codes.</div>`}</section>
-    ${old.length ? html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Expired (${old.length})</h3></div>${old.slice(0, 30).map(row)}</section>` : ''}`;
+    ${old.length ? html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Expired (${old.length})</h3></div>${old.slice(0, 30).map(row)}</section>` : ''}
+    ${redeemCard()}`;
+}
+function redeemCard() {
+  const R = S.redeem;
+  if (!R) return '';
+  const st = R.settings, on = st.redeem_enabled;
+  const total = R.codes.reduce((a, c) => a + c.ok + c.already, 0);
+  return html`<section class="w-card w-pad" id="redeem"><div class="w-sec-head"><h3 class="w-h3">Automatic redeem</h3>
+      <span class="w-badge ${on ? 'ok' : 'todo'}">${on ? 'On' : 'Off'}</span></div>
+    <p class="w-sub" style="margin-bottom:12px">Redeems every active code for every player who linked their game account (${R.linked} linked so far) – new codes at once, new players as soon as they link.
+      This needs a redeem address on <b>your game server</b>. The bot calls it once per player and code, with the UID and code filled in.</p>
+    <div class="w-row"><div><div class="w-row-label">Redeem codes automatically</div><div class="w-row-desc">Off = nothing is sent to the game server.</div></div>
+      <label class="w-switch"><input type="checkbox" id="rd-on" ${on ? 'checked' : ''}><span></span></label></div>
+    <div class="w-form2" style="margin-top:12px">
+      <div class="w-field"><label class="w-label" for="rd-url">Redeem address</label><input class="w-input" id="rd-url" maxlength="500" placeholder="https://your-game-server/api/redeem" value="${st.redeem_url}" autocomplete="off"></div>
+      <div class="w-field"><label class="w-label" for="rd-method">Method</label><select class="w-select" id="rd-method">${['POST', 'GET'].map(m => html`<option ${st.redeem_method === m ? 'selected' : ''}>${m}</option>`)}</select></div>
+    </div>
+    <div class="w-field"><label class="w-label" for="rd-body">Body <span class="w-hint">(POST only – {uid} and {code} are filled in)</span></label><input class="w-input" id="rd-body" maxlength="1000" value="${st.redeem_body}" style="font-family:ui-monospace,monospace"></div>
+    <div class="w-field"><label class="w-label" for="rd-header">Secret header <span class="w-hint">(optional, e.g. <code>Authorization: Bearer …</code> – ${R.header_set ? 'one is saved; leave empty to keep it' : 'none saved'})</span></label>
+      <input class="w-input" id="rd-header" type="password" maxlength="1000" autocomplete="off" placeholder="${R.header_set ? '•••••• (saved)' : 'Name: value'}"></div>
+    <div class="w-form2">
+      <div class="w-field"><label class="w-label" for="rd-ok">Success when the answer contains <span class="w-hint">(empty = any 2xx answer)</span></label><input class="w-input" id="rd-ok" maxlength="100" value="${st.redeem_ok_text}" placeholder="e.g. success"></div>
+      <div class="w-field"><label class="w-label" for="rd-already">“Already redeemed” when it contains</label><input class="w-input" id="rd-already" maxlength="100" value="${st.redeem_already_text}"></div>
+    </div>
+    <div class="w-form2">
+      <div class="w-field"><label class="w-label" for="rd-delay">Seconds between requests</label><input class="w-input" id="rd-delay" type="number" min="0" max="60" value="${st.redeem_delay}"></div>
+      <div class="w-field"><label class="w-label">&nbsp;</label><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="rd-dm" ${st.redeem_dm ? 'checked' : ''}> DM players when a code is redeemed for them</label></div>
+    </div>
+    <div class="w-actions"><button class="w-btn primary" data-act="redeemSave">Save</button></div>
+    <div class="w-sect"><span class="w-label">Test with one player</span>
+      <div class="w-inline" style="margin-top:6px"><input class="w-input" id="rd-tuid" inputmode="numeric" placeholder="Player UID" style="max-width:180px" aria-label="Player UID">
+        <input class="w-input" id="rd-tcode" placeholder="Code" style="max-width:180px;font-family:ui-monospace,monospace" aria-label="Code">
+        <button class="w-btn" data-act="redeemTest">Test</button></div>
+      <div class="w-hint" id="rd-tres" style="margin-top:6px"></div></div>
+    ${R.codes.length ? html`<div class="w-sect"><div class="w-sec-head"><span class="w-label">Results (${total} redeemed)</span>
+        ${R.failures.length ? html`<button class="w-btn small" data-act="redeemRetry">Retry ${R.failures.length} failed now</button>` : ''}</div>
+      <div class="w-tablewrap"><table class="w-table"><thead><tr><th>Code</th><th>Redeemed</th><th>Already had it</th><th>Failed</th></tr></thead><tbody>
+        ${R.codes.map(c => html`<tr><td><code>${c.code}</code></td><td>${c.ok || '–'}</td><td>${c.already || '–'}</td><td>${c.failed ? html`<b style="color:var(--w-bad)">${c.failed}</b>` : '–'}</td></tr>`)}</tbody></table></div>
+      ${R.failures.length ? html`<details style="margin-top:8px"><summary class="w-hint">Why did they fail?</summary>${R.failures.map(f => html`<div class="w-sub" style="margin-top:4px"><code>${f.code}</code> · ${f.chief || 'UID ' + f.uid} – ${f.message} · ${ago(f.ts)}</div>`)}</details>` : ''}
+      <p class="w-hint" style="margin-top:6px">Failed ones are tried again by themselves after 6 hours.</p></div>` : ''}
+  </section>`;
+}
+
+/* ---- players (linked game accounts) ---- */
+function viewPlayers() {
+  const P = S.players;
+  if (!P) return html`<div class="w-pagehead"><h2>Players</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  return html`
+    <div class="w-pagehead"><h2>Players</h2><p>Discord members who linked their game account – with <code>/link</code>, the 🔗 button under the gift-codes list, or by giving their UID in a bug report.
+      Linked players get their bug reports filled in${S.settings.redeem_enabled ? ' and gift codes redeemed automatically' : ''}.</p></div>
+    <div class="w-tiles w-tiles4"><div class="w-card w-tile"><i class="w-tic">${icon('users')}</i><b>${P.total}</b><span>Linked accounts</span></div></div>
+    <section class="w-card w-pad"><div class="w-inline" style="margin-bottom:10px"><input class="w-input" id="pl-q" placeholder="Search chief name, UID or Discord ID" value="${P.q || ''}" aria-label="Search players">
+      <button class="w-btn" data-act="playersSearch">Search</button></div>
+      ${P.items.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Chief</th><th>UID</th><th>Discord</th><th>Bug reports</th><th>Codes redeemed</th><th>Linked</th>${isMod() ? '' : html`<th></th>`}</tr></thead><tbody>
+        ${P.items.map(x => html`<tr><td>${x.chief || '–'}</td><td><code>${x.uid}</code></td><td>${x.name || 'User …' + x.discord_id.slice(-4)}</td><td>${x.bugs || '–'}</td><td>${x.redeemed || '–'}</td><td title="${full(x.ts)}">${ago(x.ts)}</td>
+          ${isMod() ? '' : html`<td><button class="w-btn small danger" data-act="linkDelete" data-id="${x.discord_id}">Unlink</button></td>`}</tr>`)}</tbody></table></div>`
+        : html`<div class="w-empty">${P.q ? 'No player matches that search.' : 'Nobody has linked their game account yet.'}</div>`}
+      <p class="w-hint" style="margin-top:8px">Links are typed in by the players – they are not verified by the game.</p>
+    </section>`;
+}
+
+/* ---- moderator stats ---- */
+function viewModerators() {
+  const M = S.modstats;
+  if (!M) return html`<div class="w-pagehead"><h2>Moderators</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  const tile = (n, l, c) => html`<div class="w-card w-tile ${c || ''}"><b>${n}</b><span>${l}</span></div>`;
+  const chip = d => html`<button class="w-chip" data-act="modDays" data-d="${d}" aria-pressed="${String(M.days === d)}">${d ? 'Last ' + d + ' days' : 'All time'}</button>`;
+  const WHO = { Moderators: 'warn', Admins: 'info', 'Info ticket': 'todo' };
+  return html`
+    <div class="w-pagehead"><h2>Moderators</h2><p>How fast players get an answer, who does the work, and what is waiting too long right now.</p></div>
+    <div class="w-chips" style="margin-bottom:12px">${[7, 30, 90, 0].map(chip)}</div>
+    <div class="w-tiles w-tiles4">
+      ${tile(fmtHours(M.mod_hours), 'First answer by a moderator (median, ' + M.mod_count + ' bugs)')}
+      ${tile(fmtHours(M.admin_hours), 'Admin answer after passing (median, ' + M.admin_count + ' bugs)')}
+      ${tile(M.within_day == null ? '–' : M.within_day + '%', 'Bugs answered within 24 h', M.within_day == null ? '' : M.within_day >= 80 ? 'ok' : 'bad')}
+      ${tile(fmtHours(M.sug_hours), 'Suggestion decision (median, ' + M.sug_count + ')')}
+    </div>
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Waiting over ${M.wait_hours} h (${M.waiting_total})</h3></div>
+      ${M.waiting.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th></th><th style="text-align:left">What</th><th>Waiting on</th><th>Since</th><th>Affected</th></tr></thead><tbody>
+        ${M.waiting.map(w => html`<tr><td>${w.kind === 'bug' ? html`<button class="w-linkbtn" data-act="bugOpen" data-id="${w.id}">#${w.id}</button>` : '💡 #' + w.id}</td>
+          <td style="text-align:left">${w.severity ? SEV[w.severity] + ' · ' : ''}${w.title}</td><td><span class="w-badge ${WHO[w.who] || 'todo'}">${w.who}</span></td><td title="${full(w.since)}">${ago(w.since)}</td><td>${w.votes ? '👥 ' + w.votes : '–'}</td></tr>`)}</tbody></table></div>`
+        : html`<div class="w-empty">Nothing has waited over ${M.wait_hours} h. 🎉</div>`}
+      <p class="w-hint" style="margin-top:6px">“Info ticket” means a moderator is waiting for the player to answer.</p>
+    </section>
+    <section class="w-card w-pad"><h3 class="w-h3">Who did the work</h3><p class="w-sub" style="margin-bottom:8px">“First answer” = how long reports waited before this person answered them first (median).</p>
+      ${M.staff.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Name</th><th>Handled</th><th>Bugs</th><th>Suggestions</th><th>Replies</th><th>First answer</th><th>Admin answer</th><th>Last active</th></tr></thead><tbody>
+        ${M.staff.map(p => html`<tr><td>${p.name}</td><td><b>${p.handled}</b></td><td>${p.bugs || '–'}</td><td>${p.suggestions || '–'}</td><td>${p.replies || '–'}</td>
+          <td>${p.first_count ? fmtHours(p.first_hours) + ' (' + p.first_count + ')' : '–'}</td><td>${p.admin_count ? fmtHours(p.admin_hours) + ' (' + p.admin_count + ')' : '–'}</td><td>${p.last ? ago(p.last) : '–'}</td></tr>`)}</tbody></table></div>`
+        : html`<div class="w-empty">Nothing recorded in this period.</div>`}
+    </section>`;
 }
 
 /* ---- translations ---- */
@@ -1387,7 +1480,7 @@ function memberCard(M) {
       ${M.estimated ? html`<p class="w-hint" style="margin-top:6px">Days before the bot started tracking are estimated from join dates, so members who already left are not included there.</p>` : ''}
     </section>`;
 }
-function fmtHours(h) { if (h == null) return '–'; return h >= 48 ? (h / 24).toFixed(1) + ' days' : h + ' h'; }
+function fmtHours(h) { if (h == null) return '–'; return h >= 48 ? (h / 24).toFixed(1) + ' days' : h >= 1 ? h + ' h' : Math.round(h * 60) + ' min'; }
 function viewInsights() {
   const I = S.insights, B = S.overview.stats.bugs;
   if (!I) return html`<div class="w-pagehead"><h2>Insights</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
@@ -1603,11 +1696,13 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+const VIEWS = { players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
   features: viewFeatures, welcome: viewWelcome, patch: viewPatch, mod: viewMod, bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
-  codes: async () => { S.codes = await call('GET', '/api/giftcodes'); },
+  codes: async () => { const [c, r] = await Promise.all([call('GET', '/api/giftcodes'), call('GET', '/api/redeem').catch(() => null)]); S.codes = c; S.redeem = r; },
+  players: async () => { const q = S.players ? S.players.q || '' : ''; S.players = Object.assign(await call('GET', '/api/links?q=' + encodeURIComponent(q)), { q }); },
+  moderators: async () => { const d = S.modstats ? S.modstats.days : 30; S.modstats = await call('GET', '/api/modstats?days=' + d); },
   translations: () => loadTr(S.tr && S.tr.data ? S.tr.data.lang : null),
   bot: async () => { try { S.auth = S.user && S.user.role !== 'admin' ? null : await call('GET', '/api/auth/settings'); } catch (e) { S.auth = null; } },
   bugs: () => loadBugs(true),
@@ -1875,6 +1970,34 @@ root.addEventListener('click', async e => {
       busy(el, true, 'Uploading…');
       try { const r = await call('POST', '/api/drive/upload'); toast('Copied to Google Drive: ' + r.name); S.data = await call('GET', '/api/data'); renderMain(); }
       catch (err) { busy(el, false); toast(err.message, 'err'); S.data = await call('GET', '/api/data'); renderMain(); }
+    }
+    else if (act === 'playersSearch') { S.players.q = $('#pl-q').value.trim(); loadTab('players'); }
+    else if (act === 'linkDelete') {
+      if (!el.dataset.armed) { el.dataset.armed = '1'; el.textContent = 'Click again'; setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = 'Unlink'; } }, 3500); return; }
+      busy(el, true, '…');
+      try { await call('DELETE', '/api/links/' + el.dataset.id); toast('Link removed.'); loadTab('players'); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'modDays') { S.modstats.days = parseInt(el.dataset.d, 10); loadTab('moderators'); }
+    else if (act === 'redeemSave') {
+      const body = { redeem_enabled: $('#rd-on').checked, redeem_url: $('#rd-url').value.trim(), redeem_method: $('#rd-method').value, redeem_body: $('#rd-body').value,
+        redeem_ok_text: $('#rd-ok').value.trim(), redeem_already_text: $('#rd-already').value.trim(), redeem_delay: parseInt($('#rd-delay').value || '0', 10), redeem_dm: $('#rd-dm').checked };
+      const h = $('#rd-header').value.trim(); if (h) body.header = h;
+      busy(el, true, 'Saving…');
+      try { S.redeem = await call('PUT', '/api/redeem', body); S.settings.redeem_enabled = body.redeem_enabled; toast(body.redeem_enabled ? 'Saved – redeeming for linked players in the background.' : 'Saved. Automatic redeem is off.'); renderMain(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'redeemTest') {
+      const uid = $('#rd-tuid').value.trim(), code = $('#rd-tcode').value.trim(), out = $('#rd-tres');
+      if (!uid || !code) return toast('Type a player UID and a code.', 'err');
+      busy(el, true, 'Testing…');
+      try { const r = await call('POST', '/api/redeem/test', { uid, code }); out.textContent = ({ ok: '✅ Worked', already: 'ℹ️ Already redeemed', failed: '❌ Failed' })[r.status] + ' – ' + r.message; }
+      catch (err) { toast(err.message, 'err'); }
+      busy(el, false);
+    }
+    else if (act === 'redeemRetry') {
+      busy(el, true, 'Retrying…');
+      try { const r = await call('POST', '/api/redeem/retry'); toast('Trying ' + r.retrying + ' again in the background.'); S.redeem = await call('GET', '/api/redeem'); renderMain(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'codeBulk') {
       const codes = $('#gc-bulk').value, dur = $('#gc-bulkdur').value;
@@ -2184,7 +2307,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, bounty_enabled: true, bounty_channel_id: null, points_accepted: 1, points_fixed: 3, points_suggestion: 2, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
     backup_channel_id: null, bug_areas: 'City\nAlliance\nCombat\nHeroes\nEvents\nShop & payments\nChat\nLogin & connection\nUI & display\nOther',
@@ -2257,7 +2380,12 @@ function makeMock() {
     history: STs[i % STs.length] === 'new' ? [] : [{ ts: now - i * 3600 * 6, action: 'passed', actor: 'Sofie' }].concat(
       ['fixed', 'being_investigated', 'admin_rejected'].includes(STs[i % STs.length]) ? [{ ts: now - i * 3600 * 4, action: STs[i % STs.length], actor: 'Kasper' }] : [])
   }));
-  const briefBug = b => ({ id: b.id, summary: b.summary, status: b.status, reporter_id: b.reporter_id, reporter: b.reporter, created_at: b.created_at, duplicate_of: b.duplicate_of, announced: b.announced, area: b.area, version: b.version, severity: b.severity, source: b.source });
+  const links = Array.from({ length: 14 }, (_, i) => ({ discord_id: '7000' + i, name: NAMES[i % 8], uid: String(41000000 + i * 7919), chief: 'Chief ' + NAMES[i % 8], ts: now - i * 86400 * 2, bugs: i % 4, redeemed: 30 + i % 9 }));
+  const rdm = { settings: { redeem_enabled: false, redeem_url: '', redeem_method: 'POST', redeem_body: '{"uid": "{uid}", "code": "{code}"}', redeem_ok_text: '', redeem_already_text: 'already', redeem_delay: 2, redeem_dm: false },
+    header_set: false, linked: 14, codes: [{ code: 'WOSEU1GIFT', ok: 12, already: 1, failed: 1 }, { code: 'FROST500K', ok: 13, already: 0, failed: 0 }],
+    failures: [{ code: 'WOSEU1GIFT', uid: '41007919', chief: 'Chief Jonas', message: 'HTTP 404: {"msg": "no such player"}', ts: now - 3600 }] };
+  bugs.forEach((b, i) => { b.votes = b.public && ['passed', 'being_investigated'].includes(b.status) ? (i * 7) % 13 : 0; });
+  const briefBug = b => ({ votes: b.votes, id: b.id, summary: b.summary, status: b.status, reporter_id: b.reporter_id, reporter: b.reporter, created_at: b.created_at, duplicate_of: b.duplicate_of, announced: b.announced, area: b.area, version: b.version, severity: b.severity, source: b.source });
   const replies = [{ id: 1, title: 'Duplicate report', text: 'Thanks for your report! This is a duplicate of a bug we already know about ({bug}). We are working on it.' },
     { id: 2, title: 'Working as intended', text: 'Thanks for reporting {bug}. We checked it and this feature works as designed.' },
     { id: 3, title: 'Need more info', text: 'Could you add a screenshot or video of {summary}? That helps us find the cause.' }];
@@ -2324,6 +2452,24 @@ function makeMock() {
         known: Object.keys(names).map(c => ({ code: c, name: names[c] })) };
     }
     if (p === '/api/translations') { trOver[body.lang] = Object.assign(trOver[body.lang] || {}, body.items); Object.keys(trOver[body.lang]).forEach(k => { if (!trOver[body.lang][k]) delete trOver[body.lang][k]; }); return { ok: true }; }
+    if (p === '/api/links' && method === 'GET') { const t = (q.get('q') || '').toLowerCase();
+      return { total: links.length, items: links.filter(x => !t || (x.chief + ' ' + x.uid + ' ' + x.discord_id).toLowerCase().includes(t)) }; }
+    { const ml = p.match(/^\/api\/links\/(\d+)$/); if (ml) { const i = links.findIndex(x => x.discord_id === ml[1]); if (i < 0) throw new Error("That link doesn't exist."); links.splice(i, 1); return { ok: true }; } }
+    if (p === '/api/redeem' && method === 'GET') return rdm;
+    if (p === '/api/redeem') { if (body.redeem_url && !/^https?:\/\//i.test(body.redeem_url)) throw new Error('The redeem address must start with https:// (or http://).');
+      if (body.redeem_enabled && !body.redeem_url) throw new Error('Type the redeem address before turning automatic redeem on.');
+      Object.keys(rdm.settings).forEach(k => { if (k in body) rdm.settings[k] = body[k]; }); if (body.header) rdm.header_set = true; settings.redeem_enabled = rdm.settings.redeem_enabled; return rdm; }
+    if (p === '/api/redeem/test') return body.uid === '1' ? { status: 'failed', message: 'HTTP 404: {"msg": "no such player"}' } : { status: 'ok', message: '{"result": "success"}' };
+    if (p === '/api/redeem/retry') { const n = rdm.failures.length; rdm.failures = []; rdm.codes.forEach(c => { c.ok += c.failed; c.failed = 0; }); return { retrying: n }; }
+    if (p === '/api/modstats') { const d = parseInt(q.get('days') || '30', 10);
+      return { days: d, wait_hours: 24, mod_hours: 3.4, mod_count: 41, admin_hours: 26.5, admin_count: 22, sug_hours: 51, sug_count: 9, within_day: 86,
+        staff: [{ id: '1', name: 'Sofie', handled: 74, bugs: 58, suggestions: 12, replies: 4, first_count: 33, first_hours: 2.1, admin_count: 0, admin_hours: null, last: now - 1800 },
+          { id: '2', name: 'Kasper', handled: 39, bugs: 30, suggestions: 6, replies: 3, first_count: 8, first_hours: 5.5, admin_count: 22, admin_hours: 26.5, last: now - 300 },
+          { id: '3', name: 'Mira', handled: 12, bugs: 12, suggestions: 0, replies: 0, first_count: 5, first_hours: 0.6, admin_count: 0, admin_hours: null, last: now - 4 * 86400 }],
+        waiting: [{ kind: 'bug', id: 60, title: 'Alliance chest shows wrong reward', status: 'new', who: 'Moderators', since: now - 30 * 3600, severity: 'critical', votes: 7 },
+          { kind: 'bug', id: 52, title: 'Hero skill text cut off', status: 'passed', who: 'Admins', since: now - 4 * 86400, severity: 'minor', votes: 0 },
+          { kind: 'suggestion', id: 17, title: 'Add a timer for the bear trap', status: 'new', who: 'Moderators', since: now - 2 * 86400, severity: null, votes: 0 },
+          { kind: 'bug', id: 49, title: 'Cannot open the shop', status: 'investigating', who: 'Info ticket', since: now - 3 * 86400, severity: '', votes: 2 }], waiting_total: 4 }; }
     if (p === '/api/giftcodes/import') { const t = Math.floor(Date.now() / 1000), added = [], skipped = [];
       body.codes.split('\n').map(x => x.trim()).filter(Boolean).forEach(c => { if (!/^[A-Za-z0-9_-]{3,40}$/.test(c) || codes.some(k => k.code.toLowerCase() === c.toLowerCase())) skipped.push(c); else { added.push(c); codes.push({ id: codes.length + 100, code: c, reward: '', created_at: t - 7 * 86400, expires_at: null, by: 'Dashboard', url: null }); } });
       return { added, skipped }; }

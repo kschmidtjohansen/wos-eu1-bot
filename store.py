@@ -167,6 +167,21 @@ db.executescript(
         expires INTEGER NOT NULL,
         last_seen INTEGER
     );
+    CREATE TABLE IF NOT EXISTS bug_votes (     -- "I have this too" on a known issue; voters get a DM when it is fixed
+        bug_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        ts INTEGER NOT NULL,
+        PRIMARY KEY (bug_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS redemptions (   -- automatic gift-code redeem for linked players
+        code TEXT NOT NULL,
+        uid TEXT NOT NULL,
+        discord_id INTEGER,
+        status TEXT NOT NULL,                      -- ok | already | failed
+        message TEXT,
+        ts INTEGER NOT NULL,
+        PRIMARY KEY (code, uid)
+    );
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -351,6 +366,15 @@ SCHEMA = {
     "giftcodes_new_hours": {"type": "int", "default": 24, "min": 1, "max": 168},
     "giftcodes_delete_expired": {"type": "bool", "default": True},
     "giftcodes_list": {"type": "bool", "default": True},
+    "board_channel_id": {"type": "channel", "default": None},
+    "redeem_enabled": {"type": "bool", "default": False},
+    "redeem_url": {"type": "text", "default": "", "min": 0, "max": 500},
+    "redeem_method": {"type": "choice", "default": "POST", "choices": ["POST", "GET"]},
+    "redeem_body": {"type": "text", "default": '{"uid": "{uid}", "code": "{code}"}', "min": 0, "max": 1000},
+    "redeem_ok_text": {"type": "text", "default": "", "min": 0, "max": 100},
+    "redeem_already_text": {"type": "text", "default": "already", "min": 0, "max": 100},
+    "redeem_delay": {"type": "int", "default": 2, "min": 0, "max": 60},
+    "redeem_dm": {"type": "bool", "default": False},
     "info_channel_id": {"type": "channel", "default": None},
     "info_rules": {"type": "text", "default": DEFAULT_RULES, "min": 1, "max": 4000},
     "bugs_enabled": {"type": "bool", "default": True},
@@ -700,6 +724,110 @@ def insights(weeks: int = 8) -> dict:
     }
 
 
+def _median(xs):
+    xs = sorted(xs)
+    if not xs:
+        return None
+    m = len(xs) // 2
+    return xs[m] if len(xs) % 2 else (xs[m - 1] + xs[m]) / 2
+
+
+MOD_FIRST = ("passed", "rejected", "investigating")
+ADMIN_FIRST = ("being_investigated", "fixed", "admin_rejected")
+
+
+def mod_stats(days: int = 30, wait_hours: int = 24) -> dict:
+    """Moderator / admin numbers for the dashboard: how fast reports get a first answer, who handles what,
+    and what has been waiting too long right now."""
+    now = int(time.time())
+    since = now - days * 86400 if days else 0
+    hours = lambda sec: round(sec / 3600, 1) if sec is not None else None
+    people = {}
+
+    def person(aid, name):
+        key = str(aid or name or "?")
+        return people.setdefault(key, {"id": str(aid) if aid else None, "name": name or "Unknown", "handled": 0,
+                                       "bugs": 0, "suggestions": 0, "replies": 0, "first": [], "admin_first": [],
+                                       "last": 0})
+
+    for r in db.execute("SELECT * FROM actions WHERE ts>=? AND actor_name IS NOT NULL ORDER BY ts", (since,)):
+        if r["action"] == "ticket_closed":          # done by the bot itself, not a person
+            continue
+        p = person(r["actor_id"], r["actor_name"])
+        p["handled"] += 1
+        p["last"] = max(p["last"], r["ts"])
+        if r["action"] == "replied":
+            p["replies"] += 1
+        elif r["kind"] == "suggestion":
+            p["suggestions"] += 1
+        else:
+            p["bugs"] += 1
+
+    # first answer from a moderator, per bug reported in the period
+    mod_times, admin_times = [], []
+    rows = db.execute(
+        "SELECT b.id, b.created_at, a.ts, a.actor_id, a.actor_name, a.action FROM bug_reports b JOIN actions a "
+        "ON a.kind='bug' AND a.item_id=b.id WHERE b.created_at>=? ORDER BY b.id, a.ts", (since,)).fetchall()
+    seen_mod, seen_admin, passed_at = set(), set(), {}
+    for r in rows:
+        if r["action"] in MOD_FIRST and r["id"] not in seen_mod and r["created_at"]:
+            seen_mod.add(r["id"])
+            t = max(0, r["ts"] - r["created_at"])
+            mod_times.append(t)
+            person(r["actor_id"], r["actor_name"])["first"].append(t)
+        if r["action"] == "passed" and r["id"] not in passed_at:
+            passed_at[r["id"]] = r["ts"]
+        if r["action"] in ADMIN_FIRST and r["id"] not in seen_admin and r["id"] in passed_at:
+            seen_admin.add(r["id"])
+            t = max(0, r["ts"] - passed_at[r["id"]])
+            admin_times.append(t)
+            person(r["actor_id"], r["actor_name"])["admin_first"].append(t)
+    sug_times = [max(0, r[1] - r[0]) for r in db.execute(
+        "SELECT s.created_at, MIN(a.ts) FROM suggestions s JOIN actions a ON a.kind='suggestion' AND a.item_id=s.id "
+        "WHERE s.created_at>=? GROUP BY s.id", (since,)) if r[0] and r[1]]
+
+    staff = []
+    for p in people.values():
+        staff.append({"id": p["id"], "name": p["name"], "handled": p["handled"], "bugs": p["bugs"],
+                      "suggestions": p["suggestions"], "replies": p["replies"], "last": p["last"] or None,
+                      "first_count": len(p["first"]), "first_hours": hours(_median(p["first"])),
+                      "admin_count": len(p["admin_first"]), "admin_hours": hours(_median(p["admin_first"]))})
+    staff.sort(key=lambda e: -e["handled"])
+
+    # waiting right now
+    limit = now - wait_hours * 3600
+    waiting = []
+    for r in db.execute("SELECT * FROM bug_reports WHERE status IN ('new','investigating','passed','being_investigated') "
+                        "ORDER BY created_at"):
+        start = r["created_at"] or now
+        who = "Moderators"
+        if r["status"] in ("passed", "being_investigated"):
+            who = "Admins"
+            t = db.execute("SELECT MAX(ts) FROM actions WHERE kind='bug' AND item_id=? AND action=?",
+                           (r["id"], r["status"])).fetchone()[0]
+            start = t or start
+        elif r["status"] == "investigating":
+            who = "Info ticket"
+        if start <= limit:
+            waiting.append({"kind": "bug", "id": r["id"], "title": bug_summary(r), "status": r["status"], "who": who,
+                            "since": start, "severity": r["severity"], "votes": vote_count(r["id"])})
+    for r in db.execute("SELECT * FROM suggestions WHERE status='new' AND created_at<=? ORDER BY created_at", (limit,)):
+        waiting.append({"kind": "suggestion", "id": r["id"], "title": (r["text"] or "")[:80], "status": "new",
+                        "who": "Moderators", "since": r["created_at"], "severity": None, "votes": 0})
+    waiting.sort(key=lambda w: w["since"])
+    sev = {"critical": 0, "major": 1, "minor": 2}
+    waiting.sort(key=lambda w: (w["who"] == "Info ticket", sev.get(w["severity"], 3), w["since"]))
+    return {
+        "days": days, "wait_hours": wait_hours,
+        "mod_hours": hours(_median(mod_times)), "mod_count": len(mod_times),
+        "admin_hours": hours(_median(admin_times)), "admin_count": len(admin_times),
+        "sug_hours": hours(_median(sug_times)), "sug_count": len(sug_times),
+        "within_day": round(sum(1 for t in mod_times if t <= 86400) / len(mod_times) * 100) if mod_times else None,
+        "staff": staff,
+        "waiting": waiting[:40], "waiting_total": len(waiting),
+    }
+
+
 # ----------------------------------------------------------- areas, severity
 SEVERITIES = ("critical", "major", "minor")
 
@@ -737,6 +865,99 @@ def delete_link(discord_id: int) -> bool:
     cur = db.execute("DELETE FROM links WHERE discord_id=?", (discord_id,))
     db.commit()
     return cur.rowcount > 0
+
+
+def all_links(q: str = "", limit: int = 200):
+    """Linked accounts for the dashboard, newest first (search in chief name, UID or Discord name)."""
+    q = (q or "").strip()
+    sql = ("SELECT l.*, (SELECT COUNT(*) FROM bug_reports b WHERE b.reporter_id=l.discord_id) AS bugs, "
+           "(SELECT COUNT(*) FROM redemptions r WHERE r.uid=l.player_uid AND r.status IN ('ok','already')) AS redeemed "
+           "FROM links l")
+    args = []
+    if q:
+        sql += " WHERE l.chief_name LIKE ? OR l.player_uid LIKE ? OR CAST(l.discord_id AS TEXT)=?"
+        args = [f"%{q}%", f"%{q}%", q]
+    sql += " ORDER BY l.ts DESC LIMIT ?"
+    return db.execute(sql, (*args, limit)).fetchall()
+
+
+def link_count() -> int:
+    return db.execute("SELECT COUNT(*) FROM links").fetchone()[0]
+
+
+# ------------------------------------------------------------ "I have this too"
+def toggle_vote(bug_id: int, user_id: int) -> bool:
+    """Add or remove the player's vote. Returns True when they now have a vote on the bug."""
+    if db.execute("SELECT 1 FROM bug_votes WHERE bug_id=? AND user_id=?", (bug_id, user_id)).fetchone():
+        db.execute("DELETE FROM bug_votes WHERE bug_id=? AND user_id=?", (bug_id, user_id))
+        db.commit()
+        return False
+    db.execute("INSERT INTO bug_votes (bug_id, user_id, ts) VALUES (?,?,?)", (bug_id, user_id, int(time.time())))
+    db.commit()
+    return True
+
+
+def add_vote(bug_id: int, user_id: int):
+    db.execute("INSERT OR IGNORE INTO bug_votes (bug_id, user_id, ts) VALUES (?,?,?)", (bug_id, user_id, int(time.time())))
+    db.commit()
+
+
+def vote_count(bug_id: int) -> int:
+    return db.execute("SELECT COUNT(*) FROM bug_votes WHERE bug_id=?", (bug_id,)).fetchone()[0]
+
+
+def vote_counts() -> dict:
+    return {r[0]: r[1] for r in db.execute("SELECT bug_id, COUNT(*) FROM bug_votes GROUP BY bug_id")}
+
+
+def voters(bug_id: int) -> list:
+    return [r[0] for r in db.execute("SELECT user_id FROM bug_votes WHERE bug_id=? ORDER BY ts", (bug_id,))]
+
+
+def board_bugs(limit: int = 25):
+    """Open known issues for the Discord board: on the public list, confirmed or being investigated –
+    most "me too" first."""
+    return db.execute(
+        "SELECT b.*, (SELECT COUNT(*) FROM bug_votes v WHERE v.bug_id=b.id) AS votes FROM bug_reports b "
+        "WHERE b.public=1 AND b.status IN ('passed','being_investigated') ORDER BY votes DESC, b.id DESC LIMIT ?",
+        (limit,)).fetchall()
+
+
+def recently_fixed_public(days: int = 7, limit: int = 8):
+    since = int(time.time()) - days * 86400
+    return db.execute(
+        "SELECT b.* FROM bug_reports b WHERE b.public=1 AND b.status='fixed' AND EXISTS "
+        "(SELECT 1 FROM actions a WHERE a.kind='bug' AND a.item_id=b.id AND a.action='fixed' AND a.ts>=?) "
+        "ORDER BY b.id DESC LIMIT ?", (since, limit)).fetchall()
+
+
+# ------------------------------------------------------------ gift-code redeem
+def redemption_done(code: str, uid: str) -> bool:
+    return db.execute("SELECT 1 FROM redemptions WHERE code=? AND uid=? AND status IN ('ok','already')",
+                      (code, uid)).fetchone() is not None
+
+
+def save_redemption(code: str, uid: str, discord_id, status: str, message: str = ""):
+    db.execute("INSERT OR REPLACE INTO redemptions (code, uid, discord_id, status, message, ts) VALUES (?,?,?,?,?,?)",
+               (code, uid, discord_id, status, (message or "")[:300], int(time.time())))
+    db.commit()
+
+
+def redemption_summary() -> dict:
+    """{code: {"ok": n, "already": n, "failed": n}}"""
+    out = {}
+    for r in db.execute("SELECT code, status, COUNT(*) AS n FROM redemptions GROUP BY code, status"):
+        out.setdefault(r["code"], {"ok": 0, "already": 0, "failed": 0})[r["status"]] = r["n"]
+    return out
+
+
+def redemption_failures(limit: int = 30):
+    return db.execute("SELECT r.*, l.chief_name FROM redemptions r LEFT JOIN links l ON l.discord_id=r.discord_id "
+                      "WHERE r.status='failed' ORDER BY r.ts DESC LIMIT ?", (limit,)).fetchall()
+
+
+def redeemed_codes_for(uid: str) -> set:
+    return {r[0] for r in db.execute("SELECT code FROM redemptions WHERE uid=? AND status IN ('ok','already')", (uid,))}
 
 
 # -------------------------------------------------------------- stored files
@@ -1151,6 +1372,7 @@ def delete_bugs(ids, reset_numbers: bool = False) -> list:
         i = r["id"]
         shutil.rmtree(ATTACH_DIR / str(i), ignore_errors=True)
         db.execute("DELETE FROM bug_files WHERE bug_id=?", (i,))
+        db.execute("DELETE FROM bug_votes WHERE bug_id=?", (i,))
         db.execute("DELETE FROM points WHERE kind IN ('bug_accepted','bug_fixed') AND ref=?", (i,))
         db.execute("DELETE FROM actions WHERE kind='bug' AND item_id=?", (i,))
         db.execute("UPDATE bug_reports SET duplicate_of=NULL WHERE duplicate_of=?", (i,))
