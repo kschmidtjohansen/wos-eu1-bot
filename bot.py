@@ -1257,9 +1257,11 @@ PLAYER_COMMANDS = [
     ("/codes", "Show the active gift codes"),
     ("/link", "Link your in-game account (chief name + UID) – fills in your bug reports and lets the bot redeem gift codes for you"),
     ("/unlink", "Remove that link"),
+    ("/invites show", "See how many people you (or someone else) invited"),
+    ("/invites top", "See who has invited the most people"),
     ("/language", "Choose the language the bot uses with you"),
     ("/members", "How many members the server has"),
-    ("Translate", "Right-click (or long-press) any message → Apps → Translate, to read it in your language"),
+    ("Translate", "Long-press (phone) or right-click any message → Apps → Translate, to read it in your language"),
 ]
 
 

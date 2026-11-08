@@ -1814,9 +1814,10 @@ async function setLanguages(langs, def) {
 
 /* ---- info channel ---- */
 const PLAYER_COMMANDS = [['/mybugs', 'See the status of your bug reports and ideas'], ['/codes', 'Show the active gift codes'],
-  ['/link', 'Link your in-game account (chief name + UID) – it fills in your bug reports'], ['/unlink', 'Remove that link'],
+  ['/link', 'Link your in-game account (chief name + UID) – fills in your bug reports and lets the bot redeem gift codes for you'], ['/unlink', 'Remove that link'],
+  ['/invites show', 'See how many people you (or someone else) invited'], ['/invites top', 'See who has invited the most people'],
   ['/language', 'Choose the language the bot uses with you'], ['/members', 'How many members the server has'],
-  ['Translate', 'Right-click (or long-press) any message → Apps → Translate, to read it in your language']];
+  ['Translate', 'Long-press (phone) or right-click any message → Apps → Translate, to read it in your language']];
 function viewInfo() {
   const st = S.settings, rules = S.infoDraft != null ? S.infoDraft : st.info_rules, rep = chanName(st.report_channel_id) || '#bug-reports', b = S.overview.bot;
   const emb = (color, title, body) => html`<div class="w-dp-embed" style="border-left-color:${color};margin-top:8px"><div class="w-dp-title">${title}</div><div class="w-dp-desc">${raw(body)}</div><div class="w-dp-foot">${b.name}</div></div>`;
