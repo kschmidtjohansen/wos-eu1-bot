@@ -1219,11 +1219,18 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(400, "Give it a name and a message (up to 1,900 characters).")
         if not str(d.get("channel_id") or "").isdigit():
             raise ApiError(400, "Choose the channel.")
-        kind = "interval" if d.get("kind") == "interval" else "daily"
+        kind = d.get("kind") if d.get("kind") in ("once", "daily", "interval") else "daily"
         f = {"name": name, "content": content, "channel_id": int(d["channel_id"]), "kind": kind,
              "role_id": int(d["role_id"]) if str(d.get("role_id") or "").isdigit() else None,
              "delete_previous": 1 if d.get("delete_previous") else 0, "enabled": 0 if d.get("enabled") is False else 1}
-        if kind == "daily":
+        if kind == "once":
+            at = str(d.get("at") or "")[:16]
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d", at):
+                raise ApiError(400, "Pick the date and time to post it.")
+            if store.timer_next_run({"kind": "once", "at": at}, int(time.time()) + 30) is None:
+                raise ApiError(400, "That time has already passed – pick a time in the future.")
+            f.update(at=at, days=None, every_minutes=None, delete_previous=0)
+        elif kind == "daily":
             at = str(d.get("at") or "")
             if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", at):
                 raise ApiError(400, "Write the time like 18:30.")

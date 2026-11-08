@@ -230,8 +230,8 @@ db.executescript(
     CREATE TABLE IF NOT EXISTS timers (        -- messages the bot posts on a schedule
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL, channel_id INTEGER NOT NULL, content TEXT NOT NULL,
-        kind TEXT NOT NULL DEFAULT 'daily',        -- daily | interval
-        at TEXT, days TEXT,                        -- "18:30" and "mon,tue,…" (daily) – server time zone
+        kind TEXT NOT NULL DEFAULT 'daily',        -- once | daily | interval
+        at TEXT, days TEXT,                        -- once: "2026-11-14T18:30"; daily: "18:30" and "mon,tue,…" – server time zone
         every_minutes INTEGER,                     -- interval
         role_id INTEGER, delete_previous INTEGER NOT NULL DEFAULT 0,
         enabled INTEGER NOT NULL DEFAULT 1, next_run INTEGER, last_run INTEGER, last_msg_id INTEGER
@@ -1115,6 +1115,12 @@ WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 def timer_next_run(t, after: int) -> Optional[int]:
     """The next time a timer fires after `after` (unix seconds), in the server's time zone."""
     from datetime import datetime, timedelta
+    if t["kind"] == "once":
+        try:
+            when = int(datetime.strptime(str(t["at"] or ""), "%Y-%m-%dT%H:%M").replace(tzinfo=tz()).timestamp())
+        except ValueError:
+            return None
+        return when if when > after else None
     if t["kind"] == "interval":
         every = max(5, int(t["every_minutes"] or 60)) * 60
         return after + every

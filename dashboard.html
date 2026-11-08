@@ -352,6 +352,36 @@
 .w-bar{height:8px;border-radius:99px;background:var(--w-surface-2);overflow:hidden;margin:8px 0}
 .w-bar i{display:block;height:100%;background:linear-gradient(90deg,#7de3f4,#5be0a8)}
 @media (max-width:700px){.w-acc-row{grid-template-columns:28px 1fr 60px}.w-acc-row .acc-role,.w-acc-row .acc-label{grid-column:2/4}.w-acc-head{display:none}}
+.w-addrow{display:grid;grid-template-columns:minmax(180px,1.4fr) minmax(130px,.8fr) minmax(150px,1.2fr) auto;gap:10px}
+.w-codein{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;letter-spacing:.04em}
+.w-linkbtn{background:none;border:0;color:var(--w-accent);cursor:pointer;font:inherit;font-size:13px;padding:4px}
+.w-linkbtn:hover{text-decoration:underline}
+.w-crow{display:grid;grid-template-columns:minmax(150px,auto) 1fr auto;gap:8px 14px;align-items:center;padding:10px 0;border-top:1px solid var(--w-border)}
+.w-sec-head + .w-crow, summary + .w-crow{border-top:0}
+.w-crow.expired{opacity:.6}
+.w-crow-info{min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.w-crow-info .w-hint{flex-basis:100%}
+.w-crow-reward{font-size:13.5px}
+.w-crow-acts{display:flex;gap:6px}
+.w-crow .w-code{font-size:14px;padding:3px 9px;justify-self:start}
+.w-crow.new .w-code{border:1px solid rgba(255,138,61,.55);color:var(--w-heat-2)}
+.w-howto{margin:0 0 14px;padding:12px 14px;border:1px solid var(--w-border);border-radius:12px;background:var(--w-surface-2)}
+.w-howto summary{cursor:pointer}
+.w-expired summary{cursor:pointer;list-style:none}
+.w-expired[open] summary{margin-bottom:8px}
+.w-subtabs{display:flex;gap:4px;flex-wrap:wrap;margin:-4px 0 16px;padding:4px;border-radius:14px;background:var(--w-surface-2);width:max-content;max-width:100%}
+.w-subtab{border:0;background:none;color:var(--w-muted);font:inherit;font-size:13.5px;font-weight:600;padding:8px 14px;border-radius:10px;cursor:pointer}
+.w-subtab:hover{color:var(--w-text)}
+.w-subtab[aria-selected="true"]{background:var(--w-surface);color:var(--w-text);box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 4px 14px -6px rgba(0,0,0,.6)}
+@media (max-width:700px){.w-addrow{grid-template-columns:1fr 1fr}.w-addrow .w-codein{grid-column:1/3}.w-crow{grid-template-columns:1fr auto}.w-crow-info{grid-column:1/3;grid-row:2}
+  .w-subtabs{width:auto;flex-wrap:nowrap;overflow-x:auto}.w-subtab{white-space:nowrap}}
+.w-livebar{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:-6px;font-size:12.5px;color:var(--w-muted)}
+.w-livebar .w-btn{padding:5px 10px}
+.w-live-dot{width:8px;height:8px;border-radius:50%;background:#5be0a8;box-shadow:0 0 0 3px rgba(91,224,168,.16)}
+.w-live-dot.busy{background:#7de3f4;animation:wpulse 1s ease-in-out infinite}
+.w-live-dot.err{background:#e5534b;box-shadow:0 0 0 3px rgba(229,83,75,.16)}
+@keyframes wpulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.w-live-dot.busy{animation:none}}
 .w-steps{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px}
 .w-steps code{font-size:12.5px;background:var(--w-surface-2);padding:2px 6px;border-radius:6px;overflow-wrap:anywhere}
 .w-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border-radius:14px;background:var(--w-bad-soft);border:1px solid color-mix(in srgb,var(--w-bad) 35%,transparent)}
@@ -703,11 +733,12 @@ const S = {
 const NAV = [
   ['overview', 'Overview', 'grid', 'Daily work'], ['bugs', 'Bugs', 'bug', 'Daily work'], ['suggestions', 'Suggestions', 'bulb', 'Daily work'],
   ['codes', 'Gift codes', 'gift', 'Daily work'], ['players', 'Players', 'users', 'Daily work'], ['warnings', 'Warnings', 'alert', 'Daily work'], ['mod', 'Moderation', 'shield', 'Daily work'],
-  ['access', 'Access & languages', 'globe', 'Community'], ['rolemenus', 'Role menus', 'tag', 'Community'], ['giveaways', 'Giveaways', 'party', 'Community'], ['timers', 'Timed messages', 'clock', 'Community'],
-  ['insights', 'Insights', 'chart', 'How it is going'], ['moderators', 'Moderators', 'timer', 'How it is going'], ['invites', 'Invites', 'userplus', 'How it is going'], ['status', 'Server status', 'pulse', 'How it is going'], ['log', 'Activity log', 'list', 'How it is going'],
-  ['panel', 'Panel message', 'message', 'Set up'], ['channels', 'Channels', 'hash', 'Set up'], ['features', 'Features', 'sliders', 'Set up'],
-  ['welcome', 'Welcome', 'userplus', 'Set up'], ['info', 'Info channel', 'list', 'Set up'], ['translations', 'Translations', 'globe', 'Set up'],
-  ['patch', 'Patch notes', 'wrench', 'Set up'], ['bot', 'Bot profile', 'bot', 'Set up'], ['data', 'Data', 'db', 'Set up']
+  ['welcome', 'Welcome', 'userplus', 'Community'], ['access', 'Access & languages', 'globe', 'Community'], ['rolemenus', 'Role menus', 'tag', 'Community'],
+  ['giveaways', 'Giveaways', 'party', 'Community'], ['timers', 'Timed messages', 'clock', 'Community'], ['invites', 'Invites', 'userplus', 'Community'],
+  ['info', 'Info channel', 'list', 'Posts'], ['patch', 'Patch notes & posts', 'wrench', 'Posts'],
+  ['insights', 'Insights', 'chart', 'How it is going'], ['moderators', 'Moderators', 'timer', 'How it is going'], ['status', 'Server status', 'pulse', 'How it is going'], ['log', 'Activity log', 'list', 'How it is going'],
+  ['panel', 'Bug bot', 'bug', 'Set up'], ['channels', 'Channels', 'hash', 'Set up'], ['translations', 'Translations', 'globe', 'Set up'],
+  ['bot', 'Bot profile', 'bot', 'Set up'], ['data', 'Data & backups', 'db', 'Set up']
 ];
 // Moderators who log in with Discord see these pages; admins see everything.
 const MOD_TABS = ['overview', 'status', 'bugs', 'suggestions', 'players', 'warnings', 'giveaways', 'insights', 'invites', 'mod', 'log'];
@@ -723,7 +754,7 @@ const CHANNELS = [
   ['giftcodes_channel_id', 'Gift codes channel', 'Optional. New gift codes are announced here. Give the bot “Mention @everyone” if you ping @everyone or @here.'],
   ['log_channel_id', 'Bot log channel', 'Optional, keep it staff-only. Everything the bot does is posted here too – who did what, and when (shown in each reader’s own time). Choose what to post on the Channels page below the list.'],
   ['invites_channel_id', 'Invite log channel', 'Optional. Posts “Mira joined – invited by Jonas (12 invites)” and who left. Works like an invite-tracker bot, so you can remove that one.'],
-  ['weekly_channel_id', 'Weekly post channel', 'Optional. Where “This week in WOS EU1” is posted for players (turn it on under Features).'],
+  ['weekly_channel_id', 'Weekly post channel', 'Optional. Where “This week in WOS EU1” is posted for players (turn it on under Patch notes & posts → Weekly post).'],
   ['board_channel_id', 'Known issues board channel', 'Optional. One message lists the open known issues (bugs you put on the public list). Players pick “I have this too” and get a DM when it is fixed.']
 ];
 const CHANNEL_KEYS = CHANNELS.map(c => c[0]);
@@ -888,11 +919,16 @@ function previewHtml() {
     <div class="w-dp-reacts"><span class="w-dp-btn pri">🐛 Report a bug</span><span class="w-dp-btn">💡 Suggest an idea</span></div>
   </div>`;
 }
+const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['staff', 'Reminders & digest']];
 function viewPanel() {
-  const d = S.panelDraft, p = S.health.panel;
-  return html`
-    <div class="w-pagehead"><h2>Panel message</h2>
-      <p>The message players react to. Publishing posts it in the bug report channel, or updates it in place if it is already there.</p></div>
+  const d = S.panelDraft, p = S.health.panel, sub = subOf(BUGBOT_SUBS);
+  const head = html`<div class="w-pagehead"><h2>Bug bot</h2>
+      <p>Everything about bug reports and suggestions: the panel message players use, how reports work, the website form and the reminders for staff.</p></div>${subTabs(BUGBOT_SUBS)}`;
+  if (sub === 'reports') return html`${head}${fsec('bugReports', 'modMessages')}${saveBar()}`;
+  if (sub === 'suggestions') return html`${head}${fsec('suggestions')}${saveBar()}`;
+  if (sub === 'website') return html`${head}${fsec('website')}${saveBar()}`;
+  if (sub === 'staff') return html`${head}${fsec('reminders', 'digest')}${saveBar()}`;
+  return html`${head}
     <div class="w-grid2">
       <section class="w-card w-pad">
         <div class="w-field"><label class="w-label" for="p-ch">Bug report channel</label>
@@ -951,9 +987,24 @@ function textRow(k, label, desc, ph, max) {
   return html`<div class="w-row"><div><div class="w-row-label">${label}</div><div class="w-row-desc">${desc}</div></div>
     <input class="w-input" style="max-width:220px" data-k="${k}" maxlength="${max}" placeholder="${ph}" value="${S.draft[k] || ''}" aria-label="${label}"></div>`;
 }
-function viewFeatures() {
-  return html`
-    <div class="w-pagehead"><h2>Features</h2><p>Switch parts of the bot on or off and set limits.</p></div>
+// Sub-tabs inside a page (e.g. Bug bot → Panel message · Bug reports · …). Remembered per page.
+const subOf = list => { const v = (S.sub || {})[S.tab]; return list.some(x => x[0] === v) ? v : list[0][0]; };
+const subTabs = list => html`<div class="w-subtabs" role="tablist" aria-label="Parts of this page">${list.map(x => html`<button role="tab" class="w-subtab" data-act="sub" data-v="${x[0]}" aria-selected="${String(subOf(list) === x[0])}">${x[1]}</button>`)}</div>`;
+// A page with its own settings gets a "Settings" sub-tab (admins only).
+function withSettings(view, names, label) {
+  return () => {
+    const page = String(view());
+    if (isMod()) return new Raw(page);
+    const list = [['main', 'Overview'], ['settings', label || 'Settings']];
+    const cut = page.indexOf('</div>', page.indexOf('w-pagehead')) + 6;
+    if (subOf(list) === 'main') return new Raw(page.slice(0, cut) + subTabs(list) + page.slice(cut));
+    return new Raw(page.slice(0, cut) + subTabs(list) + String(fsec(...names)) + String(saveBar()));
+  };
+}
+
+// Settings, grouped by feature – each page shows the groups that belong to it (admins only).
+const FSEC = {
+  bugReports: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Bug reports</div>
       ${toggleRow('bugs_enabled', 'Bug reports (🐛)', 'When off, players who press “Report a bug” are told that reports are closed.')}
       ${selectRow('report_style', 'How players report', '“Form” = one short form with a screenshot upload (recommended). “Ticket” = the older private thread with step-by-step questions.', ['form', 'ticket'])}
@@ -966,7 +1017,8 @@ function viewFeatures() {
       ${textRow('game_version', 'Current game version', 'Filled in on new reports, and written on a bug as “fixed in” when it is marked fixed.', 'V5 · 1.33.9', 30)}
       <div class="w-row"><div><div class="w-row-label">Areas</div><div class="w-row-desc">The pick-list players see (one per line, max 25). Used for filters and insights.</div></div>
         <textarea class="w-textarea" style="min-height:150px;max-width:260px" data-k="bug_areas" aria-label="Areas">${S.draft.bug_areas || ''}</textarea></div>
-    </section>
+    </section>`,
+  website: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Website</div>
       ${toggleRow('web_form_enabled', 'Accept bug reports from the website', 'Lets report.html send bugs straight to the mod channel. Off = the endpoint answers “switched off”.')}
       ${toggleRow('changelog_enabled', 'Public changelog', 'changelog.html shows every patch-notes announcement you publish (the list of fixed bugs).')}
@@ -974,37 +1026,43 @@ function viewFeatures() {
       ${numberRow('auto_block_rejects', 'Pause after this many rejected reports in a row', 'Duplicates do not count.', 2, 20, 'reports')}
       ${numberRow('auto_block_days', 'Pause for', 'Lift it early on the Moderation page.', 1, 90, 'days')}
       ${toggleRow('known_issues_enabled', 'Public known-issues list', 'known-issues.html only shows bugs you have marked “Show on the public list” (open a bug to do that).')}
-    </section>
+    </section>`,
+  suggestions: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Suggestions</div>
       ${toggleRow('suggestions_enabled', 'Suggestions (💡)', 'When off, players who react 💡 are told that suggestions are closed.')}
       ${numberRow('suggestion_max_length', 'Maximum length', 'Longest suggestion a player may send (50–1900 characters).', 50, 1900, 'characters')}
-    </section>
+    </section>`,
+  modMessages: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Moderation & messages</div>
       ${toggleRow('investigate_enabled', 'Investigate tickets (🔍)', 'Lets moderators open a private ticket with the reporter to ask for more information.')}
       ${numberRow('info_remind_hours', 'Remind the reporter after', 'If a moderator’s question in an info ticket is not answered, the player is tagged and gets a DM. 0 = never.', 0, 720, 'hours')}
       ${numberRow('info_close_hours', 'Close unanswered info tickets after', 'The ticket is closed and the bug goes back to the moderators as New. 0 = never.', 0, 720, 'hours')}
       ${toggleRow('dm_notifications', 'Send status updates by DM', 'Tell players by DM when their bug or suggestion is handled.')}
       ${toggleRow('update_notice_enabled', 'Announce updates', 'After “Update bugbot”, post the new version and what changed in the admin channel.')}
-    </section>
+    </section>`,
+  reminders: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Reminders</div>
       ${toggleRow('reminders_enabled', 'Remind staff about waiting items', 'The bot posts one digest in the mod and admin channels (tagging the role) when items wait too long.')}
       ${numberRow('reminder_mod_hours', 'Moderators: remind after', 'New bugs and suggestions nobody has handled yet.', 1, 720, 'hours')}
       ${numberRow('reminder_admin_hours', 'Admins: remind after', 'Bugs passed on that are still not fixed or rejected.', 1, 720, 'hours')}
       ${numberRow('reminder_critical_hours', 'Critical bugs: remind after', '🚨 Critical bugs are reminded much sooner.', 1, 72, 'hours')}
-    </section>
+    </section>`,
+  digest: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Weekly digest</div>
       ${toggleRow('digest_enabled', 'Post a weekly summary', 'New, fixed and closed bugs, what is waiting longest, critical bugs and the busiest areas.')}
       ${selectRow('digest_weekday', 'Day', 'The digest is posted on this day…', ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])}
       ${numberRow('digest_hour', 'Hour', '…at this hour (0–23) in the time zone below.', 0, 23, 'o\u2019clock')}
       ${textRow('timezone', 'Time zone', 'A name such as Europe/Copenhagen or Europe/Warsaw. Used for the weekly digest.', 'Europe/Copenhagen', 40)}
       <div class="w-actions" style="margin-top:10px"><button class="w-btn small" data-act="sendDigest">Send the digest now</button></div>
-    </section>
+    </section>`,
+  weekly: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Weekly post for players</div>
       ${toggleRow('weekly_enabled', 'Post “This week in WOS EU1”', 'Once a week in the channel you choose (Channels page): fixes, new gift codes, player ideas you added, what you’re still working on and member growth. Players with notifications on get a ping too.')}
       ${selectRow('weekly_weekday', 'Day', 'In the time zone above.', ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])}
       ${numberRow('weekly_hour', 'Hour', '0–23.', 0, 23, ':00')}
       <div class="w-actions" style="margin-top:10px"><button class="w-btn small" data-act="weeklyNow">Post it now</button></div>
-    </section>
+    </section>`,
+  push: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Phone notifications</div>
       ${toggleRow('push_enabled', 'Let players turn on notifications', 'A “Notify me” button on the website and in the app. They get a notification for new gift codes, patch notes and the weekly post. Needs the website on https.')}
       ${S.push ? html`<div class="w-row"><div><div class="w-row-label">Devices signed up</div><div class="w-row-desc">${S.push.ready ? 'Ready to send.' : 'Not ready – the update installs what’s needed; check again after “Update bugbot”.'}</div></div><b style="font-size:22px">${S.push.total}</b></div>
@@ -1012,13 +1070,15 @@ function viewFeatures() {
         <div class="w-form2" style="margin-top:8px"><div class="w-field"><input class="w-input" id="pn-title" maxlength="80" placeholder="Title, e.g. Server maintenance at 14:00" aria-label="Title"></div>
           <div class="w-field"><input class="w-input" id="pn-body" maxlength="200" placeholder="Text (optional)" aria-label="Text"></div></div>
         <div class="w-actions"><button class="w-btn primary" data-act="pushSend">${icon('send')} Send to ${S.push.total} device${S.push.total === 1 ? '' : 's'}</button></div></div>` : ''}
-    </section>
+    </section>`,
+  warnings: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Warnings</div>
       ${numberRow('warn_timeout_at', 'Time out at', 'This many active warnings times the member out automatically. 0 = never.', 0, 20, 'warnings')}
       ${numberRow('warn_timeout_minutes', 'Timeout length', 'How long the automatic timeout lasts.', 1, 40320, 'minutes')}
       ${numberRow('warn_ban_at', 'Ban at', 'This many active warnings bans the member. 0 = never ban automatically.', 0, 50, 'warnings')}
       ${numberRow('warn_expire_days', 'Warnings stop counting after', '0 = they always count.', 0, 365, 'days')}
-    </section>
+    </section>`,
+  automod: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Auto-mod</div>
       ${toggleRow('automod_badwords_on', 'Bad words', 'Removes messages with words from the list below. Catches simple tricks like 1d10t.')}
       <div class="w-row"><div><div class="w-row-label">Blocked words</div><div class="w-row-desc">One per line. End a word with * to catch every form (noob* also catches noobs).</div></div>
@@ -1028,18 +1088,21 @@ function viewFeatures() {
       ${numberRow('automod_mentions_max', 'Too many mentions from', '', 2, 50, 'people')}
       ${toggleRow('automod_repeat_on', 'Repeated messages', 'Removes the same message sent 3 times within a minute.')}
       ${toggleRow('automod_warn', 'Also give a warning', 'Each removal counts as a warning, so repeat offenders reach the timeout above. Staff are never touched.')}
-    </section>
+    </section>`,
+  guard: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Scam &amp; phishing guard</div>
       ${toggleRow('guard_enabled', 'Remove scam links', 'Deletes fake Nitro / Steam / free-gems messages, look-alike links (dlscord.com, steamcommunlty…) and the same link posted in 3+ channels within a minute (a hacked account). Staff are never touched. Every removal goes to the activity log.')}
       ${numberRow('guard_timeout_minutes', 'Time out the sender for', 'Needs the bot permission “Timeout Members”. 0 = only delete the message.', 0, 10080, 'minutes')}
       ${toggleRow('guard_block_invites', 'Remove invites to other servers', 'Deletes discord.gg links that aren’t for this server.')}
       <div class="w-row"><div><div class="w-row-label">Always allowed sites</div><div class="w-row-desc">One per line. Links to these (and their sub-domains) are never removed. Your website is always allowed.</div></div>
         <textarea class="w-textarea" style="min-height:150px;max-width:260px" data-k="guard_allow_domains" aria-label="Allowed sites">${S.draft.guard_allow_domains || ''}</textarea></div>
-    </section>
+    </section>`,
+  invites: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Invites</div>
       ${toggleRow('invites_enabled', 'Track who invited whom', 'Needs the bot permission “Manage Server”. Choose an invite log channel on the Channels page to post joins and leaves.')}
       ${numberRow('invites_fake_days', 'Don’t count accounts younger than', 'New accounts are marked and not counted – stops people inflating their invites with fresh accounts. 0 = count everyone.', 0, 90, 'days')}
-    </section>
+    </section>`,
+  giftcodes: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Gift codes</div>
       ${toggleRow('giftcodes_enabled', 'Gift codes', 'Shows the Gift codes page on the website and lets players use /codes. Add codes on the Gift codes page.')}
       ${selectRow('giftcodes_ping', 'Notify players', 'Who is tagged when a new code is announced.', ['none', 'here', 'everyone', 'role'])}
@@ -1048,7 +1111,8 @@ function viewFeatures() {
       ${numberRow('giftcodes_new_hours', 'New codes stay on their own for', 'New codes get their own announcement in Discord and the “New” section on the website for this long. Then they move into the list with the other codes.', 1, 168, 'hours')}
       ${toggleRow('giftcodes_delete_expired', 'Delete expired codes here too', 'Expired codes always disappear from Discord and the website. On = they are also deleted from this dashboard. Off = they stay under “Expired” here as history.')}
       ${textRow('giftcodes_site_url', 'Website gift-codes page', 'Optional. The address of the Gift codes page on your website – Discord gets an “All codes on the website” button.', 'http://…/bugs/codes.html', 300)}
-    </section>
+    </section>`,
+  backups: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Screenshots & backups</div>
       ${toggleRow('keep_attachments', 'Keep screenshots and videos', 'Saves a copy on the bot’s computer, because Discord links stop working after a while.')}
       ${numberRow('attachment_keep_days', 'Delete kept files of closed bugs after', '0 = keep forever. Only files of fixed or rejected bugs are removed.', 0, 3650, 'days')}
@@ -1056,8 +1120,9 @@ function viewFeatures() {
       ${toggleRow('drive_enabled', 'Copy backups to Google Drive', 'Only works after the one-time setup (bot guide, “Backups to Google Drive”). See the Data page.')}
       ${numberRow('drive_every_days', 'Copy to Google Drive every', '7 = once a week.', 1, 30, 'days')}
       ${numberRow('drive_keep', 'Keep this many copies in Google Drive', 'Older copies made by the bot are deleted from the folder.', 1, 60, 'copies')}
-    </section>${saveBar()}`;
-}
+    </section>`,
+};
+const fsec = (...names) => isMod() ? '' : html`${names.map(n => FSEC[n]())}`;
 
 const saveBar = () => html`<div class="w-savebar" id="savebar" hidden role="status">
   <span id="savecount"></span>
@@ -1469,41 +1534,43 @@ function timeLeft(ts) {
   const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
   return 'Expires in ' + (d ? d + ' d ' + h + ' h' : h ? h + ' h ' + m + ' min' : m + ' min');
 }
+const CODE_SUBS = [['codes', 'Codes'], ['redeem', 'Auto-redeem'], ['settings', 'Settings']];
 function viewCodes() {
   const C = S.codes;
   if (!C) return html`<div class="w-pagehead"><h2>Gift codes</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
-  const on = S.settings.giftcodes_enabled, ch = chanName(S.settings.giftcodes_channel_id);
+  const on = S.settings.giftcodes_enabled, ch = chanName(S.settings.giftcodes_channel_id), sub = subOf(CODE_SUBS);
   const live = C.items.filter(x => x.state !== 'expired'), old = C.items.filter(x => x.state === 'expired');
-  const row = x => html`<div class="w-coderow ${x.state}"><div class="w-codebody"><div class="w-inline" style="gap:10px"><code class="w-code">${x.code}</code>
-      <span class="w-badge ${CODE_BADGE[x.state][0]}">${CODE_BADGE[x.state][1]}</span></div>
-      <div class="w-sub">${x.reward ? x.reward + ' · ' : ''}${timeLeft(x.expires_at)} · added ${ago(x.created_at)}${x.by ? ' by ' + x.by : ''}${x.state === 'expired' ? '' : x.where === 'announcement' ? ' · in its own announcement until ' + full(x.created_at + S.settings.giftcodes_new_hours * 3600) : ' · in the code list'}</div></div>
-    <div class="w-inline">${x.url ? html`<a class="w-btn small" href="${x.url}" target="_blank" rel="noopener">Discord</a>` : ''}
-      ${x.state !== 'expired' ? html`<button class="w-btn small" data-act="codeEnd" data-id="${x.id}">End now</button>` : ''}
-      <button class="w-btn small danger" data-act="codeDelete" data-id="${x.id}">Delete</button></div></div>`;
-  return html`
-    <div class="w-pagehead"><h2>Gift codes</h2><p>Add one or more codes: they are announced together in Discord and shown as “New” on the website for ${S.settings.giftcodes_new_hours} h.
-      Then they move into the “Active gift codes” list with the others. When a code expires it disappears everywhere by itself.</p></div>
+  const head = html`<div class="w-pagehead"><h2>Gift codes</h2><p>New codes are announced in Discord and marked “New” on the website for ${S.settings.giftcodes_new_hours} h, then join the “Active gift codes” list. Expired codes disappear everywhere by themselves.</p></div>${subTabs(CODE_SUBS)}`;
+  if (sub === 'settings') return html`${head}${fsec('giftcodes')}${saveBar()}`;
+  if (sub === 'redeem') return html`${head}${redeemCard() || html`<div class="w-card w-pad w-empty">Loading…</div>`}`;
+  const where = x => x.state === 'expired' ? 'expired ' + ago(x.expires_at) : x.where === 'announcement' ? 'own announcement until ' + full(x.created_at + S.settings.giftcodes_new_hours * 3600) : 'in the code list';
+  const row = x => html`<div class="w-crow ${x.state}">
+      <code class="w-code">${x.code}</code>
+      <div class="w-crow-info"><span class="w-badge ${CODE_BADGE[x.state][0]}">${CODE_BADGE[x.state][1]}</span>${x.reward ? html`<span class="w-crow-reward">${x.reward}</span>` : ''}
+        <div class="w-hint">${x.state === 'expired' ? '' : timeLeft(x.expires_at) + ' · '}${where(x)} · added ${ago(x.created_at)}${x.by ? ' by ' + x.by : ''}</div></div>
+      <div class="w-crow-acts">${x.url ? html`<a class="w-btn small" href="${x.url}" target="_blank" rel="noopener" title="Open in Discord">Discord</a>` : ''}
+        ${x.state !== 'expired' ? html`<button class="w-btn small" data-act="codeEnd" data-id="${x.id}" title="Expire it now">End</button>` : ''}
+        <button class="w-btn small danger" data-act="codeDelete" data-id="${x.id}" aria-label="Delete ${x.code}">✕</button></div></div>`;
+  return html`${head}
     ${!on || !ch ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>${!on ? 'Gift codes are switched off' : 'No gift-codes channel chosen'}</b>
-      <div class="w-sub">${!on ? 'Turn them on under Features → Gift codes, so players see them on the website and with /codes.' : 'Choose one on the Channels page, otherwise new codes are not announced.'}</div></div>
-      <button class="w-btn small" data-act="goto" data-tab="${!on ? 'features' : 'channels'}">Fix</button></div>` : ''}
-    <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:12px">Add a gift code</h3>
-      <div class="w-form2">
-        <div class="w-field"><label class="w-label" for="gc-code">Code</label><input class="w-input" id="gc-code" maxlength="40" placeholder="e.g. WOSEU1GIFT" autocomplete="off" style="font-family:ui-monospace,monospace;text-transform:none"></div>
-        <div class="w-field"><label class="w-label" for="gc-dur">Works for</label><select class="w-select" id="gc-dur">${C.durations.map(d => html`<option value="${d.hours == null ? '' : d.hours}" ${d.hours === 24 ? 'selected' : ''}>${d.label}</option>`)}</select></div>
-      </div>
-      <div class="w-field"><label class="w-label" for="gc-reward">Reward <span class="w-hint">(optional)</span></label><input class="w-input" id="gc-reward" maxlength="200" placeholder="e.g. 500 gems, 2× speed-up 1h"></div>
-      <div class="w-inline"><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="gc-announce" checked> Announce in ${ch || 'Discord'}${S.settings.giftcodes_ping !== 'none' ? ' and tag ' + (S.settings.giftcodes_ping === 'role' ? 'the role' : '@' + S.settings.giftcodes_ping) : ''}</label>
-        <div class="w-spacer"></div><button class="w-btn primary" data-act="codeAdd">${icon('gift')} Add code</button></div>
+      <div class="w-sub">${!on ? 'Turn them on under Settings, so players see them on the website and with /codes.' : 'Choose one on the Channels page, otherwise new codes are not announced.'}</div></div>
+      <button class="w-btn small" data-act="${!on ? 'sub' : 'goto'}" data-v="settings" data-tab="channels">Fix</button></div>` : ''}
+    <section class="w-card w-pad w-addcode">
+      <div class="w-addrow">
+        <input class="w-input w-codein" id="gc-code" maxlength="40" placeholder="New code, e.g. WOSEU1GIFT" autocomplete="off" aria-label="Code">
+        <select class="w-select" id="gc-dur" aria-label="Works for">${C.durations.map(d => html`<option value="${d.hours == null ? '' : d.hours}" ${d.hours === 24 ? 'selected' : ''}>${d.label}</option>`)}</select>
+        <input class="w-input" id="gc-reward" maxlength="200" placeholder="Reward (optional)" aria-label="Reward">
+        <button class="w-btn primary" data-act="codeAdd">${icon('gift')} Add</button></div>
+      <div class="w-inline" style="margin-top:10px;gap:14px"><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="gc-announce" checked> Announce in ${ch || 'Discord'}${S.settings.giftcodes_ping !== 'none' ? ' and tag ' + (S.settings.giftcodes_ping === 'role' ? 'the role' : '@' + S.settings.giftcodes_ping) : ''}</label>
+        <div class="w-spacer"></div><button class="w-linkbtn" data-act="codeBulkToggle">${S.codeBulk ? 'Hide' : 'Paste several codes'}</button></div>
+      ${S.codeBulk ? html`<div class="w-sect"><textarea class="w-textarea" id="gc-bulk" style="min-height:120px;font-family:ui-monospace,monospace" placeholder="CODE1&#10;CODE2&#10;CODE3" aria-label="Codes, one per line"></textarea>
+        <div class="w-inline" style="margin-top:10px"><select class="w-select w-fsel" id="gc-bulkdur" aria-label="How long they work">${C.durations.map(d => html`<option value="${d.hours == null ? '' : d.hours}" ${d.hours == null ? 'selected' : ''}>${d.label}</option>`)}</select>
+          <label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="gc-bulknew" checked> Announce as new</label>
+          <div class="w-spacer"></div><button class="w-btn primary" data-act="codeBulk">Add codes</button></div></div>` : ''}
     </section>
-    <details class="w-card w-pad w-bulk"><summary><b>Add several codes at once</b> <span class="w-hint">– paste a list, one code per line</span></summary>
-      <textarea class="w-textarea" id="gc-bulk" style="min-height:140px;margin-top:12px;font-family:ui-monospace,monospace" placeholder="CODE1&#10;CODE2&#10;CODE3"></textarea>
-      <div class="w-inline" style="margin-top:10px"><select class="w-select w-fsel" id="gc-bulkdur" aria-label="How long they work">${C.durations.map(d => html`<option value="${d.hours == null ? '' : d.hours}" ${d.hours == null ? 'selected' : ''}>${d.label}</option>`)}</select>
-        <label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="gc-bulknew" checked> Announce them as new codes (off = straight into the list, no ping)</label>
-        <div class="w-spacer"></div><button class="w-btn primary" data-act="codeBulk">Add codes</button></div></details>
-    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Active codes (${live.length})</h3></div>
-      ${live.length ? live.map(row) : html`<div class="w-empty">No active codes.</div>`}</section>
-    ${old.length ? html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Expired (${old.length})</h3></div>${old.slice(0, 30).map(row)}</section>` : ''}
-    ${redeemCard()}`;
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Active (${live.length})</h3>${S.redeem && S.redeem.settings.redeem_enabled ? html`<span class="w-badge ok">Auto-redeem on</span>` : ''}</div>
+      ${live.length ? live.map(row) : html`<div class="w-empty">No active codes – add one above.</div>`}</section>
+    ${old.length ? html`<details class="w-card w-pad w-expired"><summary><b>Expired (${old.length})</b> <span class="w-hint">– kept as history</span></summary>${old.slice(0, 30).map(row)}</details>` : ''}`;
 }
 function redeemCard() {
   const R = S.redeem;
@@ -1514,6 +1581,15 @@ function redeemCard() {
       <span class="w-badge ${on ? 'ok' : 'todo'}">${on ? 'On' : 'Off'}</span></div>
     <p class="w-sub" style="margin-bottom:12px">Redeems every active code for every player who linked their game account (${R.linked} linked so far) – new codes at once, new players as soon as they link.
       This needs a redeem address on <b>your game server</b>. The bot calls it once per player and code, with the UID and code filled in.</p>
+    <details class="w-howto"><summary><b>What your game server needs</b> <span class="w-hint">– for the server developer</span></summary>
+      <ol class="w-steps" style="margin-top:10px">
+        <li>The code must exist in the <b>game server’s own gift-code list</b> too (same code, same rewards). The bot only asks the server to redeem it – it can’t create rewards.</li>
+        <li>Add one small web address to the game server, e.g. <code>POST https://game-server/api/redeem</code>, that receives <code>{"uid": "123456789", "code": "WOSEU1GIFT"}</code>.</li>
+        <li>It should check a secret header (e.g. <code>Authorization: Bearer &lt;long random key&gt;</code>) so only the bot can use it.</li>
+        <li>Then do exactly what the in-game “Redeem code” screen does: find the player by UID, check the code is valid and not used by them, and send the rewards (normally by in-game mail).</li>
+        <li>Answer <code>{"ok": true}</code> when it worked, a text containing <code>already</code> when the player had it, and an error status (400/404) otherwise.</li>
+        <li>Paste the address and the secret header below, press <b>Save</b>, and use <b>Test with one player</b> with your own UID.</li></ol>
+      <p class="w-hint" style="margin-top:8px">A full description with an example is in the bot folder: <code>docs/AUTO-REDEEM.md</code>.</p></details>
     <div class="w-row"><div><div class="w-row-label">Redeem codes automatically</div><div class="w-row-desc">Off = nothing is sent to the game server.</div></div>
       <label class="w-switch"><input type="checkbox" id="rd-on" ${on ? 'checked' : ''}><span></span></label></div>
     <div class="w-form2" style="margin-top:12px">
@@ -1560,7 +1636,7 @@ function viewWarnings() {
   const steps = [R.warn_timeout_at ? R.warn_timeout_at + ' warnings → timed out for ' + R.warn_timeout_minutes + ' min' : null, R.warn_ban_at ? R.warn_ban_at + ' warnings → banned' : null].filter(Boolean);
   return html`
     <div class="w-pagehead"><h2>Warnings</h2><p>Every warning, timeout and ban, per player. Moderators warn with <code>/warn</code> in Discord or here; the player gets a DM with the reason.</p></div>
-    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">How warnings add up</h3><button class="w-btn small" data-act="goto" data-tab="features">Change</button></div>
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">How warnings add up</h3><button class="w-btn small" data-act="goto" data-tab="warnings" data-sub="settings">Change</button></div>
       <p class="w-sub">${steps.length ? steps.join(' · ') : 'No automatic steps – warnings are only recorded.'}${R.warn_expire_days ? ' · warnings stop counting after ' + R.warn_expire_days + ' days' : ''}. Auto-mod can give warnings too (Features).</p></section>
     <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:10px">Warn a member</h3>
       <div class="w-form2"><div class="w-field"><label class="w-label" for="wn-id">Discord user ID</label><input class="w-input" id="wn-id" inputmode="numeric" placeholder="Right-click the member → Copy User ID"></div>
@@ -1628,37 +1704,54 @@ function viewGiveaways() {
 }
 
 const DAYS = [['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'], ['fri', 'Fri'], ['sat', 'Sat'], ['sun', 'Sun']];
+function tmSoon() {   // next full hour, as yyyy-mm-ddThh:mm (the browser's own clock)
+  const d = new Date(Date.now() + 3600e3); d.setMinutes(0, 0, 0);
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':00';
+}
 function tmBlank(preset) {
   return preset === 'bear' ? { id: null, name: 'Bear Hunt reminder', channel_id: '', content: '🐻 **Bear Hunt starts in 30 minutes!** Get your rallies ready, chiefs.', kind: 'daily', at: '19:30', days: DAYS.map(d => d[0]), every_minutes: 240, role_id: '', delete_previous: true, enabled: true }
-    : { id: null, name: '', channel_id: '', content: '', kind: 'daily', at: '18:00', days: DAYS.map(d => d[0]), every_minutes: 240, role_id: '', delete_previous: true, enabled: true };
+    : { id: null, name: '', channel_id: '', content: '', kind: 'once', at: tmSoon(), days: DAYS.map(d => d[0]), every_minutes: 240, role_id: '', delete_previous: false, enabled: true };
 }
 function tmCollect() {
   const E = S.tmEdit; if (!E || !$('#tm-name')) return;
-  E.name = $('#tm-name').value; E.channel_id = $('#tm-chan').value; E.content = $('#tm-msg').value; E.kind = $('#tm-kind').value; E.role_id = $('#tm-role').value;
-  E.delete_previous = $('#tm-del').checked; if ($('#tm-at')) E.at = $('#tm-at').value; if ($('#tm-every')) E.every_minutes = parseInt($('#tm-every').value || '0', 10) * 60;
+  E.name = $('#tm-name').value; E.channel_id = $('#tm-chan').value; E.content = $('#tm-msg').value; E.role_id = $('#tm-role').value;
+  E.delete_previous = $('#tm-del') ? $('#tm-del').checked : false;
+  if ($('#tm-at')) E.at = $('#tm-at').value; if ($('#tm-when')) E.at = $('#tm-when').value;
+  if ($('#tm-every')) E.every_minutes = parseInt($('#tm-every').value || '0', 10) * 60;
+}
+const TM_KINDS = [['once', 'Once – on a date and time'], ['daily', 'Every day (or chosen days)'], ['interval', 'Again and again – every few hours']];
+function tmWhen(t) {
+  if (t.kind === 'once') { const d = new Date(t.at); return isNaN(d) ? t.at : d.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  if (t.kind === 'interval') return 'every ' + Math.round(t.every_minutes / 60) + ' h';
+  return t.at + ' · ' + (t.days.length === 7 ? 'every day' : t.days.map(d => d[0].toUpperCase() + d.slice(1)).join(', '));
 }
 function viewTimers() {
   if (!S.tm) return html`<div class="w-pagehead"><h2>Timed messages</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
   const E = S.tmEdit, T = S.tm;
+  const kindSwitch = E ? html`<div class="w-chips" role="radiogroup" aria-label="When">${TM_KINDS.map(k => html`<button type="button" class="w-chip" role="radio" data-act="tmKindPick" data-k="${k[0]}" aria-pressed="${String(E.kind === k[0])}" aria-checked="${String(E.kind === k[0])}">${k[1]}</button>`)}</div>` : '';
   const editor = E ? html`<section class="w-card w-pad" id="tm-edit"><h3 class="w-h3" style="margin-bottom:12px">${E.id ? 'Edit timed message' : 'New timed message'}</h3>
-      <div class="w-form2"><div class="w-field"><label class="w-label" for="tm-name">Name <span class="w-hint">(only for you)</span></label><input class="w-input" id="tm-name" maxlength="60" value="${E.name}"></div>
+      <div class="w-form2"><div class="w-field"><label class="w-label" for="tm-name">Name <span class="w-hint">(only for you)</span></label><input class="w-input" id="tm-name" maxlength="60" value="${E.name}" placeholder="e.g. SvS starts"></div>
         <div class="w-field"><label class="w-label" for="tm-chan">Channel</label>${chanSelect('tm-chan', E.channel_id)}</div></div>
       <div class="w-field"><label class="w-label" for="tm-msg">Message</label><textarea class="w-textarea" id="tm-msg" style="min-height:90px" maxlength="1900">${E.content}</textarea></div>
-      <div class="w-form2"><div class="w-field"><label class="w-label" for="tm-kind">When</label><select class="w-select" id="tm-kind" data-act-change="tmKind"><option value="daily" ${E.kind === 'daily' ? 'selected' : ''}>At a time of day</option><option value="interval" ${E.kind === 'interval' ? 'selected' : ''}>Every few hours</option></select></div>
-        ${E.kind === 'daily' ? html`<div class="w-field"><label class="w-label" for="tm-at">Time <span class="w-hint">(${T.timezone})</span></label><input class="w-input" id="tm-at" type="time" value="${E.at}"></div>`
-          : html`<div class="w-field"><label class="w-label" for="tm-every">Every</label><div class="w-inline"><input class="w-input" id="tm-every" type="number" min="1" max="168" value="${Math.round((E.every_minutes || 240) / 60)}" style="max-width:110px"><span class="w-hint">hours</span></div></div>`}</div>
-      ${E.kind === 'daily' ? html`<div class="w-field"><span class="w-label">On these days</span><div class="w-chips">${DAYS.map(d => html`<button type="button" class="w-chip" data-act="tmDay" data-d="${d[0]}" aria-pressed="${String(E.days.includes(d[0]))}">${d[1]}</button>`)}</div></div>` : ''}
+      <div class="w-field"><span class="w-label">When</span>${kindSwitch}</div>
+      ${E.kind === 'once' ? html`<div class="w-form2"><div class="w-field"><label class="w-label" for="tm-when">Post it on <span class="w-hint">(${T.timezone})</span></label><input class="w-input" id="tm-when" type="datetime-local" value="${/T/.test(E.at || '') ? E.at : tmSoon()}"></div></div>`
+        : E.kind === 'daily' ? html`<div class="w-form2"><div class="w-field"><label class="w-label" for="tm-at">Time <span class="w-hint">(${T.timezone})</span></label><input class="w-input" id="tm-at" type="time" value="${/^\d\d:\d\d$/.test(E.at || '') ? E.at : '18:00'}"></div></div>
+          <div class="w-field"><span class="w-label">On these days</span><div class="w-chips">${DAYS.map(d => html`<button type="button" class="w-chip" data-act="tmDay" data-d="${d[0]}" aria-pressed="${String(E.days.includes(d[0]))}">${d[1]}</button>`)}</div></div>`
+        : html`<div class="w-form2"><div class="w-field"><label class="w-label" for="tm-every">Every</label><div class="w-inline"><input class="w-input" id="tm-every" type="number" min="1" max="168" value="${Math.round((E.every_minutes || 240) / 60)}" style="max-width:110px"><span class="w-hint">hours</span></div></div></div>`}
       <div class="w-form2"><div class="w-field"><label class="w-label" for="tm-role">Ping a role <span class="w-hint">(optional)</span></label><select class="w-select" id="tm-role">${roleOptions(E.role_id, false)}</select></div>
-        <div class="w-field"><label class="w-label">&nbsp;</label><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="tm-del" ${E.delete_previous ? 'checked' : ''}> Delete the previous one when posting (keeps the channel tidy)</label></div></div>
-      <div class="w-actions"><div class="w-spacer"></div><button class="w-btn" data-act="tmCancel">Cancel</button><button class="w-btn primary" data-act="tmSave">Save</button></div></section>` : '';
-  const when = t => t.kind === 'interval' ? 'every ' + Math.round(t.every_minutes / 60) + ' h' : t.at + ' · ' + (t.days.length === 7 ? 'every day' : t.days.map(d => d[0].toUpperCase() + d.slice(1)).join(', '));
+        ${E.kind === 'once' ? '' : html`<div class="w-field"><label class="w-label">&nbsp;</label><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="tm-del" ${E.delete_previous ? 'checked' : ''}> Delete the previous one when posting (keeps the channel tidy)</label></div>`}</div>
+      <div class="w-actions"><div class="w-spacer"></div><button class="w-btn" data-act="tmCancel">Cancel</button><button class="w-btn primary" data-act="tmSave">${E.kind === 'once' ? 'Schedule it' : 'Save'}</button></div></section>` : '';
+  const upcoming = T.items.filter(t => !(t.kind === 'once' && !t.next_run)), done = T.items.filter(t => t.kind === 'once' && !t.next_run);
+  const item = t => html`<div class="w-item"><div><b>${t.name}</b> ${t.kind === 'once' && !t.next_run ? html`<span class="w-badge ok">Posted${t.last_run ? ' ' + ago(t.last_run) : ''}</span>` : t.enabled ? '' : html`<span class="w-badge todo">Paused</span>`}
+      <p>${t.kind === 'once' ? '📅 ' : '🔁 '}${tmWhen(t)} · ${chanName(t.channel_id) || '?'}${t.role_id ? ' · pings ' + roleName(t.role_id) : ''}${t.enabled && t.next_run && t.kind !== 'once' ? ' · next ' + full(t.next_run) : ''}</p><p>${t.content.slice(0, 140)}</p></div>
+    <div class="w-inline">${t.kind === 'once' && !t.next_run ? '' : html`<label class="w-switch" title="On/off"><input type="checkbox" data-act="tmToggle" data-id="${t.id}" ${t.enabled ? 'checked' : ''} aria-label="On"><span></span></label>`}
+      <button class="w-btn small" data-act="tmSend" data-id="${t.id}">Send now</button><button class="w-btn small" data-act="tmEdit" data-id="${t.id}">${t.kind === 'once' && !t.next_run ? 'Post again later' : 'Edit'}</button><button class="w-btn small danger" data-act="tmDelete" data-id="${t.id}">Delete</button></div></div>`;
   return html`
-    <div class="w-pagehead"><h2>Timed messages</h2><p>Posts the bot sends on its own – a daily “Bear Hunt in 30 min”, a reminder before SvS, rules every few hours. Times are in ${T.timezone}.</p></div>
-    ${editor || html`<div class="w-actions"><button class="w-btn primary" data-act="tmNew">+ New timed message</button><button class="w-btn" data-act="tmNew" data-preset="bear">🐻 Start from “Bear Hunt in 30 min”</button></div>`}
-    ${T.items.length ? html`<section class="w-card w-pad">${T.items.map(t => html`<div class="w-item"><div><b>${t.name}</b> ${t.enabled ? '' : html`<span class="w-badge todo">Paused</span>`}<p>${when(t)} · ${chanName(t.channel_id) || '?'}${t.role_id ? ' · pings ' + roleName(t.role_id) : ''}${t.enabled && t.next_run ? ' · next ' + full(t.next_run) : ''}</p><p>${t.content.slice(0, 140)}</p></div>
-        <div class="w-inline"><label class="w-switch" title="On/off"><input type="checkbox" data-act="tmToggle" data-id="${t.id}" ${t.enabled ? 'checked' : ''} aria-label="On"><span></span></label>
-          <button class="w-btn small" data-act="tmSend" data-id="${t.id}">Send now</button><button class="w-btn small" data-act="tmEdit" data-id="${t.id}">Edit</button><button class="w-btn small danger" data-act="tmDelete" data-id="${t.id}">Delete</button></div></div>`)}</section>`
-      : (E ? '' : html`<div class="w-card w-pad w-empty">No timed messages yet.</div>`)}`;
+    <div class="w-pagehead"><h2>Timed messages</h2><p>Write a message now and let the bot post it at the moment you choose – “SvS starts in 1 hour” on Saturday 18:00, a maintenance notice, an event announcement. Repeating ones (every day, every few hours) work too. Times are in ${T.timezone}.</p></div>
+    ${editor || html`<div class="w-actions"><button class="w-btn primary" data-act="tmNew">📅 Schedule a message</button><button class="w-btn" data-act="tmNew" data-preset="bear">🐻 Daily “Bear Hunt in 30 min”</button></div>`}
+    <section class="w-card w-pad"><h3 class="w-h3">Coming up (${upcoming.length})</h3>${upcoming.length ? upcoming.map(item) : html`<div class="w-empty">Nothing scheduled.</div>`}</section>
+    ${done.length ? html`<section class="w-card w-pad"><h3 class="w-h3">Already posted (${done.length})</h3>${done.slice(0, 20).map(item)}</section>` : ''}`;
 }
 
 /* ---- access & language chats ---- */
@@ -1722,7 +1815,7 @@ function viewInvites() {
   return html`
     <div class="w-pagehead"><h2>Invites</h2><p>Who invited whom. People who leave, and brand-new accounts, don’t count towards an invite total. Players can check theirs with <code>/invites show</code> and <code>/invites top</code>.</p></div>
     ${!V.can_read ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>The bot can’t read the invite links</b><div class="w-sub">Give the bot’s role the <b>Manage Server</b> permission in Discord – it needs it to see which link someone used.</div></div></div>` : ''}
-    ${!V.enabled ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>Invite tracking is switched off</b><div class="w-sub">Turn it on under Features → Invites.</div></div><button class="w-btn small" data-act="goto" data-tab="features">Fix</button></div>` : ''}
+    ${!V.enabled ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>Invite tracking is switched off</b><div class="w-sub">Turn it on under Invites → Settings.</div></div><button class="w-btn small" data-act="goto" data-tab="invites" data-sub="settings">Fix</button></div>` : ''}
     <div class="w-tiles w-tiles4">${tile(V.joins30, 'Joined, last 30 days')}${tile(V.known30, 'With a known inviter', 'ok')}${tile(V.inviters, 'People who invited someone')}${tile(V.top.length ? V.top[0].regular : 0, V.top.length ? 'Top: ' + V.top[0].name : 'No inviters yet')}</div>
     <section class="w-card w-pad"><h3 class="w-h3">Carry over from Invite Tracker</h3>
       ${V.carried && V.carried.players ? html`<div class="w-banner ok" style="margin:6px 0 12px">${icon('check')}<div><b>${V.carried.players} player${V.carried.players === 1 ? '' : 's'} carried over</b><div class="w-sub">Last import ${ago(V.carried.ts)}. New joins are added on top, so nobody starts from zero.</div></div></div>`
@@ -2057,7 +2150,7 @@ function viewInsights() {
     </section>
     <section class="w-card w-pad"><h3 class="w-h3">Bugs by game version</h3>
       ${I.versions && I.versions.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Version</th><th>Reports</th><th>Fixed</th></tr></thead><tbody>
-        ${I.versions.map(v => html`<tr><td>${v.name}</td><td>${v.total}</td><td>${v.fixed}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">No versions recorded yet. Set the current version under Features.</div>`}
+        ${I.versions.map(v => html`<tr><td>${v.name}</td><td>${v.total}</td><td>${v.fixed}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">No versions recorded yet. Set the current version under Bug bot → Bug reports.</div>`}
     </section>
     <section class="w-card w-pad"><h3 class="w-h3">Top reporters</h3><p class="w-sub" style="margin-bottom:8px">“Accepted” = a moderator passed the bug on to the admins. A high share means useful reports.</p>
       ${I.reporters.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Player</th><th>Reports</th><th>Accepted</th><th>Fixed</th><th>Rejected</th><th>Quality</th></tr></thead><tbody>
@@ -2077,7 +2170,7 @@ function driveCard(G) {
       ${G.configured ? html`<button class="w-btn small primary" data-act="driveNow">${icon('upload')} Copy to Google Drive now</button>` : ''}</div>
     ${G.configured ? html`<div class="w-check"><div class="w-check-ic ${G.last_error ? 'warn' : 'ok'}">${icon(G.last_error ? 'alert' : 'check')}</div>
         <div><div class="w-check-label">Connected${G.account ? ' to ' + G.account : ''}</div>
-        <div class="w-check-detail">${G.last_ok ? 'Last copy ' + ago(G.last_ok) + ' (' + G.last_name + ')' : 'No copy yet'} · every ${S.settings.drive_every_days} day(s), newest ${S.settings.drive_keep} kept${S.settings.drive_enabled ? '' : ' · switched off under Features'}</div>
+        <div class="w-check-detail">${G.last_ok ? 'Last copy ' + ago(G.last_ok) + ' (' + G.last_name + ')' : 'No copy yet'} · every ${S.settings.drive_every_days} day(s), newest ${S.settings.drive_keep} kept${S.settings.drive_enabled ? '' : ' · switched off under Data & backups'}</div>
         ${G.last_error ? html`<div class="w-check-detail" style="color:var(--w-warn)">Last try ${ago(G.last_try)}: ${G.last_error}</div>` : ''}</div>
         ${G.folder_url ? html`<a class="w-btn small" href="${G.folder_url}" target="_blank" rel="noopener">Open folder</a>` : ''}</div>`
       : html`<p class="w-sub">Not connected. A copy of the database outside the server protects you if the server is ever lost.
@@ -2110,12 +2203,14 @@ function viewData() {
       <label class="w-inline w-hint" style="gap:6px;margin-bottom:12px"><input type="checkbox" id="da-reset" checked> Start numbering at #1 again</label>
       <div class="w-inline"><input class="w-input" id="da-confirm" placeholder="Type DELETE to confirm" autocomplete="off" style="max-width:240px">
         <button class="w-btn danger" data-act="bugDelAll">Delete all</button></div>
-    </section>`;
+    </section>${fsec('backups')}${saveBar()}`;
 }
 
 /* ---- patch notes ---- */
+const PATCH_SUBS = [['notes', 'Patch notes'], ['weekly', 'Weekly post'], ['push', 'Phone notifications']];
 function viewPatch() {
-  const P = S.patch, ch = chanName(S.settings.patchnotes_channel_id);
+  const P = S.patch, ch = chanName(S.settings.patchnotes_channel_id), sub = subOf(PATCH_SUBS);
+  if (sub !== 'notes') return html`<div class="w-pagehead"><h2>Patch notes & posts</h2><p>What the bot posts for players: patch notes with the fixed bugs, the weekly post and phone notifications.</p></div>${subTabs(PATCH_SUBS)}${isMod() ? '' : sub === 'weekly' ? html`${fsec('weekly')}<p class="w-hint" style="margin:-6px 0 14px 4px">Uses the time zone set under Bug bot → Reminders & digest.</p>` : fsec('push')}${saveBar()}`;
   if (!P) return html`<div class="w-pagehead"><h2>Patch notes</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
   const list = P.unreleased;
   const embed = list.length ? html`<div class="w-dp"><div class="w-dp-head"><img src="${S.overview.bot.avatar_url}" alt=""><div><span class="w-dp-name">${S.overview.bot.name}</span><span class="w-dp-tag">BOT</span></div></div>
@@ -2123,7 +2218,7 @@ function viewPatch() {
     <div class="w-dp-desc">${list.map(b => html`<div>• ${b.summary} <i>(#${b.id})</i></div>`)}</div>
     <div class="w-dp-foot">Thanks to everyone who reported these! · ${S.overview.bot.name}</div></div></div>` : '';
   return html`
-    <div class="w-pagehead"><h2>Patch notes</h2><p>Announce the bugs that have been fixed since the last announcement. Each bug is only announced once.</p></div>
+    <div class="w-pagehead"><h2>Patch notes & posts</h2><p>What the bot posts for players: patch notes with the fixed bugs, the weekly post and phone notifications.</p></div>${subTabs(PATCH_SUBS)}
     <div class="w-grid2">
       <section class="w-card w-pad">
         <div class="w-sec-head"><h3 class="w-h3">Waiting to be announced <span class="w-badge ${list.length ? 'ok' : 'todo'}">${list.length}</span></h3></div>
@@ -2234,8 +2329,8 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { access: viewAccess, warnings: viewWarnings, rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: viewInvites, players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
-  features: viewFeatures, welcome: viewWelcome, patch: viewPatch, mod: viewMod, bot: viewBot, data: viewData, log: viewLog };
+const VIEWS = { access: viewAccess, warnings: withSettings(viewWarnings, ['warnings'], 'Escalation settings'), rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: withSettings(viewInvites, ['invites']), players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+  features: viewPanel, welcome: viewWelcome, patch: viewPatch, mod: withSettings(viewMod, ['automod', 'guard'], 'Auto-mod & scam guard'), bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
   codes: async () => { const [c, r] = await Promise.all([call('GET', '/api/giftcodes'), call('GET', '/api/redeem').catch(() => null)]); S.codes = c; S.redeem = r; },
@@ -2245,7 +2340,6 @@ const LOADERS = {
   rolemenus: async () => { const [m, r] = await Promise.all([call('GET', '/api/rolemenus'), call('GET', '/api/roles')]); S.rm = m.items; S.roles = r.roles; },
   giveaways: async () => { const [g, r] = await Promise.all([call('GET', '/api/giveaways'), call('GET', '/api/roles').catch(() => ({ roles: [] }))]); S.gw = g.items; S.roles = r.roles; },
   timers: async () => { const [t, r] = await Promise.all([call('GET', '/api/timers'), call('GET', '/api/roles').catch(() => ({ roles: [] }))]); S.tm = t; S.roles = r.roles; },
-  features: async () => { try { S.push = isMod() ? null : await call('GET', '/api/push'); } catch (e) { S.push = null; } },
   players: async () => { const q = S.players ? S.players.q || '' : ''; S.players = Object.assign(await call('GET', '/api/links?q=' + encodeURIComponent(q)), { q }); },
   moderators: async () => { const d = S.modstats ? S.modstats.days : 30; S.modstats = await call('GET', '/api/modstats?days=' + d); },
   translations: () => loadTr(S.tr && S.tr.data ? S.tr.data.lang : null),
@@ -2256,14 +2350,84 @@ const LOADERS = {
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
   insights: async () => { S.insights = await call('GET', '/api/insights'); },
-  patch: async () => { S.patch = await call('GET', '/api/patchnotes'); },
+  patch: async () => { const [pn, pu] = await Promise.all([call('GET', '/api/patchnotes'), isMod() ? null : call('GET', '/api/push').catch(() => null)]); S.patch = pn; S.push = pu; },
   mod: async () => { const [r, b] = await Promise.all([call('GET', '/api/replies'), call('GET', '/api/blocklist')]); S.replies = r.items; S.blocks = b.items; S.webblocks = (await call('GET', '/api/webblocks')).items; }
 };
 async function loadTab(t) {
   const f = LOADERS[t]; if (!f) return;
   try { await f(); } catch (e) { toast(e.message, 'err'); }
-  if (S.tab === t && t !== 'bugs' && t !== 'suggestions') { const main = $('#wosd-main'); if (main) main.innerHTML = String(VIEWS[t]()); }
+  if (S.tab === t && t !== 'bugs' && t !== 'suggestions') paint(t);
   if (S.tab === 'bot' && t === 'bot') loadStickerImgs();
+}
+
+/* ---- live data: every tab switch fetches fresh data; the open page refreshes itself in the background ---- */
+function liveBar() {
+  return html`<div class="w-livebar" role="status"><span class="w-live-dot${S.syncing ? ' busy' : S.syncErr ? ' err' : ''}" aria-hidden="true"></span>
+    <span id="w-updated">${liveText()}</span><button class="w-btn small" data-act="refresh" title="Get the newest data now">${icon('refresh')} Refresh</button></div>`;
+}
+function liveText() {
+  if (S.syncing) return 'Updating…';
+  if (S.syncErr) return 'Offline – retrying';
+  if (!S.syncedAt) return 'Live';
+  const s = Math.round((Date.now() - S.syncedAt) / 1000);
+  return 'Updated ' + (s < 5 ? 'just now' : s < 60 ? s + ' s ago' : Math.round(s / 60) + ' min ago');
+}
+function setLive() {
+  const bar = $('.w-livebar'); if (!bar) return;
+  bar.querySelector('#w-updated').textContent = liveText();
+  bar.querySelector('.w-live-dot').className = 'w-live-dot' + (S.syncing ? ' busy' : S.syncErr ? ' err' : '');
+}
+function paint(t) {
+  const m = $('#wosd-main'); if (!m) return;
+  m.innerHTML = String(liveBar()) + String(VIEWS[t || S.tab]());
+  if ($('#savebar')) updateSaveBar();
+  if (S.tab === 'log') renderLogList();
+  if (S.tab === 'bugs' && S.bugs.items) renderBugList();
+  if (S.tab === 'suggestions' && S.sugs.items) renderSugList();
+}
+// True while someone is typing or has something open – then new data waits instead of wiping their input.
+function editing() {
+  const m = $('#wosd-main'); if (!m) return false;
+  if ($('#wmodal') || S.tmEdit || S.rmEdit || S.replyEdit) return true;
+  const a = document.activeElement;
+  if (a && m.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
+  return [...m.querySelectorAll('input:not([type=checkbox]):not([type=radio]), textarea')].some(e => e.value !== e.defaultValue)
+    || [...m.querySelectorAll('select:not([multiple])')].some(e => { const d = [...e.options].findIndex(o => o.defaultSelected); return e.selectedIndex !== (d < 0 ? 0 : d); });
+}
+async function syncCore() {
+  const [overview, health, st, ch] = await Promise.all([call('GET', '/api/overview'), call('GET', '/api/health'),
+    call('GET', '/api/settings'), call('GET', '/api/channels')]);
+  S.overview = overview; S.health = health; S.channels = ch.channels;
+  if (st) {   // keep unsaved changes, take everything else from the server
+    const fresh = st.settings;
+    Object.keys(fresh).forEach(k => { if (S.draft[k] === S.settings[k]) S.draft[k] = fresh[k]; });
+    S.settings = fresh; S.panelInfo = st.panel;
+  }
+  S.coreAt = Date.now();
+}
+let syncSeq = 0;
+async function syncTab(manual) {
+  const t = S.tab, n = ++syncSeq;
+  S.syncing = true; S.syncErr = false; setLive();
+  try {
+    const list = t === 'bugs' || t === 'suggestions';
+    const listOk = list && !(t === 'bugs' ? S.bugs.selecting || S.bugs.items.length > 25 : S.sugs.selecting || S.sugs.items.length > 25);
+    await Promise.all([manual || Date.now() - (S.coreAt || 0) > 4000 ? syncCore() : null,
+      !list && LOADERS[t] ? LOADERS[t]() : null,
+      listOk && (manual || !editing()) ? (t === 'bugs' ? loadBugs(true) : loadSugs(true)) : null]);
+  } catch (e) { S.syncErr = true; if (manual) toast(e.message, 'err'); }
+  S.syncing = false;
+  if (n !== syncSeq) return;
+  if (!S.syncErr) S.syncedAt = Date.now();
+  const busyEditing = editing();
+  if (S.tab === t && !busyEditing) { paint(t); const tb = $('.w-tabbar'); if (tb && S.overview) tb.outerHTML = String(tabBar()); refreshNavCount(); }
+  else { setLive(); refreshNavCount(); if (manual && busyEditing) toast('Got the newest data – the page updates when you’ve finished editing.'); }
+  if (S.tab === 'bot' && t === 'bot') loadStickerImgs();
+}
+function refreshNavCount() {
+  const n = S.overview && S.overview.stats.bugs.awaiting, b = $('.w-nav [data-tab="bugs"]'); if (!b) return;
+  let em = b.querySelector('.w-count'); if (!n) { if (em) em.remove(); return; }
+  if (!em) { em = document.createElement('em'); em.className = 'w-count'; b.appendChild(em); } em.textContent = n;
 }
 
 // Number ticker: the overview numbers count up once per visit (skipped when the person prefers less motion).
@@ -2282,14 +2446,13 @@ function tick(scope) {
 }
 function renderTab() {
   const main = $('#wosd-main'); if (!main) return;
-  main.innerHTML = String(VIEWS[S.tab]());
+  paint(S.tab);
   if (S.tab === 'overview') tick(main);
   $$('.w-nav button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === S.tab)));
   closeSheet(); const tb = $('.w-tabbar'); if (tb && S.overview) tb.outerHTML = String(tabBar());
   window.scrollTo({ top: 0 });
   if (S.tab === 'log') { renderLogList(); loadLogs(true, true); }
-  loadTab(S.tab);
-  if (['channels', 'features', 'welcome'].includes(S.tab)) updateSaveBar();
+  syncTab(false);                       // fresh data every time a page is opened
 }
 const STAFF_ICON = 'data:image/png;base64,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';
 const PHONE_TABS = ['overview', 'bugs', 'suggestions', 'codes'];
@@ -2351,7 +2514,6 @@ function renderApp() {
           ${NAV.filter(n => !isMod() || MOD_TABS.includes(n[0])).map((n, i, list) => html`${i === 0 || list[i - 1][3] !== n[3] ? html`<div class="w-navgroup" role="presentation">${n[3]}</div>` : ''}<button role="tab" data-act="nav" data-tab="${n[0]}" aria-selected="${String(n[0] === S.tab)}">${icon(n[2])}<span>${n[1]}</span>${n[0] === 'bugs' && o.stats.bugs.awaiting ? html`<em class="w-count">${o.stats.bugs.awaiting}</em>` : ''}</button>`)}
         </nav>
         <div class="w-sidefoot">
-          <button class="w-btn small" data-act="refresh">${icon('refresh')} Refresh</button>
           <button class="w-btn small" data-act="logout">${S.user ? 'Log out' : 'Disconnect'}</button>
         </div>
       </aside>
@@ -2410,16 +2572,15 @@ async function refreshLive() {
   S.overview = overview; S.health = health;
 }
 function startPolling() {
-  clearInterval(S.timer);
-  S.timer = setInterval(async () => {
+  clearInterval(S.timer); clearInterval(S.liveTimer);
+  S.timer = setInterval(() => {
     if (document.hidden || !S.key && !S.demo && !S.user) return;
-    try {
-      if (S.tab === 'log' && S.log.auto && S.log.items.length <= 50) loadLogs(true, true);
-      else if (S.tab === 'overview') { await refreshLive(); if (S.tab === 'overview') renderTab(); }
-      else if (S.tab === 'status') { S.status = await call('GET', '/api/status'); if (S.tab === 'status') renderMain(); }
-    } catch (e) { /* ignore polling errors */ }
+    if (S.tab === 'log') { if (S.log.auto && S.log.items.length <= 50) loadLogs(true, true); return; }
+    syncTab(false).catch(() => {});
   }, CFG.pollMs);
+  S.liveTimer = setInterval(setLive, 5000);
 }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.overview && $('#wosd-main')) syncTab(false); });
 
 /* ================================================================ actions */
 async function saveSettings(btn) {
@@ -2505,7 +2666,8 @@ root.addEventListener('click', async e => {
   const el = e.target.closest('[data-act]'); if (!el) return;
   const act = el.dataset.act;
   try {
-    if (act === 'nav' || act === 'goto') { S.tab = el.dataset.tab; renderTab(); }
+    if (act === 'nav' || act === 'goto') { S.tab = el.dataset.tab; if (el.dataset.sub) { S.sub = S.sub || {}; S.sub[S.tab] = el.dataset.sub; } renderTab(); }
+    else if (act === 'sub') { S.sub = S.sub || {}; S.sub[S.tab] = el.dataset.v; renderMain(); updateSaveBar(); }
     else if (act === 'sheet') openSheet();
     else if (act === 'caseSearch') { S.cases.q = $('#cs-q').value.trim(); loadTab('warnings'); }
     else if (act === 'caseWarn') {
@@ -2549,8 +2711,10 @@ root.addEventListener('click', async e => {
       catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'tmNew') { S.tmEdit = tmBlank(el.dataset.preset); renderMain(); }
-    else if (act === 'tmEdit') { S.tmEdit = JSON.parse(JSON.stringify(S.tm.items.find(x => x.id === +el.dataset.id))); renderMain(); $('#tm-edit').scrollIntoView({ block: 'start' }); }
+    else if (act === 'tmEdit') { S.tmEdit = JSON.parse(JSON.stringify(S.tm.items.find(x => x.id === +el.dataset.id))); if (S.tmEdit.kind === 'once' && !S.tmEdit.next_run) S.tmEdit.at = tmSoon(); renderMain(); $('#tm-edit').scrollIntoView({ block: 'start' }); }
+    else if (act === 'codeBulkToggle') { S.codeBulk = !S.codeBulk; renderMain(); }
     else if (act === 'tmCancel') { S.tmEdit = null; renderMain(); }
+    else if (act === 'tmKindPick') { tmCollect(); const E = S.tmEdit; E.kind = el.dataset.k; E.at = E.kind === 'once' ? (/T/.test(E.at || '') ? E.at : tmSoon()) : E.kind === 'daily' ? (/^\d\d:\d\d$/.test(E.at || '') ? E.at : '18:00') : E.at; renderMain(); }
     else if (act === 'tmDay') { tmCollect(); const d = el.dataset.d, L = S.tmEdit.days; S.tmEdit.days = L.includes(d) ? L.filter(x => x !== d) : L.concat(d); renderMain(); }
     else if (act === 'tmSave') {
       tmCollect(); const E = S.tmEdit;
@@ -2614,7 +2778,7 @@ root.addEventListener('click', async e => {
     else if (act === 'scrollSetup') { const x = $('#setup'); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     else if (act === 'logout') logout();
     else if (act === 'demo') connect('', '', true);
-    else if (act === 'refresh') { await refreshLive(); renderApp(); toast('Refreshed.'); }
+    else if (act === 'refresh') { await syncTab(true); }
     else if (act === 'save') saveSettings(el);
     else if (act === 'discard') { S.draft = Object.assign({}, S.settings); renderTab(); }
     else if (act === 'publish') publishPanel(el);
@@ -2988,7 +3152,7 @@ root.addEventListener('click', async e => {
   } catch (err) { toast(err.message, 'err'); }
 });
 function confirmLeave() { toast('Save or discard your translation changes first.', 'warn'); return false; }
-function renderMain() { const m = $('#wosd-main'); if (m) m.innerHTML = String(VIEWS[S.tab]()); }
+function renderMain() { paint(S.tab); }
 async function downloadBackup(name) {
   if (S.demo) return toast('Downloads are not available in the demo.', 'warn');
   let res;
@@ -3082,7 +3246,6 @@ function onInput(e) {
     S.bugs[el.id === 'bugarea' ? 'area' : 'severity'] = el.value; loadBugs(true);
   } else if (el.id === 'bugver') {
     clearTimeout(logTimer); logTimer = setTimeout(() => { S.bugs.version = el.value.trim(); loadBugs(true); }, 300);
-  } else if (el.id === 'tm-kind') { tmCollect(); S.tmEdit.kind = el.value; renderMain();
   } else if (el.classList.contains('acc-on')) {
     el.closest('.w-acc-row').classList.toggle('off', !el.checked);
   } else if (el.dataset.actChange === 'trLang') {
@@ -3197,7 +3360,9 @@ function makeMock() {
     .map((c, i) => ({ id: 30 - i, user_id: '9' + i, user: c[0], kind: c[1], reason: c[2], moderator: c[3], ts: now - i * 5000, minutes: c[1] === 'timeout' ? 60 : null, active: c[4], auto: c[3] === 'Auto-mod', warnings: c[5] }));
   const gws = [{ id: 2, prize: '1,000 gems', winners: 2, ends_at: now + 86400, ended: false, channel_id: '1006', role_id: null, host: 'Kasper', entries: 0, winner_names: [], url: '#' },
     { id: 1, prize: 'Pet food bundle', winners: 1, ends_at: now - 86400 * 2, ended: true, channel_id: '1006', role_id: null, host: 'Kasper', entries: 84, winner_names: ['Jonas'], url: '#' }];
-  const tms = [{ id: 1, name: 'Bear Hunt reminder', channel_id: '1006', content: '🐻 **Bear Hunt starts in 30 minutes!** Get your rallies ready, chiefs.', kind: 'daily', at: '19:30', days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], every_minutes: null, role_id: '507', delete_previous: true, enabled: true, next_run: now + 4 * 3600, last_run: now - 20 * 3600 }];
+  const tms = [{ id: 2, name: 'SvS starts', channel_id: '1006', content: '⚔️ **SvS starts in 1 hour!** Shields up, chiefs.', kind: 'once', at: new Date((now + 2 * 86400) * 1000).toISOString().slice(0, 13) + ':00', days: [], every_minutes: null, role_id: '', delete_previous: false, enabled: true, next_run: now + 2 * 86400, last_run: null },
+    { id: 3, name: 'Maintenance notice', channel_id: '1006', content: '🔧 Short maintenance at 14:00.', kind: 'once', at: '2026-11-01T13:00', days: [], every_minutes: null, role_id: '', delete_previous: false, enabled: true, next_run: null, last_run: now - 6 * 86400 },
+    { id: 1, name: 'Bear Hunt reminder', channel_id: '1006', content: '🐻 **Bear Hunt starts in 30 minutes!** Get your rallies ready, chiefs.', kind: 'daily', at: '19:30', days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], every_minutes: null, role_id: '507', delete_previous: true, enabled: true, next_run: now + 4 * 3600, last_run: now - 20 * 3600 }];
   const links = Array.from({ length: 14 }, (_, i) => ({ discord_id: '7000' + i, name: NAMES[i % 8], uid: String(41000000 + i * 7919), chief: 'Chief ' + NAMES[i % 8], ts: now - i * 86400 * 2, bugs: i % 4, redeemed: 30 + i % 9 }));
   const rdm = { settings: { redeem_enabled: false, redeem_url: '', redeem_method: 'POST', redeem_body: '{"uid": "{uid}", "code": "{code}"}', redeem_ok_text: '', redeem_already_text: 'already', redeem_delay: 2, redeem_dm: false },
     header_set: false, linked: 14, codes: [{ code: 'WOSEU1GIFT', ok: 12, already: 1, failed: 1 }, { code: 'FROST500K', ok: 13, already: 0, failed: 0 }],
@@ -3298,7 +3463,7 @@ function makeMock() {
     if (p === '/api/giveaways') { const g = { id: gws.length + 1, prize: body.prize, winners: body.winners, ends_at: now + body.minutes * 60, ended: false, channel_id: body.channel_id, role_id: body.role_id, host: 'Dashboard', entries: 0, winner_names: [], url: '#' }; gws.unshift(g); return g; }
     { const mg = p.match(/^\/api\/giveaways\/(\d+)\/(end|reroll)$/); if (mg) { const g = gws.find(x => x.id === +mg[1]); g.ended = true; g.entries = 57; g.winner_names = mg[2] === 'reroll' ? ['Freja'] : ['Mira']; return g; } }
     if (p === '/api/timers' && method === 'GET') return { items: tms, timezone: 'Europe/Copenhagen' };
-    if (p === '/api/timers') { const t = Object.assign({}, body, { id: body.id || tms.length + 1, next_run: now + 3600 * 5 }); const i = tms.findIndex(x => x.id === t.id); if (i >= 0) tms[i] = t; else tms.push(t); return t; }
+    if (p === '/api/timers') { const t = Object.assign({}, body, { id: body.id || tms.length + 1, next_run: body.kind === 'once' ? Math.floor(new Date(body.at).getTime() / 1000) : now + 3600 * 5 }); const i = tms.findIndex(x => x.id === t.id); if (i >= 0) tms[i] = t; else tms.push(t); return t; }
     { const mt = p.match(/^\/api\/timers\/(\d+)(\/send)?$/); if (mt) { if (!mt[2]) { const i = tms.findIndex(x => x.id === +mt[1]); if (i >= 0) tms.splice(i, 1); } return { ok: true }; } }
     if (p === '/api/push' && method === 'GET') return { enabled: true, ready: true, total: 142, codes: 142, news: 118 };
     if (p === '/api/push/send') return { sent: 139, gone: 2, failed: 1 };
