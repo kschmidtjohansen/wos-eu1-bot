@@ -167,6 +167,12 @@ cat > /usr/local/bin/wosbot-login <<EOF2
 exec sudo -u $SVC python3 $APP/deploy/login-link.py $APP/bugs.db
 EOF2
 chmod 755 /usr/local/bin/wosbot-login
+# Staff page: always fetch the newest version (browsers otherwise keep an old copy after an update)
+if [[ -f /etc/nginx/snippets/wos-bot.conf ]] && ! grep -q 'no-cache' /etc/nginx/snippets/wos-bot.conf; then
+  cp -p /etc/nginx/snippets/wos-bot.conf /tmp/wos-bot.conf.bak
+  sed -i 's|location ^~ /staff/ { alias \([^;]*\); index index.html;|location ^~ /staff/ { alias \1; index index.html; add_header Cache-Control "no-cache";|' /etc/nginx/snippets/wos-bot.conf
+  if nginx -t >/dev/null 2>&1; then systemctl reload nginx; else cp -p /tmp/wos-bot.conf.bak /etc/nginx/snippets/wos-bot.conf; fi
+fi
 if [[ -f /etc/wos-staff.htpasswd ]]; then          # the old extra username + password in front of /staff/ – removed
   for f in /etc/nginx/snippets/wos-bot.conf /etc/apache2/conf-available/wos-bot.conf; do
     [[ -f $f ]] || continue

@@ -123,7 +123,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console"}
     # Moderators get the bug dashboard only: read bugs and stats, handle bugs. Nothing that changes the bot.
     MOD_READ = [r"/api/overview", r"/api/health", r"/api/channels", r"/api/settings", r"/api/bot", r"/api/status", r"/api/insights",
-                r"/api/modstats", r"/api/bugs", r"/api/bugs/\d+", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles"]
+                r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles"]
     MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/translate")]
     SECRET_SETTING = re.compile(r"(header|secret|token|key|webhook|url)", re.I)
     DEFAULT_STAFF_ROLES = {"admin": ["Admin", "Boss", "Developer"], "mod": ["Senior Moderator", "Moderator"]}
@@ -446,10 +446,21 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         severity = q.get("severity") or None
         if severity and severity not in store.SEVERITIES:
             raise ApiError(400, "Unknown severity.")
+        mine = q.get("mine") == "1" and request.get("actor_id") is not None
         rows, total, counts = store.query_bugs(status, (q.get("q") or "").strip()[:100] or None, limit, offset,
                                                (q.get("area") or "")[:40] or None, (q.get("version") or "")[:30] or None,
-                                               severity)
+                                               severity, request.get("actor_id") if mine else None)
         return web.json_response({"items": [bug_dict(r) for r in rows], "total": total, "counts": counts})
+
+    @routes.get("/api/mybugs")
+    async def my_bugs(request):
+        """The logged-in staff member's own work: bugs they handled and where those bugs are now."""
+        uid = request.get("actor_id")
+        if uid is None:
+            return web.json_response({"total": 0, "week": 0, "status_now": {}, "actions": {}, "recent": []})
+        d = store.my_bugs(uid)
+        d["recent"] = [{**bug_dict(r), "my_action": r["my_action"], "my_ts": r["my_ts"]} for r in d["recent"]]
+        return web.json_response(d)
 
     @routes.get("/api/bugs/{id}")
     async def get_bug(request):

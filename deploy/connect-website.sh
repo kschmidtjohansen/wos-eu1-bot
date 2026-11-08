@@ -188,7 +188,7 @@ if [[ "$WEB" == nginx ]]; then
     if ((STAFF_AUTH)); then
       echo "location ^~ /staff/ { alias $WWW/staff/; index index.html; auth_basic \"Staff\"; auth_basic_user_file /etc/wos-staff.htpasswd; }"
     else
-      echo "location ^~ /staff/ { alias $WWW/staff/; index index.html; }"
+      echo "location ^~ /staff/ { alias $WWW/staff/; index index.html; add_header Cache-Control \"no-cache\"; }"
     fi
   } > $SNIP
   PATTERN='server[[:space:]]*\{'

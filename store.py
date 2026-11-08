@@ -610,6 +610,21 @@ def record_action(kind: str, item_id: int, action: str, actor_id=None, actor_nam
     db.commit()
 
 
+def my_bugs(actor_id: int, limit: int = 15) -> dict:
+    """What one moderator/admin has handled: each bug once, with its status now and their last action on it."""
+    rows = db.execute("SELECT b.*, a.action AS my_action, a.ts AS my_ts FROM bug_reports b JOIN "
+                      "(SELECT item_id, action, ts FROM actions WHERE id IN (SELECT MAX(id) FROM actions WHERE kind='bug' AND actor_id=? "
+                      "GROUP BY item_id)) a ON a.item_id=b.id ORDER BY a.ts DESC", (actor_id,)).fetchall()
+    now_status = {}
+    for r in rows:
+        now_status[r["status"]] = now_status.get(r["status"], 0) + 1
+    did = {r["action"]: r["n"] for r in db.execute(
+        "SELECT action, COUNT(*) AS n FROM actions WHERE kind='bug' AND actor_id=? GROUP BY action", (actor_id,))}
+    week = db.execute("SELECT COUNT(DISTINCT item_id) FROM actions WHERE kind='bug' AND actor_id=? AND ts>=?",
+                      (actor_id, int(time.time()) - 7 * 86400)).fetchone()[0]
+    return {"total": len(rows), "week": week, "status_now": now_status, "actions": did, "recent": rows[:limit]}
+
+
 def bug_actions(bug_id: int):
     return db.execute("SELECT * FROM actions WHERE kind='bug' AND item_id=? ORDER BY id", (bug_id,)).fetchall()
 
@@ -645,8 +660,11 @@ def bug_summary(r) -> str:
 BUG_STATUSES = ("new", "investigating", "passed", "rejected", "being_investigated", "fixed", "admin_rejected")
 
 
-def query_bugs(status=None, q=None, limit=50, offset=0, area=None, version=None, severity=None):
+def query_bugs(status=None, q=None, limit=50, offset=0, area=None, version=None, severity=None, handled_by=None):
     where, args = [], []
+    if handled_by is not None:              # "Handled by me": bugs this staff member did something with
+        where.append("id IN (SELECT item_id FROM actions WHERE kind='bug' AND actor_id=?)")
+        args.append(handled_by)
     for col, val in (('area', area), ('game_version', version), ('severity', severity)):
         if val:
             where.append(f'{col}=?')

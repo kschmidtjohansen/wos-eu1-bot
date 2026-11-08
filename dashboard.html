@@ -878,6 +878,20 @@ function channelOptions(sel) {
 const dirtyKeys = () => GROUP.filter(k => S.draft[k] !== S.settings[k]);
 
 /* ================================================================ views */
+// "Your bugs": what this moderator handled, and where those bugs are now.
+function myWork() {
+  const M = S.mybugs; if (!M || !M.status_now) return '';
+  const n = (...k) => k.reduce((a, x) => a + (M.status_now[x] || 0), 0);
+  const tiles = [[M.total, 'Bugs you handled', ''], [M.week, 'This week', ''], [n('passed', 'being_investigated'), 'Now with admins', ''],
+    [n('fixed'), 'Fixed', 'ok'], [n('rejected', 'admin_rejected'), 'Rejected', 'bad'], [n('new', 'investigating'), 'Still open', 'warn']];
+  return html`<div class="w-tilegroup"><div class="w-group-title">Your bugs</div>
+    ${M.total ? html`<div class="w-tiles">${tiles.map(t => html`<div class="w-card w-tile ${t[2]}"><b>${t[0]}</b><span>${t[1]}</span></div>`)}</div>
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Handled by you</h3><button class="w-btn small" data-act="bugsMine">See all ${M.total}</button></div>
+      ${M.recent.map(b => html`<div class="w-bugrow" role="button" tabindex="0" data-act="bugOpen" data-id="${b.id}"><b>#${b.id}</b>
+        <span class="w-bugsum">${b.summary}<span class="w-hint" style="display:block">You: ${ACTION_LABEL[b.my_action] || b.my_action} · ${ago(b.my_ts)}</span></span>
+        ${bugBadge(b.status)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}</section>`
+      : html`<div class="w-card w-pad w-empty">You haven’t handled any bugs yet. When you pass, reject or reply to a bug – in Discord or here – it shows up here with where it is now.</div>`}</div>`;
+}
 // Bug stats on the moderators' dashboard (from /api/insights).
 function modStats() {
   const I = S.insights; if (!I || !I.weeks) return '';
@@ -946,7 +960,8 @@ function viewOverview() {
         </div>
       </section>
     </div>
-    <div class="w-tilegroup"><div class="w-group-title">Bug reports</div><div class="w-tiles">${bugTiles.map(tile)}</div></div>
+    ${isMod() ? myWork() : ''}
+    <div class="w-tilegroup"><div class="w-group-title">${isMod() ? 'All bug reports' : 'Bug reports'}</div><div class="w-tiles">${bugTiles.map(tile)}</div></div>
     ${isMod() ? modStats() : ''}
     ${isMod() ? '' : html`<div class="w-tilegroup"><div class="w-group-title">Suggestions</div><div class="w-tiles w-tiles4">${sugTiles.map(tile)}</div></div>`}
     ${isMod() ? '' : html`<section class="w-card w-pad" id="setup">
@@ -1359,10 +1374,11 @@ const SEV = { critical: '🚨 Critical', major: '🟠 Major', minor: '🟡 Minor
 const areaList = () => String((S.settings && S.settings.bug_areas) || '').split('\n').map(x => x.trim()).filter(Boolean);
 function bugChips() {
   const B = S.bugs, total = Object.values(B.counts).reduce((a, b) => a + b, 0);
-  return html`<button class="w-chip" data-act="bugStatus" data-s="" aria-pressed="${String(B.status === '')}">All ${total}</button>
+  return html`${S.user ? html`<button class="w-chip" data-act="bugMine" aria-pressed="${String(!!B.mine)}">👤 Handled by me${B.mine ? ' · ' + B.total : ''}</button>` : ''}<button class="w-chip" data-act="bugStatus" data-s="" aria-pressed="${String(B.status === '')}">All ${total}</button>
     ${Object.keys(BUG_LABEL).map(s => html`<button class="w-chip" data-act="bugStatus" data-s="${s}" aria-pressed="${String(B.status === s)}">${BUG_LABEL[s]} ${B.counts[s] || 0}</button>`)}`;
 }
 function bugList() {
+  if (S.bugs.error && !S.bugs.items.length) return html`<div class="w-error" role="alert">Couldn’t load the bugs: ${S.bugs.error}</div>`;
   const B = S.bugs;
   if (!B.items.length) return html`<div class="w-empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`;
   return html`${B.items.map(b => html`<div class="w-bugrow${B.selecting ? ' sel' : ''}" role="button" tabindex="0" data-act="${B.selecting ? 'bugPick' : 'bugOpen'}" data-id="${b.id}" data-sev="${b.severity || ''}"${B.selecting ? html` aria-pressed="${String(B.sel.includes(b.id))}"` : ''}>
@@ -1426,10 +1442,11 @@ async function loadBugs(reset) {
     const qs = new URLSearchParams({ limit: '25', offset: String(reset ? 0 : B.items.length) });
     if (B.status) qs.set('status', B.status);
     if (B.q) qs.set('q', B.q);
+    if (B.mine) qs.set('mine', '1');
     ['area', 'version', 'severity'].forEach(k => { if (B[k]) qs.set(k, B[k]); });
     const r = await call('GET', '/api/bugs?' + qs);
-    B.items = reset ? r.items : B.items.concat(r.items); B.total = r.total; B.counts = r.counts;
-  } catch (e) { toast(e.message, 'err'); }
+    B.items = reset ? r.items : B.items.concat(r.items); B.total = r.total; B.counts = r.counts; B.error = '';
+  } catch (e) { B.error = e.message; toast(e.message, 'err'); }
   B.loading = false; renderBugList();
 }
 // Ready reasons the player sees when a report is closed (same list as the Discord buttons).
@@ -2417,7 +2434,7 @@ const LOADERS = {
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
   insights: async () => { S.insights = await call('GET', '/api/insights'); },
-  overview: async () => { if (isMod()) S.insights = await call('GET', '/api/insights'); },
+  overview: async () => { if (isMod()) { const [i, m] = await Promise.all([call('GET', '/api/insights'), call('GET', '/api/mybugs')]); S.insights = i; S.mybugs = m; } },
   patch: async () => { const [pn, pu] = await Promise.all([call('GET', '/api/patchnotes'), isMod() ? null : call('GET', '/api/push').catch(() => null)]); S.patch = pn; S.push = pu; },
   mod: async () => { const [r, b] = await Promise.all([call('GET', '/api/replies'), call('GET', '/api/blocklist')]); S.replies = r.items; S.blocks = b.items; S.webblocks = (await call('GET', '/api/webblocks')).items; }
 };
@@ -2474,7 +2491,7 @@ async function syncCore() {
   S.coreAt = Date.now();
 }
 let syncSeq = 0;
-async function syncTab(manual) {
+async function syncTab(manual, opened) {
   const t = S.tab, n = ++syncSeq;
   S.syncing = true; S.syncErr = false; setLive();
   try {
@@ -2482,10 +2499,11 @@ async function syncTab(manual) {
     const listOk = list && !(t === 'bugs' ? S.bugs.selecting || S.bugs.items.length > 25 : S.sugs.selecting || S.sugs.items.length > 25);
     await Promise.all([manual || Date.now() - (S.coreAt || 0) > 4000 ? syncCore() : null,
       !list && LOADERS[t] ? LOADERS[t]() : null,
-      listOk && (manual || !editing()) ? (t === 'bugs' ? loadBugs(true) : loadSugs(true)) : null]);
+      listOk && (manual || opened || !editing()) ? (t === 'bugs' ? loadBugs(true) : loadSugs(true)) : null]);
   } catch (e) { S.syncErr = true; if (manual) toast(e.message, 'err'); }
   S.syncing = false;
   if (n !== syncSeq) return;
+  if (opened && S.tab === t) { paint(t); setLive(); refreshNavCount(); return; }   // just opened: nothing typed yet, show the fresh data
   if (!S.syncErr) S.syncedAt = Date.now();
   const busyEditing = editing();
   if (S.tab === t && !busyEditing) { paint(t); const tb = $('.w-tabbar'); if (tb && S.overview) tb.outerHTML = String(tabBar()); refreshNavCount(); }
@@ -2521,7 +2539,7 @@ function renderTab() {
   closeSheet(); const tb = $('.w-tabbar'); if (tb && S.overview) tb.outerHTML = String(tabBar());
   window.scrollTo({ top: 0 });
   if (S.tab === 'log') { renderLogList(); loadLogs(true, true); }
-  syncTab(false);                       // fresh data every time a page is opened
+  syncTab(false, true);                 // fresh data every time a page is opened
 }
 const STAFF_ICON = 'data:image/png;base64,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';
 const PHONE_TABS = ['overview', 'bugs', 'suggestions', 'codes'];
@@ -2880,6 +2898,8 @@ root.addEventListener('click', async e => {
     else if (act === 'modalBg') { if (e.target === el) closeModal(); }
     else if (act === 'closeModal') closeModal();
     else if (act === 'bugStatus') { S.bugs.status = el.dataset.s; loadBugs(true); }
+    else if (act === 'bugMine') { S.bugs.mine = !S.bugs.mine; loadBugs(true); }
+    else if (act === 'bugsMine') { S.bugs.mine = true; S.bugs.status = ''; S.tab = 'bugs'; renderTab(); }
     else if (act === 'bugsRefresh') loadBugs(true);
     else if (act === 'bugsMore') loadBugs(false);
     else if (act === 'bugOpen') await openBug(parseInt(el.dataset.id, 10));
@@ -3519,6 +3539,9 @@ function makeMock() {
       if (p === '/api/access/unlock') { C.locked = false; }
       return JSON.parse(JSON.stringify(A));
     }
+    if (p === '/api/mybugs') { const mine = bugs.slice(0, 7); const st = {}; mine.forEach(b => { st[b.status] = (st[b.status] || 0) + 1; });
+      return { total: mine.length, week: 4, status_now: st, actions: { passed: 4, rejected: 2, replied: 1 },
+        recent: mine.map((b, i) => Object.assign(briefBug(b), { status: b.status, created_at: b.created_at, my_action: ['passed', 'rejected', 'passed', 'replied', 'passed', 'rejected', 'passed'][i], my_ts: Math.floor(Date.now() / 1000) - i * 5400 })) }; }
     if (p === '/api/roles') return { roles: [['Admin', false], ['Moderator', false], ['FRZ Alliance', true], ['ICE Alliance', true], ['WLF Alliance', true], ['Polski', true], ['English', true], ['Bear pings', true], ['SvS pings', true], ['Gift code pings', true]].map((r, i) => ({ id: String(500 + i), name: r[0], color: null, assignable: r[1] })) };
     if (p === '/api/rolemenus' && method === 'GET') return { items: rmenus };
     if (p === '/api/rolemenus') { const m = Object.assign({}, body, { id: body.id || rmenus.length + 1, url: '#' }); const i = rmenus.findIndex(x => x.id === m.id); if (i >= 0) rmenus[i] = m; else rmenus.push(m); return m; }
