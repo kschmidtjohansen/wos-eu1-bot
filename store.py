@@ -366,6 +366,7 @@ SCHEMA = {
     "giftcodes_new_hours": {"type": "int", "default": 24, "min": 1, "max": 168},
     "giftcodes_delete_expired": {"type": "bool", "default": True},
     "giftcodes_list": {"type": "bool", "default": True},
+    "giftcodes_site_url": {"type": "text", "default": "", "min": 0, "max": 300},
     "board_channel_id": {"type": "channel", "default": None},
     "redeem_enabled": {"type": "bool", "default": False},
     "redeem_url": {"type": "text", "default": "", "min": 0, "max": 500},

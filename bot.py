@@ -1393,6 +1393,8 @@ class WosBot(discord.Client):
             backup_loop.start()
         if not schedule_loop.is_running():
             schedule_loop.start()
+        if not gift_loop.is_running():
+            gift_loop.start()
 
         if DASHBOARD_API_KEY:
             if len(DASHBOARD_API_KEY) < 20:
@@ -1409,7 +1411,7 @@ class WosBot(discord.Client):
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
                          "drive_backup": drive_backup, "fill_translations": fill_translations,
-                         "publish_info": publish_info, "refresh_gift_list": safe_refresh_gift_list,
+                         "publish_info": publish_info, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
                          "refresh_board": safe_refresh_board, "redeem_one": redeem_one, "start_redeem": start_redeem,
                          "redeem_ready": redeem_ready}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
@@ -2181,7 +2183,12 @@ async def check_info_tickets(now: Optional[float] = None):
 
 
 # ------------------------------------------------------------- gift codes
+# Flow: new codes get their own announcement (code blocks + Copy button) for the "new" period (24 h by default,
+# the same as the website's "New" section). After that they leave the announcement – which is deleted when it
+# is empty – and join the "Active gift codes" list. An expired code disappears from wherever it is.
+
 def gift_embed(r, state: Optional[str] = None, lang: Optional[str] = None) -> discord.Embed:
+    """Embed for one code (used by /codes-style displays and tests)."""
     state = state or store.gift_code_state(r)
     if state == "expired":
         e = discord.Embed(title=T("gift.expired", lang), description=f"~~`{r['code']}`~~", color=0x5C6370)
@@ -2189,11 +2196,7 @@ def gift_embed(r, state: Optional[str] = None, lang: Optional[str] = None) -> di
         e = discord.Embed(title=T("gift.new", lang), description=f"## `{r['code']}`", color=0xF1C40F)
     if r["reward"]:
         e.add_field(name=T("gift.reward", lang), value=r["reward"], inline=False)
-    if r["expires_at"]:
-        e.add_field(name=T("gift.expired_at" if state == "expired" else "gift.valid", lang),
-                    value=f"<t:{r['expires_at']}:f>" + ("" if state == "expired" else f" (<t:{r['expires_at']}:R>)"), inline=False)
-    else:
-        e.add_field(name=T("gift.valid", lang), value=T("gift.never", lang), inline=False)
+    e.add_field(name=T("gift.valid", lang), value=(f"<t:{r['expires_at']}:f>" if r["expires_at"] else T("gift.never", lang)), inline=False)
     e.set_footer(text=f"{brand()} · {T('gift.footer', lang)}")
     return e
 
@@ -2210,52 +2213,191 @@ def gift_ping():
     return None, discord.AllowedMentions.none()
 
 
-async def add_gift_code(code: str, reward: str, hours, by_name: str, by_id=None, announce: bool = True):
-    """Save a code and announce it. Returns (row, warning or None)."""
-    r = store.add_gift_code(code, reward, hours, by_name)
+def gift_block(r) -> str:
+    """One code in code format, with its reward and time left underneath."""
+    info = []
+    if r["reward"]:
+        info.append(f"🎁 {r['reward']}")
+    if r["expires_at"]:
+        t = r["expires_at"]
+        info.append("⏳ " + T("gift.until", time=f"<t:{t}:f>", relative=f"<t:{t}:R>"))
+    else:
+        info.append("♾️ " + T("gift.never"))
+    return f"```\n{r['code']}\n```-# {' · '.join(info)}\n"
+
+
+def _chunks(head: str, blocks: list, tail: str = "", limit: int = 1950) -> list:
+    """Split blocks over as few messages as possible (Discord allows 2,000 characters per message)."""
+    out, cur = [], head
+    for b in blocks:
+        if len(cur) + len(b) > limit - len(tail):
+            out.append(cur)
+            cur = ""
+        cur += b
+    out.append(cur + tail)
+    return out
+
+
+def site_url() -> Optional[str]:
+    u = (cfg("giftcodes_site_url") or "").strip()
+    return u if u.lower().startswith(("http://", "https://")) else None
+
+
+def announced_rows(msg_id: int, now=None):
+    """Codes that still belong in this announcement: active and still new."""
+    now = now or int(time.time())
+    return [r for r in db.execute("SELECT * FROM gift_codes WHERE msg_id=? ORDER BY id", (msg_id,)).fetchall()
+            if store.gift_code_state(r, now) == "new"]
+
+
+def announcement_text(rows, ping: Optional[str] = None) -> str:
+    head = (f"{ping}\n" if ping else "") + (T("gift.new_one") if len(rows) == 1 else T("gift.new_many", n=len(rows))) + "\n"
+    return head + "".join(gift_block(r) for r in rows)
+
+
+class GiftCopyView(discord.ui.View):
+    """📋 Copy under an announcement (persistent): sends each code privately as plain text, one per
+    message, so phone players can hold it and copy it without any formatting."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.copy.label = T("gift.copy_btn")[:80]
+        url = site_url()
+        if url:
+            self.add_item(discord.ui.Button(label=T("gift.website")[:80], url=url, emoji="🌐"))
+
+    @discord.ui.button(label="Copy code", emoji="📋", style=discord.ButtonStyle.secondary, custom_id="gift:copy")
+    async def copy(self, interaction: discord.Interaction, button: discord.ui.Button):
+        codes = gift_codes_from_message(interaction.message)
+        active = {r["code"] for r in store.active_gift_codes()}
+        codes = [c for c in codes if c in active] or codes
+        if not codes:
+            return await interaction.response.send_message(T("gift.none", ilang(interaction)), ephemeral=True)
+        await interaction.response.send_message(codes[0], ephemeral=True)
+        for c in codes[1:10]:
+            await interaction.followup.send(c, ephemeral=True)
+
+
+def gift_codes_from_message(msg) -> list:
+    if msg is None:
+        return []
+    found = re.findall(r"```\s*([^`\s]+)\s*```", msg.content or "")
+    if not found:
+        for e in msg.embeds:
+            found += re.findall(r"`([^`\s]+)`", e.description or "")
+    return found
+
+
+def gift_code_from_message(msg) -> Optional[str]:
+    codes = gift_codes_from_message(msg)
+    return codes[0] if codes else None
+
+
+async def add_gift_codes(items, by_name: str, by_id=None, announce: bool = True):
+    """Save one or more codes [(code, reward, hours)] and announce them together.
+    Returns (rows, skipped [(code, why)], warning or None)."""
+    rows, skipped = [], []
+    for code, reward, hours in items:
+        try:
+            rows.append(store.add_gift_code(code, reward, hours, by_name))
+        except ValueError as exc:
+            skipped.append((code, str(exc)))
     warning = None
     ch = chan("giftcodes_channel_id")
-    if announce and ch is None:
+    if rows and announce and ch is None:
         warning = "Saved, but no gift-codes channel is chosen, so it wasn't announced (Channels page)."
-    elif announce:
+    elif rows and announce:
         ping, mentions = gift_ping()
-        content = (f"{ping}\n" if ping else "") + f"```\n{r['code']}\n```"
+        parts = _chunks((f"{ping}\n" if ping else "") + (T("gift.new_one") if len(rows) == 1 else T("gift.new_many", n=len(rows))) + "\n",
+                        [gift_block(r) for r in rows])
+        i = 0
         try:
-            msg = await ch.send(content=content, embed=gift_embed(r, "new"), view=GiftCopyView(),
-                                allowed_mentions=mentions)
-            store.set_gift_code(r["id"], msg_id=msg.id)
+            for n, part in enumerate(parts):
+                count = part.count("```") // 2
+                msg = await ch.send(content=part, view=GiftCopyView(), allowed_mentions=mentions if n == 0 else discord.AllowedMentions.none())
+                for r in rows[i:i + count]:
+                    store.set_gift_code(r["id"], msg_id=msg.id)
+                i += count
         except discord.HTTPException as exc:
             warning = f"Saved, but Discord refused the announcement: {exc.text or exc}"
-    log_event("admin", f"Gift code {r['code']} added ({store.gift_duration_label(hours)})", by_id, by_name)
-    await safe_refresh_gift_list()
-    start_redeem()
-    return store.get_gift_code(r["id"]), warning
+    for r in rows:
+        log_event("admin", f"Gift code {r['code']} added ({store.gift_duration_label((r['expires_at'] - r['created_at']) // 3600 if r['expires_at'] else None)})",
+                  by_id, by_name)
+    if rows:
+        await safe_refresh_gift_list()
+        start_redeem()
+    return [store.get_gift_code(r["id"]) for r in rows], skipped, warning
 
 
-async def mark_gift_expired(r):
+async def add_gift_code(code: str, reward: str, hours, by_name: str, by_id=None, announce: bool = True):
+    """Save a code and announce it. Returns (row, warning or None)."""
+    rows, skipped, warning = await add_gift_codes([(code, reward, hours)], by_name, by_id, announce)
+    if skipped:
+        raise ValueError(skipped[0][1])
+    return rows[0], warning
+
+
+async def sync_announcement(msg_id: int, now=None):
+    """Make one announcement show only the codes that are still new and active; delete it when none are left."""
     ch = chan("giftcodes_channel_id")
-    if ch is not None and r["msg_id"]:
+    rows = announced_rows(msg_id, now)
+    if ch is None:
+        return
+    keep = [r["id"] for r in rows]                       # codes that left the announcement no longer point at it
+    db.execute(f"UPDATE gift_codes SET msg_id=NULL WHERE msg_id=? AND id NOT IN ({','.join('?' * len(keep)) or 'NULL'})",
+               (msg_id, *keep))
+    db.commit()
+    p = ch.get_partial_message(msg_id)
+    if not rows:
         try:
-            await ch.get_partial_message(r["msg_id"]).edit(content=None, embed=gift_embed(r, "expired"), view=None)
+            await p.delete()
         except discord.HTTPException:
             pass
-    store.set_gift_code(r["id"], expired_noted=1)
+        db.execute("UPDATE gift_codes SET msg_id=NULL WHERE msg_id=?", (msg_id,))
+        db.commit()
+        return
+    try:
+        msg = await ch.fetch_message(msg_id) if hasattr(ch, "fetch_message") else None
+    except discord.NotFound:
+        db.execute("UPDATE gift_codes SET msg_id=NULL WHERE msg_id=?", (msg_id,))   # deleted by hand – codes go to the list
+        db.commit()
+        return
+    except discord.HTTPException:
+        msg = None
+    content = (msg.content if msg is not None else "") or ""
+    first = content.split("\n", 1)[0] if content else ""
+    ping = first if first.startswith(("@everyone", "@here", "<@&")) else None
+    want = announcement_text(rows, ping)
+    if msg is not None and content == want and not msg.embeds:
+        return
+    try:
+        await p.edit(content=want, embed=None, view=GiftCopyView(), allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        pass
+
+
+async def sync_gift_messages(now=None):
+    """Called every minute: move codes whose "new" time is over into the list, remove expired codes."""
+    now = now or int(time.time())
+    delete = cfg("giftcodes_delete_expired")
+    for r in db.execute("SELECT * FROM gift_codes WHERE expires_at IS NOT NULL AND expires_at<=?", (now,)).fetchall():
+        if delete:
+            store.delete_gift_code(r["id"])
+            log_event("system", f"Gift code {r['code']} expired and was removed", None, brand())
+        elif not r["expired_noted"]:
+            store.set_gift_code(r["id"], expired_noted=1)
+            log_event("system", f"Gift code {r['code']} expired", None, brand())
+        if r["msg_id"]:
+            await sync_announcement(r["msg_id"], now)
+    for (mid,) in db.execute("SELECT DISTINCT msg_id FROM gift_codes WHERE msg_id IS NOT NULL").fetchall():
+        rows = db.execute("SELECT * FROM gift_codes WHERE msg_id=?", (mid,)).fetchall()
+        if any(store.gift_code_state(r, now) != "new" for r in rows):
+            await sync_announcement(mid, now)
     await safe_refresh_gift_list()
 
 
 async def expire_gift_codes():
-    """Codes with a timer: when the time is up the code is removed (announcement deleted) – or only marked
-    "expired" if the admins switched auto-delete off."""
-    delete = cfg("giftcodes_delete_expired")
-    rows = store.db.execute("SELECT * FROM gift_codes WHERE expires_at IS NOT NULL AND expires_at<=?", (int(time.time()),)).fetchall() \
-        if delete else store.expired_unnoted_gift_codes()
-    for r in rows:
-        if delete:
-            await remove_gift_code(r["id"], True, brand())
-            log_event("system", f"Gift code {r['code']} expired and was removed", None, brand())
-        else:
-            await mark_gift_expired(r)
-            log_event("system", f"Gift code {r['code']} expired", None, brand())
+    await sync_gift_messages()
 
 
 def import_seed_codes():
@@ -2272,95 +2414,117 @@ def import_seed_codes():
 
 async def end_gift_code(cid: int, by_name: str, by_id=None):
     r = store.get_gift_code(cid)
-    store.set_gift_code(cid, expires_at=int(time.time()))
-    await mark_gift_expired(store.get_gift_code(cid))
+    store.set_gift_code(cid, expires_at=int(time.time()), expired_noted=1)
+    if r["msg_id"]:
+        await sync_announcement(r["msg_id"])
+    await safe_refresh_gift_list()
     log_event("admin", f"Gift code {r['code']} ended early", by_id, by_name)
 
 
 async def remove_gift_code(cid: int, discord_too: bool, by_name: str, by_id=None):
     r = store.get_gift_code(cid)
-    ch = chan("giftcodes_channel_id")
-    if discord_too and ch is not None and r["msg_id"]:
-        try:
-            await ch.get_partial_message(r["msg_id"]).delete()
-        except discord.HTTPException:
-            pass
     store.delete_gift_code(cid)
+    if discord_too and r["msg_id"]:
+        await sync_announcement(r["msg_id"])
     log_event("admin", f"Gift code {r['code']} deleted", by_id, by_name)
     await safe_refresh_gift_list()
 
 
-class GiftCopyView(discord.ui.View):
-    """📋 Copy button under a gift-code announcement (persistent). Replies privately with only the plain
-    code, so phone players can hold the message and copy it without any formatting."""
+def list_rows(now=None):
+    """Codes for the "Active gift codes" list: every active code except those still in their announcement."""
+    now = now or int(time.time())
+    return [r for r in store.active_gift_codes(now) if not (r["msg_id"] and store.gift_code_state(r, now) == "new")]
+
+
+def gift_list_parts(now=None) -> list:
+    rows = list_rows(now)
+    head = T("gift.list_head", n=len(rows)) + "\n"
+    tail = "-# " + T("gift.list_note", hours=cfg("giftcodes_new_hours"))
+    if not rows:
+        return [head + T("gift.none") + "\n" + tail]
+    return _chunks(head, [gift_block(r) for r in rows], "\n" + tail)
+
+
+class GiftListView(discord.ui.View):
+    """Under the "Active gift codes" list: copy a code, link your game account, open the website."""
 
     def __init__(self):
         super().__init__(timeout=None)
         self.copy.label = T("gift.copy_btn")[:80]
+        self.link.label = T("link.btn")[:80]
+        url = site_url()
+        if url:
+            self.add_item(discord.ui.Button(label=T("gift.website")[:80], url=url, emoji="🌐"))
 
-    @discord.ui.button(label="Copy code", emoji="📋", style=discord.ButtonStyle.secondary, custom_id="gift:copy")
+    @discord.ui.button(label="Copy code", emoji="📋", style=discord.ButtonStyle.primary, custom_id="gift:copylist")
     async def copy(self, interaction: discord.Interaction, button: discord.ui.Button):
-        code = gift_code_from_message(interaction.message)
-        if not code:
+        rows = list_rows()
+        if not rows:
             return await interaction.response.send_message(T("gift.none", ilang(interaction)), ephemeral=True)
-        await interaction.response.send_message(code, ephemeral=True)
+        await interaction.response.send_message(T("gift.copy_pick", ilang(interaction)), view=CodePickView(rows), ephemeral=True)
+
+    @discord.ui.button(label="Link my game account", emoji="🔗", style=discord.ButtonStyle.secondary, custom_id="gift:link")
+    async def link(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(LinkModal(ilang(interaction), store.get_link(interaction.user.id)))
 
 
-def gift_code_from_message(msg) -> Optional[str]:
-    m = re.search(r"```\s*([^`\s]+)\s*```", (msg.content or "") if msg else "")
-    if m:
-        return m.group(1)
-    for e in (msg.embeds if msg else []):
-        m = re.search(r"`([^`]+)`", e.description or "")
-        if m:
-            return m.group(1)
-    return None
+class CodePickView(discord.ui.View):
+    """Private menu (up to 125 codes): pick one and get it as plain text to copy."""
 
+    def __init__(self, rows):
+        super().__init__(timeout=600)
+        for i in range(0, min(len(rows), 125), 25):
+            part = rows[i:i + 25]
+            sel = discord.ui.Select(placeholder=f"{part[0]['code']} … {part[-1]['code']}"[:150] if len(rows) > 25 else T("gift.copy_pick")[:150],
+                                    options=[discord.SelectOption(label=r["code"][:100], value=r["code"][:100],
+                                                                  description=(r["reward"] or None) and r["reward"][:100]) for r in part])
+            sel.callback = self._make(sel)
+            self.add_item(sel)
 
-def gift_list_embed() -> discord.Embed:
-    """The one "Active gift codes" message kept up to date in the gift-codes channel – every code
-    sits in its own copy box."""
-    rows = store.active_gift_codes()
-    e = discord.Embed(title=T("gift.list"), color=0xF1C40F)
-    lines = []
-    for r in rows:
-        extra = [r["reward"]] if r["reward"] else []
-        if r["expires_at"]:
-            extra.append(f"⏳ <t:{r['expires_at']}:R>")
-        lines.append(("🆕 " if store.gift_code_state(r) == "new" else "") + f"`{r['code']}`"
-                     + (f" – {' · '.join(extra)}" if extra else ""))
-    text, shown = "", 0
-    for ln in lines:
-        if len(text) + len(ln) + 60 > 4000:
-            break
-        text += ln + "\n"
-        shown += 1
-    if shown < len(lines):
-        text += f"… +{len(lines) - shown} – /codes"
-    e.description = text or T("gift.none")
-    e.set_footer(text=f"{brand()} · {T('gift.list_footer')}")
-    return e
+    def _make(self, sel):
+        async def cb(interaction: discord.Interaction):
+            await interaction.response.send_message(sel.values[0], ephemeral=True)
+        return cb
 
 
 async def refresh_gift_list():
-    """Create or update the "Active gift codes" message. Only edits Discord when something changed."""
+    """Create or update the "Active gift codes" list (one or more messages). Only edits Discord when it changed."""
     ch = chan("giftcodes_channel_id")
     if ch is None or not cfg("giftcodes_enabled") or not cfg("giftcodes_list"):
         return
-    e = gift_list_embed()
-    sig = hashlib.sha1(json.dumps(e.to_dict(), sort_keys=True).encode()).hexdigest()
-    mid, where = get_raw("gift_list_msg_id"), get_raw("gift_list_chan")
-    if mid and where == str(ch.id):
-        if get_raw("gift_list_sig") == sig:
-            return
+    parts = gift_list_parts()
+    sig = hashlib.sha1(json.dumps([parts, site_url(), T("gift.copy_btn"), T("link.btn")]).encode()).hexdigest()
+    try:
+        ids = [int(x) for x in json.loads(get_raw("gift_list_msgs") or "[]")]
+    except ValueError:
+        ids = []
+    if not ids and get_raw("gift_list_msg_id"):
+        ids = [int(get_raw("gift_list_msg_id"))]                 # the single embed message from before
+    if get_raw("gift_list_chan") != str(ch.id):
+        ids = []
+    if ids and len(ids) == len(parts) and get_raw("gift_list_sig") == sig:
+        return
+    new_ids = []
+    for n, part in enumerate(parts):
+        view = GiftListView() if n == len(parts) - 1 else None
+        mid = ids[n] if n < len(ids) else None
+        if mid:
+            try:
+                await ch.get_partial_message(mid).edit(content=part, embed=None, view=view,
+                                                       allowed_mentions=discord.AllowedMentions.none())
+                new_ids.append(mid)
+                continue
+            except discord.NotFound:
+                pass
+        msg = await ch.send(content=part, view=view, allowed_mentions=discord.AllowedMentions.none())
+        new_ids.append(msg.id)
+    for mid in ids[len(parts):]:                                  # the list got shorter
         try:
-            await ch.get_partial_message(int(mid)).edit(embed=e, view=GiftListView())
-            put_raw("gift_list_sig", sig)
-            return
-        except discord.NotFound:
-            pass                                            # someone deleted it – post a new one
-    msg = await ch.send(embed=e, view=GiftListView(), allowed_mentions=discord.AllowedMentions.none())
-    put_raw("gift_list_msg_id", str(msg.id))
+            await ch.get_partial_message(mid).delete()
+        except discord.HTTPException:
+            pass
+    put_raw("gift_list_msgs", json.dumps(new_ids))
+    put_raw("gift_list_msg_id", str(new_ids[0]))
     put_raw("gift_list_chan", str(ch.id))
     put_raw("gift_list_sig", sig)
 
@@ -2417,18 +2581,6 @@ async def do_link(user, uid: str, chief: str, lg: Optional[str]) -> str:
         text += "\n" + T("link.done_redeem", lg)
         start_redeem()
     return text
-
-
-class GiftListView(discord.ui.View):
-    """Under the "Active gift codes" list: link your game account (for auto-redeem and bug reports)."""
-
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.link.label = T("link.btn")[:80]
-
-    @discord.ui.button(label="Link my game account", emoji="🔗", style=discord.ButtonStyle.secondary, custom_id="gift:link")
-    async def link(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(LinkModal(ilang(interaction), store.get_link(interaction.user.id)))
 
 
 # ------------------------------------------------------------ known issues board + "I have this too"
@@ -2750,12 +2902,25 @@ def snapshot_members():
     store.record_members(g.member_count)
 
 
+@tasks.loop(minutes=1)
+async def gift_loop():
+    """Keeps the gift-code announcements and list exact to the minute."""
+    try:
+        if cfg("giftcodes_enabled"):
+            await sync_gift_messages()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[gift codes] {exc!r}")
+
+
+@gift_loop.before_loop
+async def _before_gift():
+    await bot.wait_until_ready()
+
+
 @tasks.loop(minutes=10)
 async def schedule_loop():
     try:
         snapshot_members()
-        await expire_gift_codes()
-        await safe_refresh_gift_list()
         await safe_refresh_board()
         start_redeem()
         await check_info_tickets()

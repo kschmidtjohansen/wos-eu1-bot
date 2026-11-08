@@ -696,7 +696,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     def code_dict(r, now=None):
         return {"id": r["id"], "code": r["code"], "reward": r["reward"] or "", "created_at": r["created_at"],
                 "expires_at": r["expires_at"], "state": store.gift_code_state(r, now), "by": r["created_by"] or "",
-                "url": jump("giftcodes_channel_id", r["msg_id"])}
+                "url": jump("giftcodes_channel_id", r["msg_id"]) or (jump("giftcodes_channel_id", store.get_raw("gift_list_msg_id"))
+                                                                    if store.gift_code_state(r, now) != "expired" else None),
+                "where": "announcement" if r["msg_id"] and store.gift_code_state(r, now) == "new" else "list"}
 
     @routes.get("/api/giftcodes")
     async def list_codes(request):
@@ -860,6 +862,10 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(400, "Paste 1–300 codes, one per line.")
         hours = data.get("hours")
         hours = int(hours) if str(hours or "").isdigit() and int(hours) > 0 else None
+        if data.get("announce") and "add_gift_codes" in hooks:
+            items = [(x.split("#", 1)[0].strip(), "", hours) for x in lines if x.split("#", 1)[0].strip()]
+            rows, bad, warn = await hooks["add_gift_codes"](items, who(request), who_id(request), announce=True)
+            return web.json_response({"added": [r["code"] for r in rows], "skipped": [c for c, _ in bad], "warning": warn})
         added, skipped = store.import_gift_codes(lines, who(request), hours, backdate=not data.get("as_new"))
         store.log_event("admin", f"Added {len(added)} gift codes at once", who_id(request), who(request))
         if "refresh_gift_list" in hooks:
