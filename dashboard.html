@@ -772,7 +772,7 @@ function sideNav(o) {
     : html`<button role="tab" data-act="hub" data-hub="${h[0]}" ${h[3].length === 1 ? html`data-tab="${h[3][0]}"` : ''} aria-selected="${String(hubOf(S.tab)[0] === h[0])}">${icon(h[2])}<span>${h[1]}</span>${h[0] === 'bugs' && o.stats.bugs.awaiting ? html`<em class="w-count">${o.stats.bugs.awaiting}</em>` : ''}</button>`);
 }
 window.wosdGo = t => { S.tab = t; renderTab(); };
-const MOD_TABS = ['overview', 'status', 'bugs', 'suggestions', 'players', 'warnings', 'giveaways', 'insights', 'invites', 'mod', 'log'];
+const MOD_TABS = ['overview', 'bugs', 'insights', 'moderators', 'status'];   // moderator view: bugs + stats, nothing that changes the bot
 const isMod = () => !!(S.user && S.user.role !== 'admin');
 const CHANNELS = [
   ['report_channel_id', 'Bug report channel', 'Where the panel message lives and where players open their private tickets.'],
@@ -899,10 +899,11 @@ function viewOverview() {
   const tile = t => html`<div class="w-card w-tile ${t[2]}"><i class="w-tic">${icon(tIc[t[1]] || 'chart')}</i><b data-tick="${t[0]}">${t[0]}</b><span>${t[1]}</span></div>`;
   const sIc = { ok: 'check', warn: 'alert', bad: 'alert', todo: 'circle' };
   const todo = [[B.awaiting, 'bug reports waiting for a moderator', 'bugs', 'new', 'bug'], [B.with_admins, 'bugs passed on, waiting for an admin', 'bugs', 'passed', 'shield'],
-    [G.pending, 'suggestions waiting for a decision', 'suggestions', 'new', 'bulb'], [issues, issues === 1 ? 'setup problem to fix' : 'setup problems to fix', 'setup', '', 'alert']].filter(t => t[0]);
+    [G.pending, 'suggestions waiting for a decision', 'suggestions', 'new', 'bulb'], [issues, issues === 1 ? 'setup problem to fix' : 'setup problems to fix', 'setup', '', 'alert']]
+    .filter(t => t[0] && (!isMod() || t[2] === 'bugs') && !(isMod() && t[3] === 'passed'));
   const waiting = todo.reduce((a, t) => a + t[0], 0);
   return html`
-    <div class="w-pagehead"><h2>Overview</h2><p>What needs a person right now, and how the server is doing.</p></div>
+    <div class="w-pagehead"><h2>${isMod() ? 'Bug dashboard' : 'Overview'}</h2><p>${isMod() ? 'Bug reports waiting for you, and how the team is doing.' : 'What needs a person right now, and how the server is doing.'}</p></div>
     <div class="w-bento">
       <section class="w-card w-hero">${waiting ? html`<i class="w-beam" aria-hidden="true"></i>` : ''}
         <h3>${waiting ? 'Needs you now' : 'All clear'}</h3>
@@ -917,20 +918,20 @@ function viewOverview() {
           <div class="w-wk"><span>Members</span><b>${o.guild.members != null ? Number(o.guild.members).toLocaleString('en') : '–'}</b></div>
           <div class="w-wk"><span>Open info tickets</span><b>${st.open_tickets}</b></div>
           <div class="w-wk"><span>Bugs fixed so far</span><b>${B.fixed}</b></div>
-          <div class="w-wk"><span>Ideas accepted</span><b>${G.accepted}</b></div>
+          ${isMod() ? html`<div class="w-wk"><span>Being investigated</span><b>${B.investigating}</b></div>` : html`<div class="w-wk"><span>Ideas accepted</span><b>${G.accepted}</b></div>`}
         </div>
       </section>
     </div>
     <div class="w-tilegroup"><div class="w-group-title">Bug reports</div><div class="w-tiles">${bugTiles.map(tile)}</div></div>
-    <div class="w-tilegroup"><div class="w-group-title">Suggestions</div><div class="w-tiles w-tiles4">${sugTiles.map(tile)}</div></div>
-    <section class="w-card w-pad" id="setup">
+    ${isMod() ? '' : html`<div class="w-tilegroup"><div class="w-group-title">Suggestions</div><div class="w-tiles w-tiles4">${sugTiles.map(tile)}</div></div>`}
+    ${isMod() ? '' : html`<section class="w-card w-pad" id="setup">
       <div class="w-sec-head"><h3 class="w-h3">Setup checklist</h3><span class="w-badge ${issues ? 'warn' : 'ok'}">${issues ? issues + ' to fix' : 'All set'}</span></div>
       ${rows.map(r => html`<div class="w-check">
         <div class="w-check-ic ${r.state}">${icon(sIc[r.state])}</div>
         <div><div class="w-check-label">${r.label}</div><div class="w-check-detail">${r.detail}</div></div>
         ${r.state !== 'ok' && r.go ? html`<button class="w-btn small" data-act="goto" data-tab="${r.go}">Fix</button>` : ''}
       </div>`)}
-    </section>
+    </section>`}
     <section class="w-card w-pad">
       <div class="w-sec-head"><h3 class="w-h3">Recent activity</h3>
         <button class="w-btn small" data-act="goto" data-tab="log">View all</button></div>
@@ -1294,20 +1295,28 @@ async function loadStickerImgs() {
 function loginCard() {
   const A = S.auth; if (!A) return '';
   const cb = (S.base || location.origin).replace(/\/+$/, '') + '/api/auth/callback';
-  return html`<section class="w-card w-pad"><h3 class="w-h3">Dashboard login with Discord</h3>
-    <p class="w-sub" style="margin:4px 0 12px">Moderators and admins log in with their own Discord account – no shared key. Moderators see bugs, suggestions, insights and moderation;
-      admins see everything. Every action is logged with their name. Someone who loses the role loses access at once.</p>
-    <ol class="w-steps">
+  const RN = A.role_names || { admin: ['Admin', 'Boss', 'Developer'], mod: ['Senior Moderator', 'Moderator'] }, M = A.matched || { admin: [], mod: [] };
+  const found = list => list.length ? list.map(r => html`<span class="w-badge ok">@${r.name} · ${r.members}</span>`) : html`<span class="w-badge bad">No matching role in the server</span>`;
+  return html`<section class="w-card w-pad"><h3 class="w-h3">Staff login</h3>
+    <p class="w-sub" style="margin:4px 0 12px">Everyone logs in with their own Discord account – there is no shared password. Access is checked against their Discord roles on every click, so someone who loses the role loses access at once. Every action is logged with their name.</p>
+    <div class="w-form2">
+      <div class="w-field"><label class="w-label" for="au-admin">Full access <span class="w-hint">– sees and changes everything</span></label>
+        <input class="w-input" id="au-admin" value="${RN.admin.join(', ')}" placeholder="Admin, Boss, Developer"><div class="w-inline" style="margin-top:6px;flex-wrap:wrap;gap:6px">${found(M.admin)}</div></div>
+      <div class="w-field"><label class="w-label" for="au-mod">Bug dashboard only <span class="w-hint">– bugs and stats, can’t change the bot</span></label>
+        <input class="w-input" id="au-mod" value="${RN.mod.join(', ')}" placeholder="Senior Moderator, Moderator"><div class="w-inline" style="margin-top:6px;flex-wrap:wrap;gap:6px">${found(M.mod)}</div></div></div>
+    <p class="w-hint">Role names, separated by commas. Capitals and emojis in the role name don’t matter. Server administrators always get full access.</p>
+    <div class="w-actions"><button class="w-btn" data-act="authRoles">Save roles</button></div>
+    <div class="w-sect"><span class="w-label">Discord login</span>
+    ${A.enabled ? '' : html`<ol class="w-steps">
       <li>Open the <a href="https://discord.com/developers/applications/${A.client_id}/oauth2" target="_blank" rel="noopener">Discord Developer Portal → OAuth2</a> for this bot.</li>
       <li>Under <b>Redirects</b> click <b>Add Redirect</b>, paste <code class="w-copyable">${cb}</code> and press <b>Save Changes</b>.</li>
-      <li>Under <b>Client Secret</b> press <b>Reset Secret</b>, copy it and paste it here.</li></ol>
+      <li>Under <b>Client Secret</b> press <b>Reset Secret</b>, copy it and paste it here.</li></ol>`}
     <div class="w-inline" style="margin-top:10px"><input class="w-input" id="au-secret" type="password" autocomplete="off" placeholder="${A.secret_set ? 'Client Secret saved – paste a new one to replace it' : 'Client Secret'}" style="max-width:380px">
-      <button class="w-btn primary" data-act="authSave">${A.enabled ? 'Update' : 'Turn on Discord login'}</button>
-      ${A.enabled ? html`<button class="w-btn danger" data-act="authOff">Turn off</button>` : ''}</div>
+      <button class="w-btn primary" data-act="authSave">${A.enabled ? 'Update' : 'Turn on Discord login'}</button></div>
     ${A.enabled ? html`<div class="w-check" style="margin-top:12px"><div class="w-check-ic ok">${icon('check')}</div><div><div class="w-check-label">Discord login is on</div>
-      <div class="w-check-detail">The login page now shows “Log in with Discord”. ${location.protocol === 'http:' ? 'Tip: with HTTPS (a domain + certificate) the login cookie is also encrypted.' : ''}</div></div></div>
+      <div class="w-check-detail">It’s the only way into this page. Locked out? On the server run <code>sudo wosbot-login</code> for a one-time admin link.</div></div></div>
       <div class="w-sect"><div class="w-sec-head"><span class="w-label">Logged in (${A.sessions.length})</span>${A.sessions.length ? html`<button class="w-btn small danger" data-act="authKick">Log everyone out</button>` : ''}</div>
-      ${A.sessions.map(x => html`<div class="w-hint">${x.name} · active ${ago(x.last_seen)}</div>`)}</div>` : ''}
+      ${A.sessions.map(x => html`<div class="w-hint">${x.name} · active ${ago(x.last_seen)}</div>`)}</div>` : ''}</div>
   </section>`;
 }
 
@@ -1375,8 +1384,8 @@ function selBar() {
       ${isMod() ? '' : html`<option value="admin_rejected">❌ Rejected by admins</option>`}<option value="rejected">❌ Rejected</option></select>
     <input class="w-input w-fsel" id="sel-reason" maxlength="900" placeholder="Reason (for rejects)" aria-label="Reason for the players" style="max-width:220px">
     <button class="w-btn small" data-act="bugMarkSel" ${B.sel.length ? '' : 'disabled'}>Mark</button>
-    <label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="sel-discord" checked> Also delete their Discord messages</label>
-    <button class="w-btn small danger" data-act="bugDelSel" ${B.sel.length ? '' : 'disabled'}>Delete ${B.sel.length || ''} selected</button></div>`;
+    ${isMod() ? '' : html`<label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="sel-discord" checked> Also delete their Discord messages</label>
+    <button class="w-btn small danger" data-act="bugDelSel" ${B.sel.length ? '' : 'disabled'}>Delete ${B.sel.length || ''} selected</button>`}</div>`;
 }
 function renderBugList() {
   const l = $('#buglist'); if (!l) return;
@@ -1463,10 +1472,10 @@ function bugModal() {
     <div class="w-sect"><span class="w-label">History</span>
       <div class="w-hist">${b.history.length ? b.history.map(h => html`<div><b>${ACTION_LABEL[h.action] || h.action}</b> · ${h.actor} · ${full(h.ts)}</div>`) : html`<div>No actions recorded yet.</div>`}</div></div>
 
-    <div class="w-sect w-danger"><span class="w-label">Delete this bug</span>
+    ${isMod() ? '' : html`<div class="w-sect w-danger"><span class="w-label">Delete this bug</span>
       <p class="w-hint" style="margin-bottom:8px">Removes the report, its screenshots and history for good – for test reports and spam. To close a real bug, use Reject instead.</p>
       <div class="w-inline"><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="m-deldiscord" checked> Also delete its messages and info ticket in Discord</label>
-        <div class="w-spacer"></div><button class="w-btn danger" data-act="bugDelete">Delete bug #${b.id}</button></div></div>
+        <div class="w-spacer"></div><button class="w-btn danger" data-act="bugDelete">Delete bug #${b.id}</button></div></div>`}
   </div></div>`;
 }
 async function openBug(id) {
@@ -2553,24 +2562,19 @@ function renderApp() {
     </div>`);
   renderTab();
 }
+const DISCORD_SVG = '<svg class="w-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 4.6A19 19 0 0 0 15.3 3l-.6 1.2a17 17 0 0 0-5.4 0L8.7 3A19 19 0 0 0 4 4.6C1 9 .3 13.3.6 17.6a19 19 0 0 0 5.8 2.9l1.2-2a12 12 0 0 1-1.9-.9l.5-.4a13.6 13.6 0 0 0 11.6 0l.5.4-1.9.9 1.2 2a19 19 0 0 0 5.8-2.9c.4-5-.8-9.3-3.4-13zM8.7 15c-1.1 0-2-1-2-2.3s.9-2.2 2-2.2 2 1 2 2.2-.9 2.3-2 2.3zm6.6 0c-1.1 0-2-1-2-2.3s.9-2.2 2-2.2 2 1 2 2.2-.9 2.3-2 2.3z"/></svg>';
 function renderLogin(error) {
+  const base = (S.base || location.origin).replace(/\/+$/, '');
   root.innerHTML = String(html`
     <div class="w-card w-login"><i class="w-beam" aria-hidden="true"></i>
       <img class="w-loginlogo" src="${STAFF_ICON}" alt="" width="64" height="64">
       <h1>${CFG.productName} staff</h1>
-      <p>Bug reports, suggestions, gift codes and the bot – for the team that keeps the furnace running.</p>
+      <p>Log in with your Discord account. Admin, Boss and Developer see everything; Senior Moderator and Moderator get the bug dashboard.</p>
       ${error ? html`<div class="w-error" role="alert">${error}</div>` : ''}
-      ${S.discordLogin ? html`<a class="w-btn primary w-discord" href="${(S.base || location.origin).replace(/\/+$/, '')}/api/auth/login">${raw('<svg class="w-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 4.6A19 19 0 0 0 15.3 3l-.6 1.2a17 17 0 0 0-5.4 0L8.7 3A19 19 0 0 0 4 4.6C1 9 .3 13.3.6 17.6a19 19 0 0 0 5.8 2.9l1.2-2a12 12 0 0 1-1.9-.9l.5-.4a13.6 13.6 0 0 0 11.6 0l.5.4-1.9.9 1.2 2a19 19 0 0 0 5.8-2.9c.4-5-.8-9.3-3.4-13zM8.7 15c-1.1 0-2-1-2-2.3s.9-2.2 2-2.2 2 1 2 2.2-.9 2.3-2 2.3zm6.6 0c-1.1 0-2-1-2-2.3s.9-2.2 2-2.2 2 1 2 2.2-.9 2.3-2 2.3z"/></svg>')} Log in with Discord</a>
-        <div class="w-or"><span>or use the admin key</span></div>` : ''}
-      <form data-form="login" novalidate>
-        ${CFG.apiBase ? '' : html`<div class="w-field"><label class="w-label" for="l-base">Bot API address</label>
-          <input class="w-input" id="l-base" name="base" placeholder="https://bot.example.com" value="${S.base}" autocomplete="off"></div>`}
-        <div class="w-field"><label class="w-label" for="l-key">API key</label>
-          <input class="w-input" id="l-key" name="key" type="password" autocomplete="off" placeholder="DASHBOARD_API_KEY from your .env file">
-          <span class="w-hint">Kept only in this browser tab until you disconnect.</span></div>
-        <div class="w-actions"><button class="w-btn primary" type="submit">Connect</button>
-          <button class="w-btn" type="button" data-act="demo">Preview with demo data</button></div>
-      </form>
+      ${S.discordLogin ? html`<a class="w-btn primary w-discord" href="${base}/api/auth/login">${raw(DISCORD_SVG)} Log in with Discord</a>`
+        : html`<div class="w-error" role="status" style="text-align:left"><b>Discord login isn’t switched on yet.</b><br>
+            ${S.botReachable === false ? 'The bot can’t be reached right now – check that it is running.' : html`On the server run <code>sudo wosbot-login</code> – it prints a one-time admin link. Then turn on Discord login under Settings → Bot profile.`}</div>`}
+      <div class="w-actions" style="justify-content:center"><button class="w-btn" type="button" data-act="demo">Preview with demo data</button></div>
     </div>`);
 }
 
@@ -2589,7 +2593,6 @@ async function connect(base, key, demo, user) {
   S.demo = !!demo; S.base = base; S.key = key; S.user = user || null;
   try {
     await loadAll();
-    if (!demo && key) { try { sessionStorage.setItem('wosd.key', key); sessionStorage.setItem('wosd.base', base); } catch (e) { /* private mode */ } }
     renderApp(); startPolling();
   } catch (e) { S.demo = false; renderLogin(e.message); }
 }
@@ -2819,10 +2822,11 @@ root.addEventListener('click', async e => {
     else if (act === 'saveBot') saveBot(el);
     else if (act === 'pickAvatar') $('#avfile').click();
     else if (act === 'pickBanner') $('#bnfile').click();
-    else if (act === 'authSave' || act === 'authOff') {
-      const body = act === 'authOff' ? { secret: '', redirect: '' } : { redirect: (S.base || location.origin).replace(/\/+$/, '') + '/api/auth/callback', return_to: location.href.split('?')[0].split('#')[0] };
+    else if (act === 'authSave' || act === 'authRoles') {
+      const body = act === 'authRoles' ? {} : { redirect: (S.base || location.origin).replace(/\/+$/, '') + '/api/auth/callback', return_to: location.href.split('?')[0].split('#')[0] };
+      if (act === 'authRoles') { body.role_names = { admin: $('#au-admin').value.split(',').map(x => x.trim()).filter(Boolean), mod: $('#au-mod').value.split(',').map(x => x.trim()).filter(Boolean) }; }
       if (act === 'authSave') { const sec = $('#au-secret').value.trim(); if (sec) body.secret = sec; else if (!S.auth.secret_set) return toast('Paste the Client Secret first.', 'err'); }
-      try { S.auth = await call('PUT', '/api/auth/settings', body); toast(act === 'authOff' ? 'Discord login turned off.' : 'Saved. Open the dashboard in a private window to try “Log in with Discord”.'); renderMain(); }
+      try { S.auth = await call('PUT', '/api/auth/settings', body); toast(act === 'authRoles' ? 'Roles saved.' : 'Saved. Open the dashboard in a private window to try “Log in with Discord”.'); renderMain(); }
       catch (err) { toast(err.message, 'err'); }
     }
     else if (act === 'authKick') {
@@ -3360,7 +3364,8 @@ function makeMock() {
   const NAMES = ['Mira', 'Jonas', 'Anders', 'Lærke', 'Sofie', 'Lars', 'Freja', 'Mikkel'];
   const TRK = [{"key": "bug.title", "group": "Bug ticket", "en": "🐛 Bug report", "pl": "🐛 Zgłoszenie błędu", "placeholders": []}, {"key": "bug.title_edit", "group": "Bug ticket", "en": "✏️ Edit your bug report", "pl": "✏️ Popraw swoje zgłoszenie", "placeholders": []}, {"key": "bug.body", "group": "Bug ticket", "en": "**Step 1** – pick the **area** in the menu, then press **Add details** (short title, chief name, player UID, game version).\n**Step 2** – answer these questions **in one message**:\n\n**1. What is the bug?**\n**2. Do you know why it is happening?**\n**3. What is the correct way the feature should work?**\n**4. Attach a picture or video** to the same message{again}\n\nWhen you press **Send**, I'll show you a preview where you can **Submit**, **Edit** or **Delete** your report.", "pl": "**Krok 1** – wybierz **obszar** w menu, a potem naciśnij **Dodaj szczegóły** (krótki tytuł, nazwa wodza, UID gracza, wersja gry).\n**Krok 2** – odpowiedz na te pytania **w jednej wiadomości**:\n\n**1. Na czym polega błąd?**\n**2. Czy wiesz, dlaczego się pojawia?**\n**3. Jak ta funkcja powinna działać prawidłowo?**\n**4. Dołącz zdjęcie lub film** do tej samej wiadomości{again}\n\nGdy naciśniesz **Wyślij**, pokażę podgląd, w którym możesz **Wysłać**, **Poprawić** albo **Usunąć** zgłoszenie.", "placeholders": ["again"]}, {"key": "bug.again", "group": "Bug ticket", "en": " (attachments have to be added again)", "pl": " (załączniki trzeba dodać ponownie)", "placeholders": []}, {"key": "bug.template_name", "group": "Bug ticket", "en": "Template you can copy", "pl": "Szablon do skopiowania", "placeholders": []}, {"key": "bug.template", "group": "Bug ticket", "en": "What is the bug?\n\nDo you know why it is happening?\n\nWhat is the correct way the feature should work?", "pl": "Na czym polega błąd?\n\nCzy wiesz, dlaczego się pojawia?\n\nJak ta funkcja powinna działać prawidłowo?", "placeholders": []}, {"key": "bug.area_ph", "group": "Bug ticket", "en": "Where is the problem? (area)", "pl": "Gdzie jest problem? (obszar)", "placeholders": []}, {"key": "bug.area_set", "group": "Bug ticket", "en": "✅ Area: **{area}**", "pl": "✅ Obszar: **{area}**", "placeholders": ["area"]}, {"key": "bug.area_gone", "group": "Bug ticket", "en": "That area doesn't exist any more.", "pl": "Ten obszar już nie istnieje.", "placeholders": []}, {"key": "bug.details_btn", "group": "Bug ticket", "en": "Add details", "pl": "Dodaj szczegóły", "placeholders": []}, {"key": "pv.title", "group": "Preview", "en": "📋 Preview – is this ready to send?", "pl": "📋 Podgląd – czy można wysłać?", "placeholders": []}, {"key": "pv.no_text", "group": "Preview", "en": "*(no text)*", "pl": "*(brak tekstu)*", "placeholders": []}, {"key": "pv.f_title", "group": "Preview", "en": "Title", "pl": "Tytuł", "placeholders": []}, {"key": "pv.f_title_missing", "group": "Preview", "en": "⚠️ *(missing – press Add details)*", "pl": "⚠️ *(brak – naciśnij Dodaj szczegóły)*", "placeholders": []}, {"key": "pv.f_area", "group": "Preview", "en": "Area", "pl": "Obszar", "placeholders": []}, {"key": "pv.f_area_missing", "group": "Preview", "en": "⚠️ *(missing – use the menu)*", "pl": "⚠️ *(brak – użyj menu)*", "placeholders": []}, {"key": "pv.f_version", "group": "Preview", "en": "Game version", "pl": "Wersja gry", "placeholders": []}, {"key": "pv.f_chief", "group": "Preview", "en": "Chief / UID", "pl": "Wódz / UID", "placeholders": []}, {"key": "pv.f_files", "group": "Preview", "en": "Attachments", "pl": "Załączniki", "placeholders": []}, {"key": "pv.footer", "group": "Preview", "en": "Submit = send to the moderators · Edit = change it · Delete = discard", "pl": "Wyślij = do moderatorów · Popraw = zmień · Usuń = odrzuć", "placeholders": []}, {"key": "pv.submit", "group": "Preview", "en": "Submit", "pl": "Wyślij", "placeholders": []}, {"key": "pv.edit", "group": "Preview", "en": "Edit", "pl": "Popraw", "placeholders": []}, {"key": "pv.delete", "group": "Preview", "en": "Delete", "pl": "Usuń", "placeholders": []}, {"key": "pv.previous", "group": "Preview", "en": "Your previous message (copy & edit)", "pl": "Twoja poprzednia wiadomość (skopiuj i popraw)", "placeholders": []}];
   const trOver = {};
-  const authS = { enabled: true, secret_set: true, redirect: '', return_to: '/staff/', client_id: '123456789012345678', sessions: [{ name: 'Sofie', id: '2', last_seen: now - 600 }, { name: 'Kasper', id: '1', last_seen: now - 60 }] };
+  const authS = { enabled: true, secret_set: true, redirect: '', return_to: '/staff/', client_id: '123456789012345678', role_names: { admin: ['Admin', 'Boss', 'Developer'], mod: ['Senior Moderator', 'Moderator'] },
+    matched: { admin: [{ id: '1', name: '👑 Boss', members: 2 }, { id: '2', name: 'Admin', members: 3 }, { id: '3', name: 'Developer', members: 2 }], mod: [{ id: '4', name: 'Senior Moderator', members: 3 }, { id: '5', name: 'Moderator', members: 9 }] }, sessions: [{ name: 'Sofie', id: '2', last_seen: now - 600 }, { name: 'Kasper', id: '1', last_seen: now - 60 }] };
   const trx = { key_set: true, key_hint: '…x9Qa', usage: { month: '2026-11', chars: 163400 }, limit: 450000, feed: { channel_id: '1006', target: 'en', sources: ['1002'] } };
   const drive = { configured: true, account: 'kasper@example.com', folder_url: 'https://drive.google.com/drive/folders/x', last_ok: now - 2 * 86400, last_name: 'bugs-20261105-031502.db.gz', last_error: null, last_try: now - 2 * 86400 };
   const codes = [['WOSEU1WEEKEND', '300 gems + 2× 1h speed-up', 3600 * 5, 86400 * 2], ['HAPPYHALLOWEEN', 'Pumpkin frame', 86400 * 3, 86400 * 4], ['WELCOME2026', 'Starter pack', 86400 * 20, null], ['LAUNCHDAY', '1000 gems', 86400 * 9, 86400 * 2]]
@@ -3456,7 +3461,7 @@ function makeMock() {
       return { items: f.slice(off, off + lim).map(briefBug), total: f.length, counts };
     }
     if (p === '/api/auth/settings' && method === 'GET') return authS;
-    if (p === '/api/auth/settings') { if ('secret' in body) authS.secret_set = !!body.secret; authS.enabled = authS.secret_set && !!body.redirect; return authS; }
+    if (p === '/api/auth/settings') { if ('secret' in body) authS.secret_set = !!body.secret; if (body.redirect) authS.enabled = authS.secret_set; if (body.role_names) authS.role_names = body.role_names; return authS; }
     if (p === '/api/auth/sessions') { authS.sessions = []; return { ok: true }; }
     if (p === '/api/translate' && method === 'GET') return trx;
     if (p === '/api/translate') { if ('key' in body) { trx.key_set = !!body.key; trx.key_hint = body.key ? '…' + body.key.slice(-4) : ''; } if ('limit' in body) trx.limit = body.limit; if (body.feed) trx.feed = body.feed; if ('feed_on' in body) trx.feed_on = body.feed_on; return trx; }
@@ -3639,19 +3644,18 @@ function makeMock() {
 }
 
 /* ================================================================== go */
-let saved = '';
-try { saved = sessionStorage.getItem('wosd.key') || ''; S.base = CFG.apiBase || sessionStorage.getItem('wosd.base') || ''; } catch (e) { /* ignore */ }
+try { sessionStorage.removeItem('wosd.key'); sessionStorage.removeItem('wosd.base'); } catch (e) { /* ignore */ }
+S.base = CFG.apiBase === 'same-origin' ? location.origin : (CFG.apiBase || location.origin);
 async function boot() {
   if (new URLSearchParams(location.search).has('demo')) return connect('', '', true);
-  if (saved && S.base) return connect(S.base, saved, false);
-  const base = (S.base || CFG.apiBase || '').replace(/\/+$/, '');
+  const base = (S.base || '').replace(/\/+$/, '');
   if (base) {
     try {
       const me = await fetch(base + '/api/auth/me', { credentials: 'same-origin' });
       if (me.ok) return connect(base, '', false, await me.json());
       const info = await (await fetch(base + '/api/auth/info', { credentials: 'same-origin' })).json();
-      S.discordLogin = !!info.discord; S.base = base;
-    } catch (e) { /* bot not reachable – the normal login shows the error */ }
+      S.discordLogin = !!info.discord; S.base = base; S.botReachable = true;
+    } catch (e) { S.botReachable = false; }
   }
   renderLogin();
 }

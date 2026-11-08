@@ -161,6 +161,29 @@ pip_log="$(sudo -u $SVC $APP/venv/bin/pip install -q --disable-pip-version-check
   printf '%s\n' "$pip_log" | tail -8 | sed 's/^/    ! /'; die "Installing the bot's libraries failed – the lines above say why."; }
 ok "Bot files and libraries installed"
 
+# Staff page: log in with Discord only. The one-time console link is the way in when that isn't set up.
+cat > /usr/local/bin/wosbot-login <<EOF2
+#!/usr/bin/env bash
+exec sudo -u $SVC python3 $APP/deploy/login-link.py $APP/bugs.db
+EOF2
+chmod 755 /usr/local/bin/wosbot-login
+if [[ -f /etc/wos-staff.htpasswd ]]; then          # the old extra username + password in front of /staff/ – removed
+  for f in /etc/nginx/snippets/wos-bot.conf /etc/apache2/conf-available/wos-bot.conf; do
+    [[ -f $f ]] || continue
+    cp -p "$f" "$f.bak"
+    if [[ $f == *nginx* ]]; then
+      sed -i 's| auth_basic "Staff"; auth_basic_user_file /etc/wos-staff.htpasswd;||' "$f"
+      if nginx -t >/dev/null 2>&1; then systemctl reload nginx; else cp -p "$f.bak" "$f"; warn "Couldn't remove the staff password from nginx – left as it was"; continue; fi
+    else
+      sed -i '/<Location \/staff\/>/,/<\/Location>/d' "$f"
+      if apache2ctl configtest >/dev/null 2>&1; then systemctl reload apache2; else cp -p "$f.bak" "$f"; warn "Couldn't remove the staff password from Apache – left as it was"; continue; fi
+    fi
+    rm -f "$f.bak"
+  done
+  mv /etc/wos-staff.htpasswd /etc/wos-staff.htpasswd.removed 2>/dev/null || true
+  ok "Staff page: the extra username + password is gone – log in with Discord (or: sudo wosbot-login)"
+fi
+
 # ----------------------------------------------------------------- 4 settings
 step "Connecting to your Discord bot"
 KEEP=0

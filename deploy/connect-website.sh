@@ -156,18 +156,7 @@ grep -q 'apiBase: "same-origin"' $WWW/staff/index.html || warn "Couldn't set api
 chmod -R a+rX $WWW
 ok "Public pages → $WWW/bugs   Dashboard → $WWW/staff"
 
-STAFF_AUTH=0
-if [[ -f /etc/wos-staff.htpasswd ]]; then STAFF_AUTH=1; ok "Keeping the extra password on /staff/"
-elif [[ -n "$WEB" ]] && command -v openssl >/dev/null && yes_no "Add an extra username + password in front of /staff/? (recommended)" y; then
-  SU="$(ask "Username" "staff")"
-  while true; do
-    read -rsp "  Password (not shown): " SP </dev/tty; echo
-    [[ ${#SP} -ge 8 ]] && break; warn "Use at least 8 characters."
-  done
-  printf '%s:%s\n' "$SU" "$(openssl passwd -apr1 "$SP")" > /etc/wos-staff.htpasswd
-  chmod 644 /etc/wos-staff.htpasswd; STAFF_AUTH=1
-  ok "Password saved"
-fi
+STAFF_AUTH=0     # the staff page is protected by Discord login (moderators and admins only) – no extra password
 
 # ----------------------------------------------------------------- 4 web server
 step "Telling the web server about the bot"

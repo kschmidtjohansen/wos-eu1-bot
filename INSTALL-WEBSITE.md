@@ -92,8 +92,10 @@ The script now copies the pages and asks:
 
 1. **Your Discord invite link** – e.g. `https://discord.gg/abc123` (shown as a "Join Discord" button). Enter = skip.
 2. **Link to your Server status page** – Enter = skip.
-3. **Extra username + password in front of /staff/?** – answer **y** (recommended). Choose a username and a password of at least 8 characters.
-   Give these to your staff along with the dashboard key.
+
+The staff page has no shared password: everyone logs in with their own Discord account. Admin, Boss and Developer
+get full access; Senior Moderator and Moderator get the bug dashboard (role names can be changed under Settings → Bot profile).
+Before Discord login is switched on, run `sudo wosbot-login` on the server – it prints a one-time admin link.
 
 Then it adds the bot settings to your web server, tests them and reloads the web server. Your existing pages are not changed.
 
@@ -174,7 +176,7 @@ Then run the website script again (step 3) – it notices the padlock and uses `
 | Update the pages/dashboard to a new version | If the website is on the bot server, it's updated together with the bot (**Update bugbot** – see the bot guide). Otherwise upload and unpack the new zip (step 2) and run `sudo bash bugbot/deploy/connect-website.sh` again. Your `config.js` and staff password are kept. |
 | Bot server got a new IP | Run the script again and type the new address. |
 | Is the link up? | `systemctl status wos-tunnel` (should say *active (running)*) |
-| Change the staff password | `sudo rm /etc/wos-staff.htpasswd` and run the script again. |
+| Can't log in to the staff page | `sudo wosbot-login` – prints a one-time admin link (works once, for 15 minutes). |
 | New dashboard key | On the bot server: edit `DASHBOARD_API_KEY` in `/opt/wosbot/.env` (`sudo nano /opt/wosbot/.env`), then `sudo systemctl restart wosbot`. |
 
 ## Troubleshooting

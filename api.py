@@ -120,15 +120,40 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             print(f"[dashboard api] {request.method} {request.path} failed: {exc!r}")
             return web.json_response({"error": "Something went wrong in the bot. Check its console."}, status=500)
 
-    AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout"}
-    MOD_WRITE = [("POST", r"/api/cases/warn"), ("POST", r"/api/cases/\d+/pardon"), (None, r"/api/giveaways(/\d+/(end|reroll))?"),
-                 ("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/(bugs|suggestions)/\d+/translate"), ("PUT", r"/api/suggestions/\d+"),
-                 (None, r"/api/replies(/\d+)?"), (None, r"/api/blocklist(/\d+)?"), ("DELETE", r"/api/webblocks")]
-    MOD_HIDDEN = [r"/api/backups/.*", r"/api/auth/settings", r"/api/translate", r"/api/drive/.*", r"/api/redeem.*",
-                  r"/api/modstats", r"/api/stickers.*", r"/api/emojis.*", r"/api/push.*", r"/api/weekly", r"/api/access.*"]
+    AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console"}
+    # Moderators get the bug dashboard only: read bugs and stats, handle bugs. Nothing that changes the bot.
+    MOD_READ = [r"/api/overview", r"/api/health", r"/api/channels", r"/api/settings", r"/api/bot", r"/api/status", r"/api/insights",
+                r"/api/modstats", r"/api/bugs", r"/api/bugs/\d+", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles"]
+    MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/translate")]
+    SECRET_SETTING = re.compile(r"(header|secret|token|key|webhook|url)", re.I)
+    DEFAULT_STAFF_ROLES = {"admin": ["Admin", "Boss", "Developer"], "mod": ["Senior Moderator", "Moderator"]}
+
+    def staff_role_names() -> dict:
+        try:
+            d = json.loads(store.get_raw("staff_roles") or "{}")
+        except ValueError:
+            d = {}
+        return {k: [str(x) for x in (d.get(k) or DEFAULT_STAFF_ROLES[k])] for k in ("admin", "mod")}
+
+    def _norm(name: str) -> str:
+        return " ".join(re.sub(r"[^\w\s]|_", " ", name.lower()).split())
+
+    def role_matches(g) -> dict:
+        """Which Discord roles give full access / the bug dashboard (matched by name, emojis and case ignored)."""
+        names = staff_role_names()
+        want = {k: {_norm(x) for x in v} for k, v in names.items()}
+        out = {"admin": [], "mod": []}
+        for r in (list(g.roles) if g else []):
+            n = _norm(r.name)
+            if n in want["admin"] or r.id == roles.get("Admin role"):
+                out["admin"].append(r)
+            elif n in want["mod"] or r.id == roles.get("Moderator role"):
+                out["mod"].append(r)
+        return out
 
     async def staff_role(user_id: int):
-        """'admin', 'mod' or None – checked live against the member's Discord roles."""
+        """'admin' (Admin, Boss, Developer – sees everything), 'mod' (Senior Moderator, Moderator – bug dashboard)
+        or None. Checked live against the member's Discord roles on every request."""
         g = client.get_guild(guild_id)
         if g is None:
             return None
@@ -139,16 +164,24 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             except discord.HTTPException:
                 return None
         ids = {r.id for r in getattr(m, "roles", [])}
-        if m.guild_permissions.administrator or roles.get("Admin role") in ids:
+        rm = role_matches(g)
+        if m.guild_permissions.administrator or roles.get("Admin role") in ids or any(r.id in ids for r in rm["admin"]):
             return "admin"
-        if roles.get("Moderator role") in ids:
+        if roles.get("Moderator role") in ids or any(r.id in ids for r in rm["mod"]):
             return "mod"
         return None
 
     def mod_may(method: str, path: str) -> bool:
         if method == "GET":
-            return not any(re.fullmatch(p, path) for p in MOD_HIDDEN)
+            return any(re.fullmatch(p, path) for p in MOD_READ)
         return any((m is None or m == method) and re.fullmatch(p, path) for m, p in MOD_WRITE)
+
+    CONSOLE_HOURS = 12
+
+    async def session_role(sess):
+        if sess["user_id"] == 0:          # one-time link from the server console (sudo wosbot-login)
+            return "admin" if time.time() - sess["created"] < CONSOLE_HOURS * 3600 else None
+        return await staff_role(sess["user_id"])
 
     @web.middleware
     async def auth_mw(request, handler):
@@ -162,6 +195,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         header = request.headers.get("Authorization", "")
         token = header[7:] if header.startswith("Bearer ") else ""
         if token:
+            if request.headers.get("X-Real-IP") or request.headers.get("X-Forwarded-For"):
+                raise ApiError(401, "Please log in with Discord.")    # the key only works on the server itself, never through the website
             if not hmac.compare_digest(token.encode(), api_key.encode()):
                 failures[ip].append(now)
                 raise ApiError(401, "Wrong or missing API key.")
@@ -170,14 +205,14 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         sess = store.get_session(request.cookies.get(SESSION_COOKIE, ""))
         if sess is None:
             raise ApiError(401, "Please log in.")
-        role = await staff_role(sess["user_id"])
+        role = await session_role(sess)
         if role is None:
             store.end_sessions(sess["user_id"])
-            raise ApiError(401, "You no longer have the Moderator or Admin role.")
+            raise ApiError(401, "You no longer have a staff role (Admin, Boss, Developer, Senior Moderator or Moderator).")
         if request.method != "GET" and request.headers.get("X-Requested-With") != "wos":
             raise ApiError(403, "Missing request header.")          # blocks cross-site form posts
         if role == "mod" and not mod_may(request.method, request.path):
-            raise ApiError(403, "Only admins can do this.")
+            raise ApiError(403, "The moderator dashboard only handles bugs – ask an admin for this.")
         request["actor_name"], request["actor_id"], request["role"] = sess["name"], sess["user_id"], role
         return await handler(request)
 
@@ -275,7 +310,10 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
 
     @routes.get("/api/settings")
     async def get_settings(request):
-        return web.json_response(settings_payload())
+        d = settings_payload()
+        if request.get("role") == "mod":       # moderators never see addresses, keys or headers
+            d["settings"] = {k: v for k, v in d["settings"].items() if not SECRET_SETTING.search(k)}
+        return web.json_response(d)
 
     @routes.put("/api/settings")
     async def put_settings(request):
@@ -553,13 +591,14 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if role is None:
             store.log_event("system", f"Dashboard login refused for {user.get('global_name') or user.get('username')} (not staff)", uid,
                             user.get("username"))
-            return page("You need the Moderator or Admin role in the server to use the dashboard.")
+            n = staff_role_names()
+            return page("You need one of these roles in the server to use the dashboard: " + ", ".join(n["admin"] + n["mod"]) + ".")
         g = client.get_guild(guild_id)
         m = g.get_member(uid) if g else None
         name = (m.display_name if m else None) or user.get("global_name") or user.get("username") or str(uid)
         avatar = str(m.display_avatar.replace(size=64).url) if m else ""
         token = store.create_session(uid, name, avatar)
-        store.log_event("settings", f"{name} logged in to the dashboard ({role})", uid, name)
+        store.log_event("settings", f"{name} logged in to the dashboard ({'full access' if role == 'admin' else 'moderator view'})", uid, name)
         resp = web.HTTPFound(c["return_to"])
         resp.set_cookie(SESSION_COOKIE, token, max_age=store.SESSION_DAYS * 86400, httponly=True, samesite="Lax", path="/",
                         secure=c["redirect"].startswith("https://"))
@@ -571,11 +610,32 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         sess = store.get_session(request.cookies.get(SESSION_COOKIE, ""))
         if sess is None:
             raise ApiError(401, "Not logged in.")
-        role = await staff_role(sess["user_id"])
+        role = await session_role(sess)
         if role is None:
             store.end_sessions(sess["user_id"])
-            raise ApiError(401, "You no longer have the Moderator or Admin role.")
+            raise ApiError(401, "You no longer have a staff role.")
         return web.json_response({"name": sess["name"], "id": str(sess["user_id"]), "avatar": sess["avatar"], "role": role})
+
+    @routes.get("/api/auth/console")
+    async def auth_console(request):
+        """One-time admin link made on the server with: sudo wosbot-login (for when Discord login isn't set up yet)."""
+        import hashlib
+        code = request.query.get("code", "")
+        try:
+            want = json.loads(store.get_raw("console_login") or "{}")
+        except ValueError:
+            want = {}
+        if not code or not want or want.get("exp", 0) < time.time() or \
+                not hmac.compare_digest(hashlib.sha256(code.encode()).hexdigest(), str(want.get("hash", ""))):
+            return page("This link expired or was already used. On the server run: sudo wosbot-login", 400)
+        store.put_raw("console_login", "")
+        token = store.create_session(0, "Server console", "")
+        store.log_event("settings", "Logged in to the dashboard with a one-time link from the server console", None, "Server console")
+        c = oauth_conf()
+        resp = web.HTTPFound(c["return_to"])
+        resp.set_cookie(SESSION_COOKIE, token, max_age=CONSOLE_HOURS * 3600, httponly=True, samesite="Lax", path="/",
+                        secure=request.scheme == "https")
+        raise resp
 
     @routes.post("/api/auth/logout")
     async def auth_logout(request):
@@ -589,8 +649,12 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if request.get("role") != "admin":
             raise ApiError(403, "Only admins can do this.")
         c = oauth_conf()
+        g = client.get_guild(guild_id)
+        rm = role_matches(g)
         return web.json_response({"enabled": bool(c["secret"] and c["redirect"]), "secret_set": bool(c["secret"]),
                                   "redirect": c["redirect"], "return_to": c["return_to"], "client_id": client_id(),
+                                  "role_names": staff_role_names(),
+                                  "matched": {k: [{"id": str(r.id), "name": r.name, "members": len(r.members)} for r in v] for k, v in rm.items()},
                                   "sessions": [{"name": s["name"], "id": str(s["user_id"]), "last_seen": s["last_seen"]}
                                                for s in store.list_sessions()]})
 
@@ -610,7 +674,13 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 if v and not re.fullmatch(r"https?://[^\s]+" if k == "redirect" else r"(https?://[^\s]+|/[^\s]*)", v):
                     raise ApiError(400, f"The {k.replace('_', ' ')} address is not valid.")
                 store.put_raw(raw_key, v)
-        store.log_event("settings", "Dashboard: Discord login settings changed", who_id(request), who(request))
+        if "role_names" in data:
+            rn = data["role_names"] or {}
+            clean = {k: [x.strip()[:60] for x in (rn.get(k) or []) if str(x).strip()][:10] for k in ("admin", "mod")}
+            if not clean["admin"]:
+                raise ApiError(400, "Name at least one role with full access.")
+            store.put_raw("staff_roles", json.dumps(clean))
+        store.log_event("settings", "Dashboard: login settings changed", who_id(request), who(request))
         return await auth_settings(request)
 
     @routes.delete("/api/auth/sessions")

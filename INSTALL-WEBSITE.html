@@ -147,9 +147,10 @@ starts again by itself after a reboot.</p>
 <ol>
 <li><strong>Your Discord invite link</strong> – e.g. <code>https://discord.gg/abc123</code> (shown as a "Join Discord" button). Enter = skip.</li>
 <li><strong>Link to your Server status page</strong> – Enter = skip.</li>
-<li><strong>Extra username + password in front of /staff/?</strong> – answer <strong>y</strong> (recommended). Choose a username and a password of at least 8 characters.
-   Give these to your staff along with the dashboard key.</li>
 </ol>
+<p>The staff page has no shared password: everyone logs in with their own Discord account. Admin, Boss and Developer
+get full access; Senior Moderator and Moderator get the bug dashboard (role names can be changed under Settings → Bot profile).
+Before Discord login is switched on, run <code>sudo wosbot-login</code> on the server – it prints a one-time admin link.</p>
 <p>Then it adds the bot settings to your web server, tests them and reloads the web server. Your existing pages are not changed.</p>
 <blockquote class="ok">
 <p>✅ The script ends with <strong>"Finished."</strong> and a list of addresses.</p>
@@ -235,8 +236,8 @@ sudo certbot --nginx -d yourdomain.com                  # Apache: --apache
 <td><code>systemctl status wos-tunnel</code> (should say <em>active (running)</em>)</td>
 </tr>
 <tr>
-<td>Change the staff password</td>
-<td><code>sudo rm /etc/wos-staff.htpasswd</code> and run the script again.</td>
+<td>Can't log in to the staff page</td>
+<td><code>sudo wosbot-login</code> – prints a one-time admin link (works once, for 15 minutes).</td>
 </tr>
 <tr>
 <td>New dashboard key</td>
