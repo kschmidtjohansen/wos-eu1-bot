@@ -1,0 +1,122 @@
+[
+ {
+  "id": "gg",
+  "name": "GG!",
+  "emoji": "🎉",
+  "desc": "Good game, chief!"
+ },
+ {
+  "id": "new-code",
+  "name": "NEW CODE",
+  "emoji": "🎁",
+  "desc": "A new gift code is out"
+ },
+ {
+  "id": "copied",
+  "name": "COPIED",
+  "emoji": "✅",
+  "desc": "Code copied, redeeming now"
+ },
+ {
+  "id": "bug-spotted",
+  "name": "BUG?!",
+  "emoji": "🐛",
+  "desc": "Found something broken"
+ },
+ {
+  "id": "fixed",
+  "name": "FIXED",
+  "emoji": "🔧",
+  "desc": "The bug is fixed"
+ },
+ {
+  "id": "on-it",
+  "name": "ON IT",
+  "emoji": "🫡",
+  "desc": "Staff are on it"
+ },
+ {
+  "id": "known-issue",
+  "name": "KNOWN ISSUE",
+  "emoji": "🤷",
+  "desc": "We already know about this one"
+ },
+ {
+  "id": "brrr",
+  "name": "BRRR",
+  "emoji": "🥶",
+  "desc": "So cold out there"
+ },
+ {
+  "id": "cozy",
+  "name": "COZY",
+  "emoji": "🔥",
+  "desc": "Warm by the fire"
+ },
+ {
+  "id": "rally",
+  "name": "RALLY!",
+  "emoji": "🚩",
+  "desc": "Join the rally"
+ },
+ {
+  "id": "bear-time",
+  "name": "BEAR TIME",
+  "emoji": "🐾",
+  "desc": "Bear hunt is starting"
+ },
+ {
+  "id": "thanks-chief",
+  "name": "THANKS CHIEF",
+  "emoji": "❤️",
+  "desc": "Thank you!"
+ },
+ {
+  "id": "report-it",
+  "name": "REPORT IT",
+  "emoji": "📣",
+  "desc": "Please report that bug"
+ },
+ {
+  "id": "afk",
+  "name": "AFK",
+  "emoji": "😴",
+  "desc": "Away for a bit"
+ },
+ {
+  "id": "hype",
+  "name": "HYPE",
+  "emoji": "✨",
+  "desc": "So hyped"
+ },
+ {
+  "id": "gm-chief",
+  "name": "GM CHIEF",
+  "emoji": "☕",
+  "desc": "Good morning"
+ },
+ {
+  "id": "svs-time",
+  "name": "SVS TIME",
+  "emoji": "⚔️",
+  "desc": "State vs State is on"
+ },
+ {
+  "id": "lag",
+  "name": "LAG...",
+  "emoji": "🐌",
+  "desc": "The game is lagging"
+ },
+ {
+  "id": "nice",
+  "name": "NICE",
+  "emoji": "👍",
+  "desc": "Nice one"
+ },
+ {
+  "id": "level-up",
+  "name": "LEVEL UP",
+  "emoji": "🔥",
+  "desc": "Furnace levelled up"
+ }
+]

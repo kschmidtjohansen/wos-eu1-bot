@@ -1443,6 +1443,8 @@ class WosBot(discord.Client):
             schedule_loop.start()
         if not gift_loop.is_running():
             gift_loop.start()
+        if not log_loop.is_running():
+            log_loop.start()
 
         if DASHBOARD_API_KEY:
             if len(DASHBOARD_API_KEY) < 20:
@@ -1459,7 +1461,7 @@ class WosBot(discord.Client):
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
                          "drive_backup": drive_backup, "fill_translations": fill_translations,
-                         "publish_info": publish_info, "suggestion_changes": post_suggestion_changes, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
+                         "publish_info": publish_info, "sticker_status": sticker_status, "install_stickers": install_stickers, "suggestion_changes": post_suggestion_changes, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
                          "refresh_board": safe_refresh_board, "redeem_one": redeem_one, "start_redeem": start_redeem,
                          "redeem_ready": redeem_ready}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
@@ -2861,6 +2863,134 @@ async def changed_cmd(interaction: discord.Interaction, suggestion: int, text: a
         return await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
     await interaction.followup.send(f"✅ Suggestion #{suggestion}: update posted in the suggestions channel and sent to the author.",
                                     ephemeral=True)
+
+
+# ------------------------------------------------------------ Discord log channel
+# Every entry of the activity log is also posted to a staff channel (if one is chosen): who did what, and when.
+# Entries are collected for a few seconds and sent together, so a busy minute doesn't hit Discord's limits.
+LOG_STYLE = {"bug": ("🐛", 0x4F46E5), "ticket": ("🎫", 0x0284C7), "mod": ("🛡️", 0xD97706), "admin": ("👑", 0xEA580C),
+             "suggestion": ("💡", 0x0D9488), "welcome": ("👋", 0x0891B2), "panel": ("📌", 0x7C3AED), "settings": ("⚙️", 0x64748B),
+             "patch": ("🩹", 0x16A34A), "block": ("⛔", 0xBE123C), "profile": ("🤖", 0xDB2777), "system": ("🖥️", 0xDC2626),
+             "backup": ("💾", 0x475569), "link": ("🔗", 0x0F766E)}
+_log_queue: list = []
+
+
+def queue_log(entry: dict):
+    if not cfg("log_channel_id"):
+        return
+    kinds = [k.strip().lower() for k in (cfg("log_channel_kinds") or "all").splitlines() if k.strip()]
+    if "all" not in kinds and entry["kind"] not in kinds:
+        return
+    if len(_log_queue) < 500:
+        _log_queue.append(entry)
+
+
+store.log_listeners.append(queue_log)
+
+
+def log_line(e: dict) -> str:
+    emoji = LOG_STYLE.get(e["kind"], ("•", 0))[0]
+    who = (f"<@{e['actor_id']}>" if e["actor_id"] else (e["actor_name"] or "")) or "—"
+    return f"<t:{e['ts']}:T> {emoji} {e['text'][:300]}\n-# {who}"
+
+
+async def flush_logs():
+    """Send what is waiting: one embed per kind of change, up to 10 embeds per message."""
+    ch = chan("log_channel_id")
+    if ch is None:
+        _log_queue.clear()
+        return 0
+    if not _log_queue:
+        return 0
+    batch = _log_queue[:40]
+    del _log_queue[:40]
+    embeds, cur, cur_kind = [], [], None
+    for e in batch + [None]:
+        if e is None or (cur and (e["kind"] != cur_kind or sum(len(x) for x in cur) > 3500)):
+            if cur:
+                label = cur_kind.capitalize()
+                em = discord.Embed(description="\n".join(cur)[:4000], color=LOG_STYLE.get(cur_kind, ("", 0x5865F2))[1])
+                em.set_author(name=f"{label} · {len(cur)}" if len(cur) > 1 else label)
+                embeds.append(em)
+            cur = []
+        if e is not None:
+            cur_kind = e["kind"]
+            cur.append(log_line(e))
+    for i in range(0, len(embeds), 10):
+        try:
+            await ch.send(embeds=embeds[i:i + 10], allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException as exc:
+            print(f"[log channel] {exc!r}")              # never log this (it would loop)
+            break
+    return len(batch)
+
+
+@tasks.loop(seconds=6)
+async def log_loop():
+    try:
+        await flush_logs()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[log channel] {exc!r}")
+
+
+@log_loop.before_loop
+async def _before_log_loop():
+    await bot.wait_until_ready()
+
+
+# ------------------------------------------------------------ sticker pack ("Frostbit")
+STICKER_DIR = Path(__file__).with_name("assets") / "stickers"
+
+
+def sticker_pack() -> list:
+    try:
+        return json.loads((STICKER_DIR / "pack.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def sticker_name(s) -> str:
+    return " ".join(w.capitalize() if w.isalpha() else w for w in s["name"].replace("!", "").replace("?", "").replace(".", "").split())[:30] or s["id"]
+
+
+def sticker_status() -> dict:
+    g = bot.get_guild(GUILD_ID)
+    have = {x.name.lower() for x in (g.stickers if g else [])}
+    return {"items": [{**s, "title": sticker_name(s), "installed": sticker_name(s).lower() in have} for s in sticker_pack()],
+            "used": len(g.stickers) if g else 0, "limit": g.sticker_limit if g else 0}
+
+
+async def install_stickers(ids=None, actor_id=None, actor_name: str = "Dashboard") -> dict:
+    """Upload the pack's stickers that the server doesn't have yet (needs "Manage Expressions")."""
+    g = bot.get_guild(GUILD_ID)
+    if g is None:
+        raise ValueError("The bot can't see the server right now.")
+    if not g.me.guild_permissions.manage_expressions:
+        raise ValueError("Give the bot the “Manage Expressions” permission (Server Settings → Roles) and try again.")
+    have = {x.name.lower() for x in g.stickers}
+    free = g.sticker_limit - len(g.stickers)
+    added, skipped, failed = [], [], []
+    for s in sticker_pack():
+        if ids and s["id"] not in ids:
+            continue
+        name = sticker_name(s)
+        if name.lower() in have:
+            skipped.append(name)
+            continue
+        if free <= 0:
+            failed.append(f"{name}: no free sticker slots")
+            continue
+        try:
+            await g.create_sticker(name=name, description=s.get("desc") or name, emoji=s.get("emoji") or "🙂",
+                                   file=discord.File(STICKER_DIR / f"{s['id']}.png"), reason=f"Frostbit pack – {actor_name}")
+            added.append(name)
+            free -= 1
+        except discord.HTTPException as exc:
+            failed.append(f"{name}: {exc.text or exc}")
+    if added:
+        log_event("profile", f"Added {len(added)} sticker{'s' if len(added) != 1 else ''} to the server: {', '.join(added[:8])}"
+                  + (" …" if len(added) > 8 else ""), actor_id, actor_name)
+    return {"added": added, "skipped": skipped, "failed": failed}
 
 
 async def run_schedules(now=None):

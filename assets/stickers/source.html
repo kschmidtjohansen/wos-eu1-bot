@@ -1,0 +1,127 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:U;font-weight:200 900;src:url(file:///home/claude/wos-eu1-bot/site/fonts/unbounded.woff2)}
+html,body{margin:0;background:transparent}
+#s{width:320px;height:320px}
+</style></head><body><div id="s"></div>
+<script>
+const INK = '#0b1630', ORANGE = '#ff8a3d', GOLD = '#ffc15e', ICE = '#7de3f4', NAVY = '#1b2f57', NAVY2 = '#2a4680';
+const sw = 6;
+const st = `stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"`;
+
+function eyes(kind) {
+  const L = 126, R = 194, Y = 158;
+  const dot = (x, s = 1) => `<ellipse cx="${x}" cy="${Y}" rx="${9 * s}" ry="${12 * s}" fill="${INK}"/><circle cx="${x + 3 * s}" cy="${Y - 5 * s}" r="${3.4 * s}" fill="#fff"/>`;
+  const star = x => `<path transform="translate(${x} ${Y})" d="M0,-15 L4.4,-4.6 15,-4.6 6.6,2.2 9.6,13 0,6.6 -9.6,13 -6.6,2.2 -15,-4.6 -4.4,-4.6Z" fill="${GOLD}" ${st.replace(sw, 3.5)}/>`;
+  switch (kind) {
+    case 'happy': return `<path d="M${L - 11},${Y + 4} Q${L},${Y - 12} ${L + 11},${Y + 4}" fill="none" ${st}/><path d="M${R - 11},${Y + 4} Q${R},${Y - 12} ${R + 11},${Y + 4}" fill="none" ${st}/>`;
+    case 'closed': return `<path d="M${L - 11},${Y} Q${L},${Y + 9} ${L + 11},${Y}" fill="none" ${st}/><path d="M${R - 11},${Y} Q${R},${Y + 9} ${R + 11},${Y}" fill="none" ${st}/>`;
+    case 'sleepy': return `<path d="M${L - 12},${Y + 2} L${L + 12},${Y + 2}" ${st}/><path d="M${R - 12},${Y + 2} L${R + 12},${Y + 2}" ${st}/><path d="M${L - 12},${Y - 3} Q${L},${Y - 9} ${L + 12},${Y - 3}" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round" opacity=".5"/><path d="M${R - 12},${Y - 3} Q${R},${Y - 9} ${R + 12},${Y - 3}" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round" opacity=".5"/>`;
+    case 'star': return star(L) + star(R);
+    case 'wide': return dot(L, 1.25) + dot(R, 1.25);
+    case 'worried': return dot(L) + dot(R) + `<path d="M${L - 13},${Y - 22} L${L + 9},${Y - 28}" ${st.replace(sw, 4.5)}/><path d="M${R + 13},${Y - 22} L${R - 9},${Y - 28}" ${st.replace(sw, 4.5)}/>`;
+    case 'determined': return dot(L) + dot(R) + `<path d="M${L - 13},${Y - 27} L${L + 10},${Y - 19}" ${st.replace(sw, 4.5)}/><path d="M${R + 13},${Y - 27} L${R - 10},${Y - 19}" ${st.replace(sw, 4.5)}/>`;
+    case 'heart': { const h = x => `<path transform="translate(${x} ${Y - 2}) scale(.9)" d="M0,12 C-18,0 -14,-16 0,-8 C14,-16 18,0 0,12Z" fill="#ff5d7a" ${st.replace(sw, 3.5)}/>`; return h(L) + h(R); }
+    default: return dot(L) + dot(R);
+  }
+}
+function mouth(kind) {
+  const X = 160, Y = 190;
+  switch (kind) {
+    case 'open': return `<path d="M${X - 16},${Y - 4} Q${X},${Y - 6} ${X + 16},${Y - 4} Q${X + 14},${Y + 20} ${X},${Y + 20} Q${X - 14},${Y + 20} ${X - 16},${Y - 4}Z" fill="${INK}"/><path d="M${X - 8},${Y + 13} Q${X},${Y + 6} ${X + 8},${Y + 13} Q${X},${Y + 19} ${X - 8},${Y + 13}Z" fill="#ff7a8c"/>`;
+    case 'o': return `<ellipse cx="${X}" cy="${Y + 4}" rx="8" ry="10" fill="${INK}"/>`;
+    case 'wavy': return `<path d="M${X - 18},${Y + 2} l6,-6 l6,6 l6,-6 l6,6 l6,-6" fill="none" ${st.replace(sw, 4.5)}/>`;
+    case 'flat': return `<path d="M${X - 12},${Y + 3} L${X + 12},${Y + 3}" ${st.replace(sw, 4.5)}/>`;
+    case 'grin': return `<path d="M${X - 18},${Y - 3} Q${X},${Y + 18} ${X + 18},${Y - 3}Z" fill="#fff" ${st.replace(sw, 4.5)}/>`;
+    default: return `<path d="M${X - 13},${Y} Q${X},${Y + 13} ${X + 13},${Y}" fill="none" ${st.replace(sw, 5)}/>`;
+  }
+}
+function mitt(x, y, r = 0) { return `<g transform="translate(${x} ${y}) rotate(${r})"><ellipse cx="0" cy="0" rx="19" ry="17" fill="${ORANGE}" ${st}/><ellipse cx="-12" cy="-8" rx="7" ry="8" fill="${ORANGE}" ${st.replace(sw, 5)}/><path d="M-14,10 Q0,16 14,10" fill="none" stroke="${GOLD}" stroke-width="4" stroke-linecap="round"/></g>`; }
+const POSE = {
+  down: [mitt(70, 206, -20), mitt(250, 206, 200)],
+  up: [mitt(52, 98, -40), mitt(268, 98, 220)],
+  hold: [mitt(122, 222, 10), mitt(198, 222, 170)],
+  salute: [mitt(70, 206, -20), mitt(238, 118, 230)],
+  shrug: [mitt(48, 168, -70), mitt(272, 168, 250)],
+  upone: [mitt(70, 206, -20), mitt(266, 104, 220)],
+  hug: [mitt(96, 200, 30), mitt(224, 200, 150)],
+  thumb: [mitt(70, 206, -20), `<g transform="translate(250 196)"><ellipse cx="0" cy="6" rx="21" ry="18" fill="${ORANGE}" ${st}/><rect x="-7" y="-26" width="15" height="28" rx="7.5" fill="${ORANGE}" ${st.replace(sw, 5)}/></g>`]
+};
+function body(o) {
+  const icicle = o.icicles ? `<path d="M88,118 l6,22 l6,-22 M120,121 l5,16 l5,-16 M194,121 l5,18 l5,-18 M224,118 l6,24 l6,-24" fill="#dff6ff" ${st.replace(sw, 3.5)}/>` : '';
+  return `
+  <ellipse cx="160" cy="250" rx="90" ry="12" fill="${INK}" opacity=".18"/>
+  <circle cx="160" cy="160" r="92" fill="url(#snow)" ${st}/>
+  <path d="M104,122 Q160,100 216,122" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" opacity=".6"/>
+  <ellipse cx="108" cy="186" rx="13" ry="8" fill="#ff9fb2" opacity=".75"/><ellipse cx="212" cy="186" rx="13" ry="8" fill="#ff9fb2" opacity=".75"/>
+  ${eyes(o.eyes)}${mouth(o.mouth)}
+  <path d="M74,206 Q160,246 246,206 L240,228 Q160,266 80,228 Z" fill="url(#scarf)" ${st}/>
+  <path d="M96,215 l8,14 M126,224 l6,15 M160,228 l0,16 M194,224 l-6,15 M224,215 l-8,14" stroke="${GOLD}" stroke-width="4" stroke-linecap="round" opacity=".9"/>
+  <path d="M206,236 L226,272 L244,264 L228,226 Z" fill="url(#scarf)" ${st}/>
+  <path d="M77,124 C77,46 243,46 243,124 Z" fill="${NAVY}" ${st}/>
+  <path d="M110,70 Q118,96 112,120 M140,58 Q144,90 140,120 M180,58 Q176,90 180,120 M210,70 Q202,96 208,120" fill="none" stroke="${NAVY2}" stroke-width="5" stroke-linecap="round"/>
+  <rect x="68" y="108" width="184" height="30" rx="15" fill="${NAVY2}" ${st}/>
+  <path d="M86,123 h148" stroke="${ICE}" stroke-width="4" stroke-dasharray="2 9" stroke-linecap="round"/>
+  <circle cx="160" cy="44" r="18" fill="${ORANGE}" ${st}/><path d="M152,38 l4,4 M166,36 l-3,5 M160,52 l0,-5" stroke="${GOLD}" stroke-width="3.5" stroke-linecap="round"/>
+  ${icicle}`;
+}
+const P = {
+  gift: `<g transform="translate(160 236)"><rect x="-34" y="-28" width="68" height="52" rx="8" fill="${ORANGE}" ${st}/><rect x="-40" y="-36" width="80" height="18" rx="6" fill="${GOLD}" ${st}/><rect x="-7" y="-36" width="14" height="60" fill="${ICE}" ${st.replace(sw, 4)}/><path d="M0,-36 C-22,-60 -36,-40 -10,-36 M0,-36 C22,-60 36,-40 10,-36" fill="${ICE}" ${st.replace(sw, 4)}/></g>`,
+  ticket: `<g transform="translate(160 236) rotate(-6)"><path d="M-58,-24 H58 a8,8 0 0 1 0,16 a8,8 0 0 0 0,16 a8,8 0 0 1 0,16 H-58 a8,8 0 0 1 0,-16 a8,8 0 0 0 0,-16 a8,8 0 0 1 0,-16Z" fill="${GOLD}" ${st.replace(sw, 5)}/><path d="M-30,-20 V20" stroke="${INK}" stroke-width="3" stroke-dasharray="4 5"/><text x="12" y="7" text-anchor="middle" font-family="U" font-weight="800" font-size="17" fill="${INK}">CODE</text></g>`,
+  magnifier: `<g transform="translate(176 222)"><path d="M26,26 L58,58" stroke="${INK}" stroke-width="16" stroke-linecap="round"/><path d="M26,26 L58,58" stroke="${NAVY2}" stroke-width="8" stroke-linecap="round"/><circle cx="0" cy="0" r="36" fill="#d9f6ff" fill-opacity=".85" ${st}/><g transform="scale(.9)"><ellipse cx="0" cy="2" rx="11" ry="15" fill="#5be08a" ${st.replace(sw, 3.5)}/><path d="M-11,-4 l-10,-6 M-11,6 l-11,2 M11,-4 l10,-6 M11,6 l11,2 M-4,-12 l-5,-9 M4,-12 l5,-9" stroke="${INK}" stroke-width="3.5" stroke-linecap="round"/></g></g>`,
+  wrench: `<g transform="translate(166 226) rotate(-35)"><path d="M-8,-48 a22,22 0 1 0 16,0 v18 h-16z" fill="#c9d6e8" ${st.replace(sw, 5)}/><rect x="-9" y="-12" width="18" height="70" rx="9" fill="#c9d6e8" ${st.replace(sw, 5)}/></g><path d="M222,94 l6,-14 l6,14 l14,6 l-14,6 l-6,14 l-6,-14 l-14,-6z" fill="${GOLD}" ${st.replace(sw, 3)}/>`,
+  confetti: [[40, 60, ORANGE, 20], [270, 70, ICE, -15], [60, 130, GOLD, 40], [272, 150, '#ff5d7a', 10], [36, 230, ICE, -30], [282, 230, GOLD, 25], [110, 26, '#5be08a', 15], [214, 22, ORANGE, -20]].map(([x, y, c, r]) => `<rect x="${x - 7}" y="${y - 4}" width="14" height="8" rx="2" transform="rotate(${r} ${x} ${y})" fill="${c}" stroke="${INK}" stroke-width="3"/>`).join(''),
+  flag: `<g transform="translate(266 104)"><path d="M0,10 V-88" stroke="${INK}" stroke-width="10" stroke-linecap="round"/><path d="M0,10 V-88" stroke="#c9d6e8" stroke-width="4" stroke-linecap="round"/><path d="M2,-86 C24,-96 34,-74 58,-82 L52,-46 C30,-40 22,-60 2,-52Z" fill="${ORANGE}" ${st.replace(sw, 5)}/><path d="M14,-70 l14,0" stroke="${GOLD}" stroke-width="4" stroke-linecap="round"/></g>`,
+  paws: [[48, 70, -20], [270, 58, 20], [40, 150, -10]].map(([x, y, r]) => `<g transform="translate(${x} ${y}) rotate(${r})" fill="${INK}"><ellipse cx="0" cy="8" rx="13" ry="11"/><circle cx="-12" cy="-8" r="5.5"/><circle cx="-4" cy="-14" r="5.5"/><circle cx="5" cy="-14" r="5.5"/><circle cx="13" cy="-8" r="5.5"/></g>`).join('') + `<g transform="translate(262 150)"><path d="M0,-30 L28,22 H-28Z" fill="${GOLD}" ${st.replace(sw, 5)}/><path d="M0,-10 V6 M0,14 v1" stroke="${INK}" stroke-width="6" stroke-linecap="round"/></g>`,
+  heart: `<path transform="translate(160 226) scale(1.7)" d="M0,14 C-22,0 -17,-19 0,-9 C17,-19 22,0 0,14Z" fill="#ff5d7a" ${st.replace(sw, 3.5)}/><path d="M146,214 q4,-6 10,-4" stroke="#fff" stroke-width="4" stroke-linecap="round" fill="none"/>`,
+  megaphone: `<g transform="translate(184 222) rotate(-18)"><path d="M-40,-14 L28,-38 V38 L-40,14Z" fill="${ORANGE}" ${st.replace(sw, 5)}/><rect x="-52" y="-16" width="16" height="32" rx="5" fill="${NAVY2}" ${st.replace(sw, 5)}/><path d="M42,-24 q12,24 0,48 M54,-34 q18,34 0,68" fill="none" stroke="${ICE}" stroke-width="5" stroke-linecap="round"/></g>`,
+  zzz: `<text x="236" y="86" font-family="U" font-weight="800" font-size="34" fill="${ICE}" stroke="${INK}" stroke-width="7" paint-order="stroke">Z</text><text x="266" y="56" font-family="U" font-weight="800" font-size="24" fill="${ICE}" stroke="${INK}" stroke-width="6" paint-order="stroke">z</text><text x="286" y="34" font-family="U" font-weight="800" font-size="17" fill="${ICE}" stroke="${INK}" stroke-width="5" paint-order="stroke">z</text>`,
+  sparkles: [[44, 80, 1.2, GOLD], [276, 70, 1, ICE], [282, 170, .8, GOLD], [36, 180, .8, ICE], [230, 26, .7, '#fff']].map(([x, y, s, c]) => `<path transform="translate(${x} ${y}) scale(${s})" d="M0,-20 C3,-5 5,-3 20,0 C5,3 3,5 0,20 C-3,5 -5,3 -20,0 C-5,-3 -3,-5 0,-20Z" fill="${c}" stroke="${INK}" stroke-width="3.5"/>`).join(''),
+  mug: `<g transform="translate(160 230)"><rect x="-26" y="-26" width="46" height="50" rx="8" fill="#fff" ${st.replace(sw, 5)}/><path d="M20,-14 q20,0 20,14 q0,14 -20,14" fill="none" ${st.replace(sw, 5)}/><rect x="-22" y="-20" width="38" height="10" rx="4" fill="#8a5a3c"/><path d="M-12,-36 q-6,-10 0,-20 M2,-36 q-6,-10 0,-20" fill="none" stroke="#c9d6e8" stroke-width="4" stroke-linecap="round"/></g>`,
+  shield: `<g transform="translate(160 228)"><path d="M0,-40 L36,-28 C36,8 22,26 0,38 C-22,26 -36,8 -36,-28Z" fill="${NAVY2}" ${st.replace(sw, 5)}/><path d="M0,-22 V22 M-19,-11 L19,11 M19,-11 L-19,11" stroke="${ICE}" stroke-width="5" stroke-linecap="round"/></g><path d="M40,70 L70,100 M70,70 L40,100 M250,70 L280,100 M280,70 L250,100" stroke="${INK}" stroke-width="8" stroke-linecap="round"/><path d="M40,70 L70,100 M70,70 L40,100 M250,70 L280,100 M280,70 L250,100" stroke="#c9d6e8" stroke-width="3" stroke-linecap="round"/>`,
+  spinner: `<g transform="translate(262 92)">${[0, 45, 90, 135, 180, 225, 270, 315].map((a, i) => `<rect x="-4" y="-30" width="8" height="15" rx="4" transform="rotate(${a})" fill="${ICE}" opacity="${(0.2 + i * 0.1).toFixed(2)}" stroke="${INK}" stroke-width="2.5"/>`).join('')}</g>`,
+  campfire: `<g transform="translate(160 238)"><path d="M-40,22 L40,6 M-40,6 L40,22" stroke="#8a5a3c" stroke-width="14" stroke-linecap="round"/><path d="M-40,22 L40,6 M-40,6 L40,22" fill="none" stroke="${INK}" stroke-width="3"/><path d="M0,10 C-26,4 -24,-24 -6,-42 C-8,-24 6,-24 6,-36 C22,-20 26,4 0,10Z" fill="${ORANGE}" ${st.replace(sw, 4.5)}/><path d="M0,6 C-12,2 -10,-12 -2,-20 C0,-10 8,-12 8,-16 C14,-6 12,4 0,6Z" fill="${GOLD}"/></g>`,
+  snow: [[40, 70], [282, 60], [34, 170], [288, 180], [70, 22], [250, 20]].map(([x, y], i) => `<path transform="translate(${x} ${y}) scale(${i % 2 ? .8 : 1})" d="M0,-14 V14 M-12,-7 L12,7 M12,-7 L-12,7" stroke="${ICE}" stroke-width="5" stroke-linecap="round"/>`).join(''),
+  flame: `<g transform="translate(160 232)"><path d="M0,30 C-36,24 -38,-14 -10,-46 C-12,-20 8,-22 6,-40 C34,-14 38,24 0,30Z" fill="${ORANGE}" ${st.replace(sw, 5)}/><path d="M0,24 C-16,20 -16,0 -4,-14 C-2,-2 8,-4 8,-10 C18,2 16,20 0,24Z" fill="${GOLD}"/></g><path d="M250,40 l8,-20 l8,20 Z" fill="#5be08a" ${st.replace(sw, 4)}/><path d="M258,40 v26" ${st.replace(sw, 7)}/><path d="M258,40 v26" stroke="#5be08a" stroke-width="3"/>`,
+  ice: ''
+};
+function sticker(o) {
+  const cap = o.cap, fs = cap.length > 9 ? 25 : cap.length > 6 ? 31 : 37;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+  <defs>
+    <radialGradient id="snow" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset=".65" stop-color="#e6f5fd"/><stop offset="1" stop-color="#b6dcf3"/></radialGradient>
+    <linearGradient id="scarf" x1="0" x2="1"><stop offset="0" stop-color="${ORANGE}"/><stop offset="1" stop-color="#ff6a2a"/></linearGradient>
+    <filter id="cut" x="-10%" y="-10%" width="120%" height="120%">
+      <feMorphology in="SourceAlpha" operator="dilate" radius="7" result="d"/><feFlood flood-color="#ffffff"/><feComposite in2="d" operator="in" result="white"/>
+      <feGaussianBlur in="d" stdDeviation="3" result="b"/><feOffset in="b" dy="3" result="ob"/><feFlood flood-color="#000" flood-opacity=".35"/><feComposite in2="ob" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="white"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#cut)" transform="translate(160 150) scale(.86) translate(-160 -160)">
+    ${o.back || ''}${body(o)}${(POSE[o.pose] || POSE.down).join('')}${o.prop ? P[o.prop] : ''}
+    <text x="160" y="${300}" text-anchor="middle" font-family="U" font-weight="800" font-size="${fs}" letter-spacing="0" word-spacing="9" fill="${o.capColor || '#fff'}" stroke="${INK}" stroke-width="10" stroke-linejoin="round" paint-order="stroke">${cap}</text>
+  </g></svg>`;
+}
+window.STICKERS = [
+  { id: 'gg', cap: 'GG!', eyes: 'happy', mouth: 'open', pose: 'up', back: P.confetti, emoji: '🎉', desc: 'Good game, chief!' },
+  { id: 'new-code', cap: 'NEW CODE', eyes: 'star', mouth: 'open', pose: 'hold', prop: 'gift', capColor: GOLD, emoji: '🎁', desc: 'A new gift code is out' },
+  { id: 'copied', cap: 'COPIED', eyes: 'happy', mouth: 'smile', pose: 'hold', prop: 'ticket', emoji: '✅', desc: 'Code copied, redeeming now' },
+  { id: 'bug-spotted', cap: 'BUG?!', eyes: 'wide', mouth: 'o', pose: 'down', prop: 'magnifier', emoji: '🐛', desc: 'Found something broken' },
+  { id: 'fixed', cap: 'FIXED', eyes: 'determined', mouth: 'grin', pose: 'hold', prop: 'wrench', capColor: '#5be0a8', emoji: '🔧', desc: 'The bug is fixed' },
+  { id: 'on-it', cap: 'ON IT', eyes: 'determined', mouth: 'smile', pose: 'salute', emoji: '🫡', desc: 'Staff are on it' },
+  { id: 'known-issue', cap: 'KNOWN ISSUE', eyes: 'worried', mouth: 'flat', pose: 'shrug', emoji: '🤷', desc: 'We already know about this one' },
+  { id: 'brrr', cap: 'BRRR', eyes: 'worried', mouth: 'wavy', pose: 'hug', back: P.snow, icicles: true, capColor: ICE, emoji: '🥶', desc: 'So cold out there' },
+  { id: 'cozy', cap: 'COZY', eyes: 'closed', mouth: 'smile', pose: 'hold', prop: 'campfire', emoji: '🔥', desc: 'Warm by the fire' },
+  { id: 'rally', cap: 'RALLY!', eyes: 'determined', mouth: 'open', pose: 'upone', prop: 'flag', capColor: GOLD, emoji: '🚩', desc: 'Join the rally' },
+  { id: 'bear-time', cap: 'BEAR TIME', eyes: 'wide', mouth: 'o', pose: 'up', back: P.paws, emoji: '🐾', desc: 'Bear hunt is starting' },
+  { id: 'thanks-chief', cap: 'THANKS CHIEF', eyes: 'heart', mouth: 'smile', pose: 'hold', prop: 'heart', emoji: '❤️', desc: 'Thank you!' },
+  { id: 'report-it', cap: 'REPORT IT', eyes: 'determined', mouth: 'open', pose: 'hold', prop: 'megaphone', emoji: '📣', desc: 'Please report that bug' },
+  { id: 'afk', cap: 'AFK', eyes: 'sleepy', mouth: 'o', pose: 'down', back: P.zzz, capColor: ICE, emoji: '😴', desc: 'Away for a bit' },
+  { id: 'hype', cap: 'HYPE', eyes: 'star', mouth: 'open', pose: 'up', back: P.sparkles, capColor: GOLD, emoji: '✨', desc: 'So hyped' },
+  { id: 'gm-chief', cap: 'GM CHIEF', eyes: 'happy', mouth: 'smile', pose: 'hold', prop: 'mug', emoji: '☕', desc: 'Good morning' },
+  { id: 'svs-time', cap: 'SVS TIME', eyes: 'determined', mouth: 'grin', pose: 'hold', prop: 'shield', capColor: GOLD, emoji: '⚔️', desc: 'State vs State is on' },
+  { id: 'lag', cap: 'LAG...', eyes: 'worried', mouth: 'flat', pose: 'down', back: P.spinner, emoji: '🐌', desc: 'The game is lagging' },
+  { id: 'nice', cap: 'NICE', eyes: 'happy', mouth: 'grin', pose: 'thumb', emoji: '👍', desc: 'Nice one' },
+  { id: 'level-up', cap: 'LEVEL UP', eyes: 'star', mouth: 'open', pose: 'hold', prop: 'flame', capColor: GOLD, emoji: '🔥', desc: 'Furnace levelled up' }
+];
+window.render = i => { document.getElementById('s').innerHTML = sticker(STICKERS[i]); };
+</script></body></html>

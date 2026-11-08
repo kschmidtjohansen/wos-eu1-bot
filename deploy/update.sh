@@ -60,6 +60,7 @@ refresh_web() {
   local keep; keep="$(cat $WWW/bugs/config.js 2>/dev/null || true)"
   cp -r $SRC/site/. $WWW/bugs/
   [[ -n "$keep" ]] && printf '%s\n' "$keep" > $WWW/bugs/config.js
+  [[ -d $SRC/staff ]] && cp -r $SRC/staff/. $WWW/staff/      # staff app icons + manifest
   sed 's|apiBase: "",|apiBase: "same-origin",|' $SRC/dashboard.html > $WWW/staff/index.html
   chmod -R a+rX $WWW
 }

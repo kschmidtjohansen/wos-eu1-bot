@@ -53,9 +53,10 @@ CHANNEL_NEEDS = {
     "digest_channel_id": ("Weekly digest channel", _BASE),
     "giftcodes_channel_id": ("Gift codes channel", _BASE + ["read_message_history"]),
     "board_channel_id": ("Known issues board channel", _BASE + ["read_message_history"]),
+    "log_channel_id": ("Bot log channel", list(_BASE)),
 }
 OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id",
-                     "giftcodes_channel_id", "board_channel_id")
+                     "giftcodes_channel_id", "board_channel_id", "log_channel_id")
 # accepted suggestions are only posted here; moderators decide in the mod channel
 
 
@@ -120,7 +121,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("PUT", r"/api/suggestions/\d+"),
                  (None, r"/api/replies(/\d+)?"), (None, r"/api/blocklist(/\d+)?"), ("DELETE", r"/api/webblocks")]
     MOD_HIDDEN = [r"/api/backups/.*", r"/api/auth/settings", r"/api/translate", r"/api/drive/.*", r"/api/redeem.*",
-                  r"/api/modstats"]
+                  r"/api/modstats", r"/api/stickers.*"]
 
     async def staff_role(user_id: int):
         """'admin', 'mod' or None – checked live against the member's Discord roles."""
@@ -959,6 +960,30 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         for p in s["staff"]:
             p["name"] = (person(int(p["id"]), p["name"]) if p["id"] and p["id"].isdigit() else None) or p["name"]
         return web.json_response(s)
+
+    # ---------------------------------------------------------- sticker pack
+    @routes.get("/api/stickers")
+    async def stickers(request):
+        return web.json_response(hooks["sticker_status"]())
+
+    @routes.get("/api/stickers/{id}.png")
+    async def sticker_png(request):
+        sid = request.match_info["id"]
+        if not re.fullmatch(r"[a-z0-9-]{2,40}", sid):
+            raise ApiError(404, "Not found.")
+        path = Path(__file__).with_name("assets") / "stickers" / f"{sid}.png"
+        if not path.is_file():
+            raise ApiError(404, "Not found.")
+        return web.FileResponse(path, headers={"Cache-Control": "private, max-age=86400"})
+
+    @routes.post("/api/stickers/install")
+    async def stickers_install(request):
+        data = await body_json(request)
+        ids = data.get("ids") if isinstance(data.get("ids"), list) else None
+        try:
+            return web.json_response(await hooks["install_stickers"](ids, who_id(request), who(request)))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
 
     @routes.post("/api/info")
     async def post_info(request):

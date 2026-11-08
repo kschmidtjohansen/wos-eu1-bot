@@ -350,6 +350,8 @@ SCHEMA = {
     "giftcodes_list": {"type": "bool", "default": True},
     "giftcodes_site_url": {"type": "text", "default": "", "min": 0, "max": 300},
     "board_channel_id": {"type": "channel", "default": None},
+    "log_channel_id": {"type": "channel", "default": None},
+    "log_channel_kinds": {"type": "lines", "default": "all", "max_lines": 20, "max_len": 20},
     "redeem_enabled": {"type": "bool", "default": False},
     "redeem_url": {"type": "text", "default": "", "min": 0, "max": 500},
     "redeem_method": {"type": "choice", "default": "POST", "choices": ["POST", "GET"]},
@@ -458,6 +460,7 @@ def put_raw(key: str, value: str):
 LOG_KINDS = ("bug", "backup", "link", "ticket", "mod", "admin", "suggestion", "welcome", "patch", "block", "panel", "settings",
              "profile", "system")
 LOG_KEEP = 5000
+log_listeners = []          # the bot adds a function here to copy every entry to the Discord log channel
 
 
 def log_event(kind: str, text: str, actor_id: Optional[int] = None, actor_name: Optional[str] = None):
@@ -467,6 +470,11 @@ def log_event(kind: str, text: str, actor_id: Optional[int] = None, actor_name: 
     )
     db.execute("DELETE FROM logs WHERE id <= (SELECT MAX(id) FROM logs) - ?", (LOG_KEEP,))
     db.commit()
+    for f in log_listeners:
+        try:
+            f({"ts": int(time.time()), "kind": kind, "actor_id": actor_id, "actor_name": actor_name, "text": text[:500]})
+        except Exception:  # noqa: BLE001 – the log must never break what is being logged
+            pass
 
 
 def query_logs(limit: int = 50, offset: int = 0, kind: Optional[str] = None, q: Optional[str] = None):

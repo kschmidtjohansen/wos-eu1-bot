@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WOS EU1 – Bot manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WOS EU1 – Staff</title>
+<meta name="theme-color" content="#060c17">
+<link rel="manifest" href="manifest.json" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><link rel="icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="EU1 Staff">
 
 <!-- STANDALONE ONLY: delete this block when you paste the page into your site's own template -->
 <style>
@@ -126,6 +130,11 @@
 .w-pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--w-surface-2);border:1px solid var(--w-border);color:var(--w-muted);white-space:nowrap}
 .w-dot{width:8px;height:8px;border-radius:50%;background:var(--w-ok);flex:none}
 .w-demo{background:var(--w-warn-soft);color:var(--w-warn);border-color:transparent}
+.w-stickers{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px}
+.w-stk{margin:0;padding:10px 6px 8px;border-radius:14px;border:1px solid var(--w-border);background:var(--w-surface-2);text-align:center;opacity:.6}
+.w-stk.on{opacity:1;border-color:color-mix(in srgb,var(--w-ok) 40%,var(--w-border))}
+.w-stk img{width:84px;height:84px;display:block;margin:0 auto 4px;object-fit:contain}
+.w-stk figcaption{font-size:12px;color:var(--w-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .w-changes{margin:10px 0;padding:12px;border:1px dashed var(--w-border);border-radius:12px}
 .w-changes.done{border-style:solid;border-color:color-mix(in srgb,#9b59b6 45%,var(--w-border));background:color-mix(in srgb,#9b59b6 7%,transparent)}
 .w-changes .w-textarea{min-height:70px;margin-top:6px}
@@ -502,6 +511,59 @@
 .w-login h1{font-family:var(--w-display);font-weight:600;letter-spacing:-.02em}
 .wosd[data-theme="wos"] .w-logo{width:52px;height:52px;border-radius:16px;font-family:var(--w-display);font-size:22px;color:#2a1204;background:linear-gradient(135deg,var(--w-heat),var(--w-heat-2));box-shadow:0 12px 30px -10px var(--w-heat)}
 .wosd a{color:var(--w-accent);text-underline-offset:3px}
+
+/* ---- quick jump, phone tab bar, "More" sheet, login (v3.1) ---- */
+.w-search-btn{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:12px;border:1px solid var(--w-border-strong);background:rgba(4,10,20,.4);color:var(--w-muted);cursor:pointer;font-size:14px;text-align:left}
+.w-search-btn:hover{border-color:rgba(125,227,244,.45);color:var(--w-text)}
+.w-search-btn span{flex:1}
+.w-search-btn kbd{font:inherit;font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:7px;border:1px solid var(--w-border-strong);color:var(--w-muted)}
+.w-palbg{position:fixed;inset:0;z-index:10000;background:rgba(3,7,14,.6);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:grid;place-items:start center;padding:12vh 12px 12px}
+.w-pal{width:100%;max-width:560px;border-radius:20px;background:var(--w-surface-solid);border:1px solid var(--w-border-strong);box-shadow:0 30px 80px -20px rgba(0,0,0,.8);overflow:hidden;animation:w-pop .16s ease-out}
+@keyframes w-pop{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+.wosd .w-palin{width:100%;border:0;border-bottom:1px solid var(--w-border);border-radius:0;background:transparent;padding:18px 20px;font-size:17px;color:var(--w-text);outline:none}
+.wosd .w-palin:focus{box-shadow:none;border-color:var(--w-border) !important}
+.w-pallist{max-height:50vh;overflow:auto;padding:8px}
+.w-pallist button{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:0;border-radius:12px;background:none;color:var(--w-text);cursor:pointer;text-align:left;font-size:15px}
+.w-pallist button span{flex:1}
+.w-pallist button small{color:var(--w-muted);font-size:12.5px}
+.w-pallist button .w-ic{color:var(--w-muted)}
+.w-pallist button[aria-selected="true"],.w-pallist button:hover{background:var(--w-accent-soft)}
+.w-pallist button[aria-selected="true"] .w-ic{color:var(--w-accent)}
+.w-palfoot{display:flex;gap:16px;padding:10px 18px;border-top:1px solid var(--w-border);font-size:12px;color:var(--w-muted)}
+.w-tabbar{display:none}
+.w-loginlogo{display:block;width:64px;height:64px;border-radius:18px;box-shadow:0 0 0 1px var(--w-border-strong),0 14px 34px -12px var(--w-accent)}
+.w-login .w-beam{background:conic-gradient(from var(--w-ang,0deg),transparent 0 75%,var(--w-accent) 86%,#fff 91%,transparent 96%)}
+@media (max-width:860px){
+  .wosd{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+  .w-side{flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px}
+  .w-side .w-nav,.w-side .w-sidefoot,.w-side .w-me{display:none}
+  .w-side .w-brand{flex:1;min-width:0}
+  .w-side .w-status{order:3;flex-basis:100%}
+  .w-side .w-search-btn{width:auto;padding:8px 10px}
+  .w-side .w-search-btn span,.w-side .w-search-btn kbd{display:none}
+  .w-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:900;padding:6px 6px calc(6px + env(safe-area-inset-bottom));
+    background:rgba(8,14,26,.9);-webkit-backdrop-filter:blur(18px) saturate(140%);backdrop-filter:blur(18px) saturate(140%);border-top:1px solid var(--w-border)}
+  .w-tabbar button{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;border:0;border-radius:14px;background:none;color:var(--w-muted);font-size:11.5px;font-weight:650;cursor:pointer;min-width:0}
+  .w-tabbar button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .w-tabbar .w-ic{width:22px;height:22px}
+  .w-tabbar button[aria-current="page"]{color:var(--w-text);background:var(--w-accent-soft)}
+  .w-tabbar button[aria-current="page"] .w-ic{color:var(--w-accent)}
+  .w-tabbar .w-count{position:absolute;top:2px;right:calc(50% - 26px);font-size:10.5px;min-width:18px;padding:0 5px}
+  .w-sheetbg{position:fixed;inset:0;z-index:950;background:rgba(3,7,14,.55);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);display:flex;align-items:flex-end}
+  .w-sheet{width:100%;max-height:82vh;overflow:auto;padding:10px 14px calc(16px + env(safe-area-inset-bottom));border-radius:24px 24px 0 0;background:var(--w-surface-solid);border-top:1px solid var(--w-border-strong);animation:w-up .2s ease-out}
+  @keyframes w-up{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}
+  .w-grab{display:block;width:44px;height:5px;border-radius:5px;background:var(--w-border-strong);margin:2px auto 12px}
+  .w-sheet .w-search-btn{margin-bottom:6px}
+  .w-sheet .w-navgroup{display:block;padding:14px 4px 6px}
+  .w-sheetgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .w-sheetgrid button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px;border-radius:14px;border:1px solid var(--w-border);background:var(--w-surface-2);color:var(--w-text);font-size:12.5px;font-weight:600;cursor:pointer;text-align:center}
+  .w-sheetgrid button .w-ic{width:22px;height:22px;color:var(--w-muted)}
+  .w-sheetgrid button[aria-current="page"]{border-color:rgba(125,227,244,.45);background:var(--w-accent-soft)}
+  .w-sheetgrid button[aria-current="page"] .w-ic{color:var(--w-accent)}
+  .w-sheet .w-sidefoot{display:flex;margin-top:16px;padding:14px 0 0}
+  .w-savebar{bottom:calc(80px + env(safe-area-inset-bottom))}
+  .w-toasts{bottom:calc(84px + env(safe-area-inset-bottom))}
+}
 .wosd ::-webkit-scrollbar{width:10px;height:10px}
 .wosd ::-webkit-scrollbar-thumb{background:var(--w-border-strong);border-radius:10px;border:2px solid transparent;background-clip:content-box}
 
@@ -591,6 +653,7 @@ const ICON = {
   shield: '<path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6z"/>',
   pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
   users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',
   gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
@@ -630,10 +693,11 @@ const CHANNELS = [
   ['backup_channel_id', 'Backup channel', 'Optional. A copy of the database is posted here every day. It contains player data – make it admin-only.'],
   ['digest_channel_id', 'Weekly digest channel', 'Optional. Where the Monday summary is posted. Empty = the admin channel.'],
   ['giftcodes_channel_id', 'Gift codes channel', 'Optional. New gift codes are announced here. Give the bot “Mention @everyone” if you ping @everyone or @here.'],
+  ['log_channel_id', 'Bot log channel', 'Optional, keep it staff-only. Everything the bot does is posted here too – who did what, and when (shown in each reader’s own time). Choose what to post on the Channels page below the list.'],
   ['board_channel_id', 'Known issues board channel', 'Optional. One message lists the open known issues (bugs you put on the public list). Players pick “I have this too” and get a DM when it is fixed.']
 ];
 const CHANNEL_KEYS = CHANNELS.map(c => c[0]);
-const FEATURE_KEYS = ['bugs_enabled', 'suggestions_enabled', 'investigate_enabled', 'dm_notifications',
+const FEATURE_KEYS = ['log_channel_kinds', 'bugs_enabled', 'suggestions_enabled', 'investigate_enabled', 'dm_notifications',
   'delete_ticket_on_close', 'report_cooldown_minutes', 'suggestion_max_length',
   'reminders_enabled', 'reminder_mod_hours', 'reminder_admin_hours', 'reminder_critical_hours',
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
@@ -832,8 +896,13 @@ function viewChannels() {
         <div><div class="w-row-label">${label}</div><div class="w-row-desc">${desc}</div></div>
         <div><select class="w-select" data-k="${k}" aria-label="${label}">${channelOptions(S.draft[k])}</select></div>
         <div class="full" data-badge="${k}">${badgeFor(k)}</div></div>`)}
+    </section>
+    <section class="w-card w-pad"><h3 class="w-h3">What goes to the bot log channel</h3>
+      <p class="w-sub" style="margin-bottom:12px">Pick the kinds of activity to post. “Everything” includes kinds added later.</p>
+      <div class="w-chips">${['all'].concat(Object.keys(KINDS)).map(k => html`<button class="w-chip" type="button" data-act="logKind" data-v="${k}" aria-pressed="${String(logKinds().includes(k))}">${k === 'all' ? 'Everything' : KINDS[k][0]}</button>`)}</div>
     </section>${saveBar()}`;
 }
+function logKinds() { return String(S.draft.log_channel_kinds || 'all').split('\n').filter(Boolean); }
 
 function toggleRow(k, label, desc) {
   return html`<div class="w-row"><div><div class="w-row-label">${label}</div><div class="w-row-desc">${desc}</div></div>
@@ -1006,7 +1075,30 @@ function viewBot() {
       </div>
       <div class="w-actions"><button class="w-btn primary" data-act="saveBot">Save profile</button></div>
     </section>
+    ${stickerCard()}
     ${loginCard()}`;
+}
+function stickerCard() {
+  const K = S.stickers; if (!K) return '';
+  const missing = K.items.filter(x => !x.installed).length;
+  return html`<section class="w-card w-pad" id="stickers"><div class="w-sec-head"><h3 class="w-h3">Sticker pack: Frostbit</h3>
+      <span class="w-badge ${missing ? 'info' : 'ok'}">${K.items.length - missing} of ${K.items.length} on the server</span></div>
+    <p class="w-sub" style="margin-bottom:14px">Our own snow chief, made for the server in its frost-and-furnace colours. The bot adds the missing ones to Discord in one go
+      (${K.used} of ${K.limit} sticker slots used). It needs the <b>Manage Expressions</b> permission.</p>
+    <div class="w-stickers">${K.items.map(x => html`<figure class="w-stk${x.installed ? ' on' : ''}"><img data-stk="${x.id}" alt="${x.title} sticker" width="96" height="96"><figcaption>${x.emoji} ${x.title}</figcaption></figure>`)}</div>
+    <div class="w-actions" style="margin-top:14px">${missing ? html`<button class="w-btn primary" data-act="stickersInstall">Add ${missing} sticker${missing === 1 ? '' : 's'} to Discord</button>` : html`<span class="w-hint">All stickers are on the server.</span>`}</div>
+  </section>`;
+}
+async function loadStickerImgs() {
+  for (const img of $$('img[data-stk]')) {
+    const id = img.dataset.stk;
+    if (S.demo) { img.src = 'assets/stickers/' + id + '.png'; continue; }
+    try {
+      if (!fileUrls['stk-' + id]) { const r = await fetch(S.base.replace(/\/+$/, '') + '/api/stickers/' + id + '.png', { headers: S.key ? { Authorization: 'Bearer ' + S.key } : {} });
+        if (!r.ok) throw new Error('x'); fileUrls['stk-' + id] = URL.createObjectURL(await r.blob()); }
+      img.src = fileUrls['stk-' + id];
+    } catch (e) { img.alt = 'Not available'; }
+  }
 }
 function loginCard() {
   const A = S.auth; if (!A) return '';
@@ -1824,7 +1916,8 @@ const LOADERS = {
   players: async () => { const q = S.players ? S.players.q || '' : ''; S.players = Object.assign(await call('GET', '/api/links?q=' + encodeURIComponent(q)), { q }); },
   moderators: async () => { const d = S.modstats ? S.modstats.days : 30; S.modstats = await call('GET', '/api/modstats?days=' + d); },
   translations: () => loadTr(S.tr && S.tr.data ? S.tr.data.lang : null),
-  bot: async () => { try { S.auth = S.user && S.user.role !== 'admin' ? null : await call('GET', '/api/auth/settings'); } catch (e) { S.auth = null; } },
+  bot: async () => { try { S.auth = S.user && S.user.role !== 'admin' ? null : await call('GET', '/api/auth/settings'); } catch (e) { S.auth = null; }
+    try { S.stickers = isMod() ? null : await call('GET', '/api/stickers'); } catch (e) { S.stickers = null; } },
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
@@ -1836,6 +1929,7 @@ async function loadTab(t) {
   const f = LOADERS[t]; if (!f) return;
   try { await f(); } catch (e) { toast(e.message, 'err'); }
   if (S.tab === t && t !== 'bugs' && t !== 'suggestions') { const main = $('#wosd-main'); if (main) main.innerHTML = String(VIEWS[t]()); }
+  if (S.tab === 'bot' && t === 'bot') loadStickerImgs();
 }
 
 // Number ticker: the overview numbers count up once per visit (skipped when the person prefers less motion).
@@ -1857,9 +1951,53 @@ function renderTab() {
   main.innerHTML = String(VIEWS[S.tab]());
   if (S.tab === 'overview') tick(main);
   $$('.w-nav button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === S.tab)));
+  closeSheet(); const tb = $('.w-tabbar'); if (tb && S.overview) tb.outerHTML = String(tabBar());
+  window.scrollTo({ top: 0 });
   if (S.tab === 'log') { renderLogList(); loadLogs(true, true); }
   loadTab(S.tab);
   if (['channels', 'features', 'welcome'].includes(S.tab)) updateSaveBar();
+}
+const STAFF_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAa3UlEQVR42s1daZBcV3U+59z7unt6ekYjySNja7HlRbYBL9iyQZggTCCGJBAggBOKlAkVCCQFVGInQJZKhZCQCrgMJARDEpbgYJYQkpBQFShMAtgELzK2ke3YFtYylqzFGmmW3t695+THXd593T3yaNQju2tq5s3r7tfvfe87yz1bY23VOXCCD0QkIkIkhYhI1PeDSIQ4YD+5DRz0+gXeguQ/7JhvQQAQFmEWYWH3I2Ej/AjzwKeSt2gY4kMEEHt2AQgIggAg9D2F7vm+p2DQ/uJQEp7y75fwESICAsLACAAiIuKede+WcNzyDn/w8keFhx4OLiIiCDjgSgdff7zU8BT6neFqsQeqFOUIioigv0pxuBAgg6A/rDjERIRFErjcnwBWP3zpzqEyqIRG/6UWaPZDIOWd2MM+AcAEPhH3r2MMRNYgACJgOE4BUMSIw0EG0KrYIxIuAIYMkDtuCkEZrx4Z7BdATweJUgPJ9aQYsQAJCgOTIAMQIAgyIjoqSziXAiAWEKeVEsgKQUwYFoQVYFgMKm5LmR3Fh2IBgQiIYIQApbhvJZFxgBZPSXyKGYi8TBEDILAAIiABAnh0wgkAOOKIAHh0OKGUAEv5/COJZPgi1otXwZde+KS0R8rSJyXiBBWDTEACwgIE7FjDIAjk6AOIVgARHeQAHnyBgicc1BF7tSULPMI79LBUTzghARHBRJBKuJSvHBeSIHASBCLAACQSNhxrkAJGhCKI4O6E1z6OdfHoXhNFGeK44XiUcEo8m8LGEJV0NA/oKJ6KM5SkT1LDzCCEUUNHUASDKAkQgAgKA5BE1kDQx4IOGkFEcMYrvTlR2wacOCqbhE3MDi9IFHlETQ9frLxklaWsR0MVeIHTLqm6EWEEcjoDJJEm8qzx5twbLARAD5kjEXiEMRgnCZpFIGGQB8HLWqqVIj4govTIquEA5M8VAP0jbkL4D8K/Pa8PhtlfcHhnsIH+ZWUfIBFtRxOJDgMAsNuKliuom9RwJSQqrFvBJr9zeACFi8JwYzHBC5KnMMHQ/fLyUiCAUECChX4b4Oj2eBfRQkdfIejjBBooKeIAYiJxqTewHEuNQtakZNGgELped8Zr5fB6BiBgRiBAFkIABAaIG4iAKB5jAERn5J2ogaB4s4iJGYtM6wEoINLvKzHLMEUsvfmEUaAKvpQ3CvlK5CeyLj4lZZlKHcqofkEKjyt6MYnTzImIsQhHNRxXIRBtf6GAPEbDBqhQGYU2KauYoIyi9Pmrjvq15IAXJglT+YoLtLDHG0cI1x3MOqe6hqMhK6ApRKxs/gOswwcoUTGFnsZ+rQwFSin1ELBYrXtbBH5fSh1IFuISvAmGkhfurx+g8ICiPuLAMpBEf/c6kyzLwKACgmT1WNClLFzl32KsiBBRr71yiBWIFOyRYlEawx2eQeA54i87mjMPVtDNyXYPQMvDoOK6MHHagq6Jlq14HSICkFZs7MjEhK7V8lZLaS3CkmqfiIckIQkpEShKGZSiG0GzcI+ISR80JSlz8C0Pg4KgSSFcBXewnztEzUOHVp991sv/+I/P2bp13333Te/aldXrKAPCWSk60e+BZMHl17Sc2PxoVZ2DE5zmQVa/V3MvF0BQEqpEshJCOe3E1lZGR694y7VT2+6pjY3NPL738XvuuezX3vzkjh2m3UbCNIZVwiaSKBoxiJIFkoiYI1H4N2qcHnM22PwvJ0Dh/qdOY0ox76sgmU672mhc8MpX6FpVV6unXXzR/gcfenLHDlIqEaiST5jC1GPgi+VeIk2pV52as9SrTBVWfP1yAhRdx97Fg5e4sGoCJNz1w/8FxBe/+12T52364U2fevCb3xxZsaJPsmIIcQF8mKXsCgZjFLBjloRNhX9UJlHKIBxCVmMRgoZE3ty7DSJEBEJEv//ya6/N6iNzBw4A4tiaNXm7s+2LX0QkJPTKPniagKXVWkRfAIobACFKGwiHEB17wRjiTeKJBdBRPS27Dhoka/3wibXVRkNl2b1f+5fnXXPN2KlrvvuRG6pjjeaTh/NO261LpKSoo7ZJVqmJe1j2g0pWKcaAElkr4Ij+t3CMPZ4cgJKMEGLJDQARJDLd7r7771+zadNpF10ozId37nzstttJKSQKEaWyae81XgDAMQIvLF7cokVLfSLmdAVbkqxo9YvV2UkQsR5pIwIvYoBIUQBJ67zdVlnm7Vq9LsKJTKXeJkL/MiVALwKAUqQ1wImeSMnqeUwwod5CmkjDSXz4UEv0m5GdJhIGybsqy9zLVJbZPI9hEyj5UyjelULxvno42uDEX7omkV7dXlrfA0CPh3nSAYpnUyxHkvCgiHWguKC2i2ZIacXbF2kLi1uMC5F+NedWdhiFMopoiU3F/jKJTjZA/pyZJUQ+AGPGJo3yFKs5SUQsvCviEjPQhW5zmHonq8eNipSBASKWqvqI1NMDUOL7oiAhQinGjCEIT06fhFwFIsaNKFZJxlsCSjJIuEoueDR5EZEkSBIg46GlfU6ASgJgAV1uC0s/jgGpF+6cnbCyk8AgSfwgQUSRZOlf/MXAJ4l5l8RlGKyq4ekGqCATc0nXpBFV6IWpIEtEKhIqKYgolwqIRGjKK92yrJXiAcPRQdGELt7Y9x8BQ0oCEzXktYnT1onTDIO2U75g4T8nS7/ob6bcKcxZ8QtOHKDjBaX/ve53BCs93TRf1BeHLRYaBQCeX06nIaTBNQAQQQAubouEBIKkZ9PjiEcc9cmEpv8IPWnqsgYXh4IkqEQ15A7BXu9AXKHFsqqeCLbztTEgGJ0gfw4Je6B8gSckYq4Yrmel9NRLDgBX/OZc6CI4Hfb3Q+muRilVFiZk5hijdq45knfP/XsRAMBaTuULA0Zlczb4oZdOH4TW7AzkJhB60cwSgEpWGW3keZfn5mPgFQShmlXrozDwdBGaM0fDxznfD/TYWKYztxoREWu63W4unU7irwMIZI2G0jqePR7PJeslR+WNMde/97pzz97Q7rArmnwqjBBA2PJoTf/wzns/9+mbnnPp5b/1zrd2OxYRmaUxom793o++dPOXqo1GyiP3cXm3+57r3vOc889qtq2Lkhhj/+ojN+7bMwUsYLpAamRixaZzNp5//qZLLrl4cs0kM4OA1vSxj9/0yMOPVGojMUE9UK6HCRARmfnmC7c8/7WvfHF+PEcxABnA+MrJz3ziwxvWr3vHtdcYAAWQA1QAGCtf/IfP0XijjA8gos3Na1/zqq1XPDcHUAAE0AW46VN/J6edesnzLn7uc59z8cUXXnDB+Rs2rJ8Yy3SSHlIAX/nq1/9v+wNYr4s9bgWql563sGbbth+/6uVXHpo1OtOpKT3Gw1q7qqFmZ2cBMM+7c8Y2m4xE1tjVDTU/Px90rJSSPgKAcPTo0ZaxM/PW6b5Wq12rVb/w71+7/KJzBIABugKdDhyd41CHAyJSqWCe52lqbbkASi7erzZ37tyFWmUZKKUW7wRprZQiZ3y0VkohEYGA1oqIFpZTUaS0VkoBESmFSilNNFKvzxluNm2UGyKK5yMiWjt3U3o9r8VJ2RIZxCKg1c6dOzsMRZ4PQESIcFEVIIN0VpJW7g/Uy8DT6Ha7IpJlWaUCmYIMoMXQbpdW9VIcU45TRx8PQIXtdMZSZ1NTjx892q7Xa9YKM68cVR+/6Qt/94m/GRlfaaztLTcIpkcpmp2ZBRy1lhcu5lvsKa1evXosU0927e7dB3fv2XP/PT++5LLLrnzBpc0Op3duyY+le9I60wcPHTpw4OC55643BkSAEOojIw9uv1fVV1kPEA5QXyIq04BqcXDIMdDJ8+4H/vSD00cOP/jQI3v37p2dmZHW/r+44VMve9Glc60UIAE5TuacKEAAWuv5mdmpqalnn7e+KUyEXYDzzj8PqO7REezLRgOIgKJqtdZstU4wxk1ErVb7M5/8GNAoaKWySm2knucTIyMjMtisyMkDCAAICbrdxx7bqWGLqzjo5rBhw/orr3rJ/Py8UqqkNIJ4KqJmq/XTnz527Er0RdIICVV9dW2kZtnl+cAYy8JDjDTopVp5R1nZseOnsQTBGFi1auU3v/l16VeFAoDADI0a3LntoauuuhqWSPnew1prLYtfcqR1fE8rQEHpknr00R05ACJF5huzIJOZ2QrZQn8vuvFjQRZhUY4mcPwLieUEyJ0KeY9DEid7QQ8DUSmEoRiXBRg9oFjvaQMIEYDtpnPPycoOdKfT7ansSRmkiDqdjvequVdZaK0xloFiUueMAEhaKynCQr7Mt8hCDhuaE2aQACCeddZG9j0IUqng3r2HfunVr52fm1eZFhnQEoeIeW5IERDNzs4ZU1QyGoAzzzxTtJZyVRkiMPPoaP3009caLl7f6XSazRYSSUm6njEixsxQrZ658Uwb7mdF49TU1EPbH9TVigy6mQIAgqSwklUw0/v27TtypDk+XjdGiGiuLVuuuOTZF134wLYfj01ORjdSazWzf+plv/zG884+fbbFRMTMWYb79x84fHg601lBX4ShP5amDgQBjDVj4+Pr1q7tMviTBnhg+wNgDpvc2HbHtru23fE/na7tdLnd4W7HtNrNublqtbZvz9T27Q/UMh88YyOj9eonP3HjaevXzR7Y15yebh490pw+PLP/8ec8b/MNH/6zPKzFmbmKcuddd3eOHNF6efMOS44HocnN5Pp1a9ZMmjxEJBiU1i/a+oqRsQnLtu+G+qJurWn6yMxP7t/Onc4/3fKlq7duZhEFQIpmW/L851/8Pz/4zj/dfMuP772/2WyNj4+94IrNb3rzr6ycGG22fH0nEXYt3nLLV1BrSeP0zyiAJM/XrV07PlZptQURlVIzHXjzm9/467/+xmMKJtQJvnfHT7ZufXl1xcRXv/jlt/3GW7dsfvbhGZNlWhHOzvNpp03+yfvfbQAsgAZQALNdaLb8MrjbzU9dkd38tf/6wXf/uza+wrIsumNrKSAuHSAwZuPGM6oEc5a1Vu7z81y6XTm25qJRarfbAKCUarea7/zN3/72t/5t1erxozNGa6WIul1ptaxLbLjgulIu+C25MZMrsvv+b9f1v3NdVq1hr++DC/oBuESCnYhLImeceYY1xpjchIe1lhf3AATLXB0b237vfb/wqjfu2LF7zbhWCo2xzEyhIs2VyrBlY22W4anj2W133PvqV73+wIFDulrjnhgI+ntgyo8TycToJadrQOnNmy/NtF6zUqvF2z4AApiYmHA23xo7smLinjvueslLfv597/2da655/emTKwQgBzDWrUhRkz/Lx6YO/NVnv3DjjZ9oNpu1RoOtBaSEGD4P22g0Mq0nV2odXIVKli3Zz15aPAgts67X//Vfv3H3XXd0u7z4GLiIVDLctWefUtod1Fo7smLFk9PT173ruo997JM/d/XPbtny/LPPOXv16tVZVu20WwcPHnz4kUdu+8Ht3/rWrQen9mTjK2qjox6d0F3k4GEWVRv5xn/858Enplw8SEC0wt27p1Slkt7gxZ/w8VWY9URdOzNHwRooxeuO7c6GnaQr4yvSGgYiIqJWqynNJgBSfWR0tJ5VKp12Z77ZhFYLAFVjtFqtMXPMoPooRpGkFQRoz89Dt52u5lRjPMuytHHoJAGkiELs9FiJMezrBWKWsM7AaGDck0QEIpattSzChETKxbDRQwMldMoBZnENMeWwL1pre9qqlj3t4y7Musr+BSI3sXrXtaaHKBIUVSw+m+oXFOjFxKFAWlGs/BGWkGFOMtGeIShFwgJdoJqtFLnMMprLa+ZLYenBSx9fo0wELNDuWGBAjSNVYgYWaOfFeBF397VGx8TcCDMrhcp1QqOz68kkExCtkAi7RiQEgBAECTX1nUNR3IBPWV6yTOGOBXUNErQ6XM3wknPHx+tq94HOzj1NXVO1Cj1rpRYATQgIxgoAHJkzHSNsZXJFVhtRM7NmrmlIEbNkmtaeUnHlze7KZuZNs21PW1mpVMgaX2zWzfnwbL6YEztedJYCUCnzPzgUi3nXXrxx9DO/f/6lmxruPbd864m33/DwpnUjd39qMwCYeWNZqnUFjeya99731W/vf9bptdtuuGTjxtHv3n7o5/7wfqWpm/M5p9fv/Ogl9RrBiAIrMJb99ge2/+2X93zhgxe+8LKVVRcsa+jbvnfoRdffW68r+1SJ0+NF58Q86QWqYYjAdPgPf3XDpZtXXvu++2698/Cbrn7Wta9bt/XSidt/MvP+T/+02+Hffd3aU8b1+/9+p0F4cE9LGH7tpaduPLtx1z3TV115yosvnvju3UdQI4vUJ7L/vuPw33z98WpdocJ7Hp6Dqh6pEuX8lhsfbnW5UqEDT3azCokMPqslgDJMEev/eAQEwu27mm9g+aM3bXjDz0zuPZLf8Pld3//JbLMjf3nzbujwG148OVJRf/nlKehYGtX1VdV3v2bdnduOXPW++/d+ZcvvvW79rduOOsPPOYzX9QVnNKo1EoQfPTAHCMYCAG5aW2/nXB1RR2YMG0FVlEqfICjD1UG9D8NSHdU3fv3xfU92X3jRxPqVlaufN/b2Xz3jzL/d8Sef27VqcmSmabVWQHTKqmpu5eiMee1Vk2vPHnt0X+edV59++HB+9ZbJyy6YuPuBmSzTNocLzxrbtK6BCKpC/3P/7KM7mwKoa+rdr14rIpXx7NPZ1H/84BA6MXyGrOaPWfiBzTnz5+84+xeuWvP7f/3orXdNv2brmps/dOGalVUhYiRBEVJMSkjnhqt1es9r1vM8n7ehcfnbJqZnc6xm7/qldW/Z/hAolTUqn/3PfW/76CMTY9qwiAiOVkir+Rl7ztu3zTRNRmBYao3MqXx8hgPkSo51hT7/nQNXv+CUf//QRdxiqqjbf3Tkw/+2f2S8hkqpirKoLWRZtXK4lf/iFasuv2zNx7+0+w/+cdeKum7n/M/vP/8NL1v7p199om0JMLOoLWlLGYsoJSojRmWADJBxY08kTMoBkWFjNMxmFon+ocJ2VzKtnntWY+0ptf0z9sHdbQs4UtWCCIDrJ6uZxt0Hu7mRU1dmE+PZ7ifa823WCnPDp4xnzzqlsvdgp9nhs06rzczbJ6a7inwTnLW8dnVWIXjsiaY1VjhMsnPtOjBkHg0ZoDAfgrQiIeoYsKAqFd0YzZTSgkSKkKhrQABqFULErmFrpZqRIhQQRMyNdA1XMyKEdpeVwkyF2lNmYW53jDUmIxFjmS1bK9aP9/PjZJ7JOggQCVEQSdFYNVOZJq1BadKalHJdYDVFiOhSNhUIwzzCATKEUfB7ao207ZSFma1tVCwbY7q5RQRTTE2TpVZJnUSA0Jt5JEJUQARKo8pUraorFaU1KY2KfEsmJjktPJbcFhNsmK0xbIzJu+LaOFx6jERE0GJf+8ozBiDpn01B5ChDlYyNMcxSrZIIiXJTM/tbl2TBqnMQYbHM1rAxptMVtrqSibAoxZaRw2AQWVKZ1EkUMSy6BMi3EgrzuVu3nnXlC4GZFCk3UZQQwbfsUhhs4/8NRyFARPD/ujJwEWDWird9739v+/Z3SGs2BgmBEK1LPw85vaGXqfcyNmCytY3JyZdef31jdV1yUAiEoAAIgQSU2yYgKD3lX4Cg3H63E0EhIEANYMtLXrr97m3TBw56aS1CaM94RzEdmuXqhjpzczu+//0zr9gsea7coFoX1gJUCASOARB2OlxcsyaowC8CVCCECCK1Ctz7w23N2TkiYhMCIsNWz0M281K07SpSRForrVWloqtVyjKdZY01a1SWqUyT0mFyb5wH0zsGFpN5LxJnRLJlY52Gnt5/gPOc89x0OqbbZWPYGLYsbH0E9pnGIExiYJL0irh4KCrVnJ5WlUzpDJVCRaGnIrR9FXMB0tlA6ZhIZstirTW57eZKKUnyOcl8gCHn6JfDD4pDlUItt2U2RlUyYRFfvihM3DM9YUDqMzYlxeF01iILilhjxLqAr7guFkQauo0fMkA+y6cISaEbHxpuPRo/AZtdkpQodMP7wbS4kNimzchuVWGtFygnTc5/R0ISNwkOBkTKn26A/MQAQgA3aDzpUw7ury8zt5bd3HBn3osZkYVoSDpz2qHEfpqCsDBbsZat9fMRivEgSKJYuc7fMBHxaQeoPEwBIYxs95V4GArikdl3BTIyYWnQ4uBB3QMYFBccDh03wM31Qvm+NSTxnfc+wXDCMJ0QQIUxCr/Bz3chchtARRsbs++PRBGiUhtqD4EQk0Rb0f4PzG7WaDEmx8+3AHIxJmRkAETXly+ua4xZ+mr9TkpM2g/fTybepP86MfOz+DG2JKeJxp4wgJu07tEs7nsxISGdc+4XNH7GKwIoQQ708biA60NDFEReqmLSSxQrlX4BglMABK7FktBPLYkzgzAqibBiKnfAYyJoxWQYKU1h9uAhIgEwAQqQG7jtX6HEU0YYBV1ajcUhBUCOVsdPJb1EsSpDUwian5nkYCpGKAWb5RVTGOqKgD0R9ugRuS8R8LEdQUFxw5RBQJAEhFG8XfdaWVjK9AFGAIZQ2BCnYixnZpWIiCD8xkTKiAiQiKLEecpgGMrhdpYn3gx2o0utUQKl6REcxkcwhqE/JMjhOwPYjV5gdELlx6O4QnxOJocsT/kLESmHAqEa9K0giSZC8nwprJvT4gAlmEpTzaC3y7A0bUoARMipahAMM5AcKCLCDgsRYEIQRMKkbcOF8QDYTQKxPGSAMIKiVIGF6vsqlhJGPUghQPAJ4oiAdBrZoFgQhqUG+lEoIuQH6PidrkyPGRC8TKXCFd10YRACcv4GMS2WR/p4zLl3kdMf6tFEQTcBUiplhYuE6YTpYvwtDnATAeMcm9J0FgyAuWGdwVQxCnIUKEEQwCBrECGj5EsqFoORXrxWJiJU2IfOAlIWUYuepN+AoK2hwChBKHwtgh8JDcWYFkZxv50f6OjDIijOb3LEcZHuQCJilxMqFBBY9x0ci9VHejFfbJRc/7HQ8Ysst9YIWhyLUYDetGFcx5dJlHII068N8VJGICJCwuyly5kq8f6OC7oKO4R4cKmH64uEpL4qmVGxFICiL9PDERoEzYBvcsJE4soKOx19D6VBbT3jkPy0Q4zJDQrUIRSWKFnE6MZeUKgJ5HI1r7he5BhvcjF/Ijlme5Z+KqNedpGLQFff12RFu9Zj4FL/KCKVwpROw4Vi+khpUEwyrwYZvfGKAsUDKAM9kgUC4s2on5ZHoTuZ6BiC9v8sWJg3wuE+aAAAAABJRU5ErkJggg==';
+const PHONE_TABS = ['overview', 'bugs', 'suggestions', 'codes'];
+function navList() { return NAV.filter(n => !isMod() || MOD_TABS.includes(n[0])); }
+function tabBar() {
+  const o = S.overview, more = !PHONE_TABS.includes(S.tab);
+  return html`<nav class="w-tabbar" aria-label="Sections">${navList().filter(n => PHONE_TABS.includes(n[0])).map(n => html`<button data-act="nav" data-tab="${n[0]}" aria-current="${n[0] === S.tab ? 'page' : 'false'}">${icon(n[2])}<span>${n[0] === 'suggestions' ? 'Ideas' : n[0] === 'codes' ? 'Codes' : n[1]}</span>${n[0] === 'bugs' && o.stats.bugs.awaiting ? html`<em class="w-count">${o.stats.bugs.awaiting}</em>` : ''}</button>`)}
+    <button data-act="sheet" aria-current="${more ? 'page' : 'false'}" aria-haspopup="dialog">${icon('grid')}<span>${more ? (NAV.find(n => n[0] === S.tab) || [, 'More'])[1] : 'More'}</span></button></nav>`;
+}
+function openSheet() {
+  closeSheet();
+  const groups = {}; navList().forEach(n => (groups[n[3]] = groups[n[3]] || []).push(n));
+  root.insertAdjacentHTML('beforeend', String(html`<div class="w-sheetbg" id="wsheet" data-act="sheetBg"><div class="w-sheet" role="dialog" aria-modal="true" aria-label="All sections">
+    <i class="w-grab" aria-hidden="true"></i>
+    <button class="w-search-btn" data-act="palette">${icon('search')}<span>Search pages or open bug #…</span></button>
+    ${Object.entries(groups).map(([g, items]) => html`<div class="w-sheetgroup"><div class="w-navgroup">${g}</div><div class="w-sheetgrid">${items.map(n => html`<button data-act="nav" data-tab="${n[0]}" aria-current="${n[0] === S.tab ? 'page' : 'false'}">${icon(n[2])}<span>${n[1]}</span></button>`)}</div></div>`)}
+    <div class="w-sidefoot"><button class="w-btn small" data-act="refresh">${icon('refresh')} Refresh</button><button class="w-btn small" data-act="logout">${S.user ? 'Log out' : 'Disconnect'}</button></div>
+  </div></div>`));
+}
+function closeSheet() { const x = $('#wsheet'); if (x) x.remove(); }
+/* Quick jump (Ctrl/⌘ K): pages, and #number opens that bug. */
+function openPalette() {
+  closeSheet(); closePalette();
+  root.insertAdjacentHTML('beforeend', String(html`<div class="w-palbg" id="wpal" data-act="palBg"><div class="w-pal" role="dialog" aria-modal="true" aria-label="Quick jump">
+    <input class="w-palin" id="palq" placeholder="Go to a page, or type a bug number…" autocomplete="off" aria-label="Search">
+    <div class="w-pallist" id="pall" role="listbox"></div><div class="w-palfoot"><span>↑↓ to choose</span><span>Enter to open</span><span>Esc to close</span></div></div></div>`));
+  S.pal = { i: 0, items: [] }; palDraw(); const q = $('#palq'); if (q) q.focus();
+}
+function closePalette() { const x = $('#wpal'); if (x) x.remove(); S.pal = null; }
+function palDraw() {
+  const q = ($('#palq') ? $('#palq').value : '').trim().toLowerCase(), num = q.replace(/^#/, '');
+  const items = [];
+  if (/^\d{1,6}$/.test(num)) items.push({ kind: 'bug', id: +num, label: 'Open bug #' + num, ic: 'bug' });
+  navList().filter(n => !q || n[1].toLowerCase().includes(q) || n[3].toLowerCase().includes(q)).forEach(n => items.push({ kind: 'nav', id: n[0], label: n[1], sub: n[3], ic: n[2] }));
+  S.pal.items = items; S.pal.i = Math.min(S.pal.i, Math.max(0, items.length - 1));
+  $('#pall').innerHTML = String(items.length ? html`${items.map((x, i) => html`<button role="option" data-act="palGo" data-i="${i}" aria-selected="${String(i === S.pal.i)}">${icon(x.ic)}<span>${x.label}</span>${x.sub ? html`<small>${x.sub}</small>` : ''}</button>`)}` : html`<div class="w-empty">No page matches.</div>`);
+}
+async function palGo(i) {
+  const x = S.pal && S.pal.items[i]; if (!x) return;
+  closePalette();
+  if (x.kind === 'nav') { S.tab = x.id; renderTab(); }
+  else { try { await openBug(x.id); } catch (e) { toast(e.message, 'err'); } }
 }
 function renderApp() {
   if (isMod() && !MOD_TABS.includes(S.tab)) S.tab = 'overview';
@@ -1874,6 +2012,7 @@ function renderApp() {
         <div class="w-status"><span class="w-pill"><i class="w-dot"></i>Online${b.latency_ms != null ? ' · ' + b.latency_ms + ' ms' : ''}</span>
           ${S.demo ? html`<span class="w-pill w-demo">Demo – nothing saved</span>` : ''}</div>
         ${S.user ? html`<div class="w-me">${S.user.avatar ? html`<img src="${S.user.avatar}" alt="">` : ''}<div><b>${S.user.name}</b><span class="w-hint">${S.user.role === 'admin' ? 'Admin' : 'Moderator'} · logged in with Discord</span></div></div>` : ''}
+        <button class="w-search-btn" data-act="palette" aria-keyshortcuts="Control+K Meta+K">${icon('search')}<span>Search</span><kbd>Ctrl K</kbd></button>
         <nav class="w-nav" role="tablist" aria-label="Sections">
           ${NAV.filter(n => !isMod() || MOD_TABS.includes(n[0])).map((n, i, list) => html`${i === 0 || list[i - 1][3] !== n[3] ? html`<div class="w-navgroup" role="presentation">${n[3]}</div>` : ''}<button role="tab" data-act="nav" data-tab="${n[0]}" aria-selected="${String(n[0] === S.tab)}">${icon(n[2])}<span>${n[1]}</span>${n[0] === 'bugs' && o.stats.bugs.awaiting ? html`<em class="w-count">${o.stats.bugs.awaiting}</em>` : ''}</button>`)}
         </nav>
@@ -1883,15 +2022,15 @@ function renderApp() {
         </div>
       </aside>
       <main class="w-main" id="wosd-main" role="tabpanel"></main>
-    </div>`);
+    </div>${tabBar()}`);
   renderTab();
 }
 function renderLogin(error) {
   root.innerHTML = String(html`
-    <div class="w-card w-login">
-      <div class="w-logo">W</div>
-      <h1>${CFG.productName} manager</h1>
-      <p>Connect to your bot to manage the panel, channels, features and see the activity log.</p>
+    <div class="w-card w-login"><i class="w-beam" aria-hidden="true"></i>
+      <img class="w-loginlogo" src="${STAFF_ICON}" alt="" width="64" height="64">
+      <h1>${CFG.productName} staff</h1>
+      <p>Bug reports, suggestions, gift codes and the bot – for the team that keeps the furnace running.</p>
       ${error ? html`<div class="w-error" role="alert">${error}</div>` : ''}
       ${S.discordLogin ? html`<a class="w-btn primary w-discord" href="${(S.base || location.origin).replace(/\/+$/, '')}/api/auth/login">${raw('<svg class="w-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 4.6A19 19 0 0 0 15.3 3l-.6 1.2a17 17 0 0 0-5.4 0L8.7 3A19 19 0 0 0 4 4.6C1 9 .3 13.3.6 17.6a19 19 0 0 0 5.8 2.9l1.2-2a12 12 0 0 1-1.9-.9l.5-.4a13.6 13.6 0 0 0 11.6 0l.5.4-1.9.9 1.2 2a19 19 0 0 0 5.8-2.9c.4-5-.8-9.3-3.4-13zM8.7 15c-1.1 0-2-1-2-2.3s.9-2.2 2-2.2 2 1 2 2.2-.9 2.3-2 2.3zm6.6 0c-1.1 0-2-1-2-2.3s.9-2.2 2-2.2 2 1 2 2.2-.9 2.3-2 2.3z"/></svg>')} Log in with Discord</a>
         <div class="w-or"><span>or use the admin key</span></div>` : ''}
@@ -2033,6 +2172,24 @@ root.addEventListener('click', async e => {
   const act = el.dataset.act;
   try {
     if (act === 'nav' || act === 'goto') { S.tab = el.dataset.tab; renderTab(); }
+    else if (act === 'sheet') openSheet();
+    else if (act === 'sheetBg') { if (e.target === el) closeSheet(); }
+    else if (act === 'palette') openPalette();
+    else if (act === 'palBg') { if (e.target === el) closePalette(); }
+    else if (act === 'palGo') palGo(parseInt(el.dataset.i, 10));
+    else if (act === 'stickersInstall') {
+      busy(el, true, 'Adding stickers…');
+      try { const r = await call('POST', '/api/stickers/install', {});
+        toast(r.added.length ? 'Added ' + r.added.length + ' sticker' + (r.added.length === 1 ? '' : 's') + ' to Discord.' + (r.failed.length ? ' ' + r.failed.length + ' failed: ' + r.failed[0] : '') : (r.failed[0] || 'Nothing to add.'), r.failed.length ? 'warn' : undefined);
+        S.stickers = await call('GET', '/api/stickers'); renderMain(); loadStickerImgs(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'logKind') {
+      const v = el.dataset.v; let L = logKinds();
+      if (v === 'all') L = ['all']; else { L = L.filter(x => x !== 'all'); L = L.includes(v) ? L.filter(x => x !== v) : L.concat(v); if (!L.length) L = ['all']; }
+      S.draft.log_channel_kinds = L.join('\n');
+      $$('[data-act="logKind"]').forEach(b => b.setAttribute('aria-pressed', String(L.includes(b.dataset.v)))); updateSaveBar();
+    }
     else if (act === 'gotoList') { const t = el.dataset.tab; if (t === 'bugs') S.bugs.status = el.dataset.s; else S.sugs.status = el.dataset.s; S.tab = t; renderTab(); }
     else if (act === 'scrollSetup') { const x = $('#setup'); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     else if (act === 'logout') logout();
@@ -2376,7 +2533,16 @@ async function exportCsv(what) {
   root.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
   toast('Downloaded ' + what + '.');
 }
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && S.overview) { e.preventDefault(); if (S.pal) closePalette(); else openPalette(); }
+});
+root.addEventListener('input', e => { if (e.target.id === 'palq') { S.pal.i = 0; palDraw(); } });
 root.addEventListener('keydown', e => {
+  if (S.pal && e.target.id === 'palq') {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const n = S.pal.items.length; if (n) { S.pal.i = (S.pal.i + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; palDraw(); } return; }
+    if (e.key === 'Enter') { e.preventDefault(); palGo(S.pal.i); return; }
+  }
+  if (e.key === 'Escape') { if (S.pal) return closePalette(); if ($('#wsheet')) return closeSheet(); }
   if (e.key === 'Escape' && S.detail) closeModal();
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.w-bugrow[role=button]')) { e.preventDefault(); e.target.click(); }
 });
@@ -2459,7 +2625,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, log_channel_kinds: 'all', board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
     backup_channel_id: null, bug_areas: 'City\nAlliance\nCombat\nHeroes\nEvents\nShop & payments\nChat\nLogin & connection\nUI & display\nOther',
@@ -2533,6 +2699,7 @@ function makeMock() {
     history: STs[i % STs.length] === 'new' ? [] : [{ ts: now - i * 3600 * 6, action: 'passed', actor: 'Sofie' }].concat(
       ['fixed', 'being_investigated', 'admin_rejected'].includes(STs[i % STs.length]) ? [{ ts: now - i * 3600 * 4, action: STs[i % STs.length], actor: 'Kasper' }] : [])
   }));
+  const stk = { used: 9, limit: 60, items: [{"id": "gg", "name": "GG!", "emoji": "🎉", "desc": "Good game, chief!", "title": "Gg", "installed": true}, {"id": "new-code", "name": "NEW CODE", "emoji": "🎁", "desc": "A new gift code is out", "title": "New Code", "installed": true}, {"id": "copied", "name": "COPIED", "emoji": "✅", "desc": "Code copied, redeeming now", "title": "Copied", "installed": true}, {"id": "bug-spotted", "name": "BUG?!", "emoji": "🐛", "desc": "Found something broken", "title": "Bug", "installed": true}, {"id": "fixed", "name": "FIXED", "emoji": "🔧", "desc": "The bug is fixed", "title": "Fixed", "installed": false}, {"id": "on-it", "name": "ON IT", "emoji": "🫡", "desc": "Staff are on it", "title": "On It", "installed": false}, {"id": "known-issue", "name": "KNOWN ISSUE", "emoji": "🤷", "desc": "We already know about this one", "title": "Known Issue", "installed": false}, {"id": "brrr", "name": "BRRR", "emoji": "🥶", "desc": "So cold out there", "title": "Brrr", "installed": false}, {"id": "cozy", "name": "COZY", "emoji": "🔥", "desc": "Warm by the fire", "title": "Cozy", "installed": false}, {"id": "rally", "name": "RALLY!", "emoji": "🚩", "desc": "Join the rally", "title": "Rally", "installed": false}, {"id": "bear-time", "name": "BEAR TIME", "emoji": "🐾", "desc": "Bear hunt is starting", "title": "Bear Time", "installed": false}, {"id": "thanks-chief", "name": "THANKS CHIEF", "emoji": "❤️", "desc": "Thank you!", "title": "Thanks Chief", "installed": false}, {"id": "report-it", "name": "REPORT IT", "emoji": "📣", "desc": "Please report that bug", "title": "Report It", "installed": false}, {"id": "afk", "name": "AFK", "emoji": "😴", "desc": "Away for a bit", "title": "Afk", "installed": false}, {"id": "hype", "name": "HYPE", "emoji": "✨", "desc": "So hyped", "title": "Hype", "installed": false}, {"id": "gm-chief", "name": "GM CHIEF", "emoji": "☕", "desc": "Good morning", "title": "Gm Chief", "installed": false}, {"id": "svs-time", "name": "SVS TIME", "emoji": "⚔️", "desc": "State vs State is on", "title": "Svs Time", "installed": false}, {"id": "lag", "name": "LAG...", "emoji": "🐌", "desc": "The game is lagging", "title": "Lag", "installed": false}, {"id": "nice", "name": "NICE", "emoji": "👍", "desc": "Nice one", "title": "Nice", "installed": false}, {"id": "level-up", "name": "LEVEL UP", "emoji": "🔥", "desc": "Furnace levelled up", "title": "Level Up", "installed": false}] };
   const links = Array.from({ length: 14 }, (_, i) => ({ discord_id: '7000' + i, name: NAMES[i % 8], uid: String(41000000 + i * 7919), chief: 'Chief ' + NAMES[i % 8], ts: now - i * 86400 * 2, bugs: i % 4, redeemed: 30 + i % 9 }));
   const rdm = { settings: { redeem_enabled: false, redeem_url: '', redeem_method: 'POST', redeem_body: '{"uid": "{uid}", "code": "{code}"}', redeem_ok_text: '', redeem_already_text: 'already', redeem_delay: 2, redeem_dm: false },
     header_set: false, linked: 14, codes: [{ code: 'WOSEU1GIFT', ok: 12, already: 1, failed: 1 }, { code: 'FROST500K', ok: 13, already: 0, failed: 0 }],
@@ -2605,6 +2772,8 @@ function makeMock() {
         known: Object.keys(names).map(c => ({ code: c, name: names[c] })) };
     }
     if (p === '/api/translations') { trOver[body.lang] = Object.assign(trOver[body.lang] || {}, body.items); Object.keys(trOver[body.lang]).forEach(k => { if (!trOver[body.lang][k]) delete trOver[body.lang][k]; }); return { ok: true }; }
+    if (p === '/api/stickers' && method === 'GET') return stk;
+    if (p === '/api/stickers/install') { const add = stk.items.filter(x => !x.installed); add.forEach(x => { x.installed = true; }); stk.used += add.length; return { added: add.map(x => x.title), skipped: [], failed: [] }; }
     if (p === '/api/links' && method === 'GET') { const t = (q.get('q') || '').toLowerCase();
       return { total: links.length, items: links.filter(x => !t || (x.chief + ' ' + x.uid + ' ' + x.discord_id).toLowerCase().includes(t)) }; }
     { const ml = p.match(/^\/api\/links\/(\d+)$/); if (ml) { const i = links.findIndex(x => x.discord_id === ml[1]); if (i < 0) throw new Error("That link doesn't exist."); links.splice(i, 1); return { ok: true }; } }

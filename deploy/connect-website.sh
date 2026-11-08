@@ -150,6 +150,7 @@ else
   sed -i -e "s|DISCORD_URL: ''|DISCORD_URL: '$(esc "$INVITE")'|" -e "s|STATUS_URL: ''|STATUS_URL: '$(esc "$STATUS")'|" $WWW/bugs/config.js
   ok "config.js filled in"
 fi
+[[ -d $SRC/staff ]] && cp -r "$SRC/staff/." $WWW/staff/      # staff app icons + manifest
 sed 's|apiBase: "",|apiBase: "same-origin",|' "$SRC/dashboard.html" > $WWW/staff/index.html
 grep -q 'apiBase: "same-origin"' $WWW/staff/index.html || warn "Couldn't set apiBase in the dashboard – set it by hand (website manual, troubleshooting)."
 chmod -R a+rX $WWW
