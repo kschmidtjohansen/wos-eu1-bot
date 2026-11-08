@@ -7,6 +7,7 @@ import csv
 import hmac
 import os
 import io
+import collections
 import re
 import time
 import asyncio
@@ -54,9 +55,10 @@ CHANNEL_NEEDS = {
     "giftcodes_channel_id": ("Gift codes channel", _BASE + ["read_message_history"]),
     "board_channel_id": ("Known issues board channel", _BASE + ["read_message_history"]),
     "log_channel_id": ("Bot log channel", list(_BASE)),
+    "invites_channel_id": ("Invite log channel", list(_BASE)),
 }
 OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id",
-                     "giftcodes_channel_id", "board_channel_id", "log_channel_id")
+                     "giftcodes_channel_id", "board_channel_id", "log_channel_id", "invites_channel_id")
 # accepted suggestions are only posted here; moderators decide in the mod channel
 
 
@@ -121,7 +123,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("PUT", r"/api/suggestions/\d+"),
                  (None, r"/api/replies(/\d+)?"), (None, r"/api/blocklist(/\d+)?"), ("DELETE", r"/api/webblocks")]
     MOD_HIDDEN = [r"/api/backups/.*", r"/api/auth/settings", r"/api/translate", r"/api/drive/.*", r"/api/redeem.*",
-                  r"/api/modstats", r"/api/stickers.*"]
+                  r"/api/modstats", r"/api/stickers.*", r"/api/emojis.*", r"/api/push.*", r"/api/weekly"]
 
     async def staff_role(user_id: int):
         """'admin', 'mod' or None – checked live against the member's Discord roles."""
@@ -360,7 +362,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
              "area": r["area"] or "", "version": r["game_version"] or "", "severity": r["severity"] or "",
              "source": r["source"] or "discord", "public": bool(r["public"]),
              "fixed_version": r["fixed_version"] or "",
-             "duplicates": [d["id"] for d in store.duplicates_of(r["id"])], "votes": store.vote_count(r["id"])}
+             "duplicates": [d["id"] for d in store.duplicates_of(r["id"])], "votes": store.vote_count(r["id"]),
+             "reason": r["reject_reason"] or "", "dup_suggest": r["dup_suggest"], "dup_score": r["dup_score"]}
         if full:
             linked = [] if not r["player_uid"] else [
                 {"id": str(x["discord_id"]), "name": person(x["discord_id"]) or f"User …{str(x['discord_id'])[-4:]}"}
@@ -451,8 +454,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             dup = None
         if status or dup:
             try:
+                reason = str(data.get("reason") or "").strip()[:900] or None
                 r = await hooks["set_bug_status"](r, status or "rejected", who(request), who_id(request),
-                                                  duplicate_of=dup, log_kind="admin")
+                                                  duplicate_of=dup, log_kind="admin", reason=reason)
             except discord.HTTPException as exc:
                 raise ApiError(502, f"Discord refused: {exc.text or exc}")
         if "public" in data and "refresh_board" in hooks:
@@ -962,6 +966,71 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         return web.json_response(s)
 
     # ---------------------------------------------------------- sticker pack
+    @routes.get("/api/invites")
+    async def invites(request):
+        now = int(time.time())
+        name = lambda uid, stored=None: (person(uid, stored) if uid else None) or (stored or (f"User …{str(uid)[-4:]}" if uid else None))
+        top = [{**r, "inviter_id": str(r["inviter_id"]), "name": name(r["inviter_id"])} for r in store.invite_top(25)]
+        recent = [{"member_id": str(r["member_id"]), "member": name(r["member_id"], r["member_name"]),
+                   "inviter_id": str(r["inviter_id"]) if r["inviter_id"] else None, "inviter": name(r["inviter_id"]) if r["inviter_id"] else None,
+                   "code": r["code"], "ts": r["ts"], "left": r["left_ts"], "fake": bool(r["fake"])} for r in store.recent_joins(60)]
+        one = lambda sql, *a: store.db.execute(sql, a).fetchone()[0] or 0
+        return web.json_response({
+            "enabled": bool(store.cfg("invites_enabled")), "can_read": bool(hooks.get("invite_perm", lambda: True)()),
+            "joins30": one("SELECT COUNT(*) FROM invite_joins WHERE ts>=?", now - 30 * 86400),
+            "known30": one("SELECT COUNT(*) FROM invite_joins WHERE ts>=? AND inviter_id IS NOT NULL", now - 30 * 86400),
+            "inviters": one("SELECT COUNT(DISTINCT inviter_id) FROM invite_joins WHERE inviter_id IS NOT NULL"),
+            "top": top, "recent": recent})
+
+    @routes.get("/api/push")
+    async def push_info(request):
+        return web.json_response({"enabled": bool(store.cfg("push_enabled")), "ready": bool(hooks.get("push_key") and hooks["push_key"]()),
+                                  **store.push_count()})
+
+    @routes.post("/api/push/send")
+    async def push_now(request):
+        data = await body_json(request)
+        title, body = str(data.get("title") or "").strip(), str(data.get("body") or "").strip()
+        topic = data.get("topic") if data.get("topic") in store.PUSH_TOPICS else "news"
+        if not 3 <= len(title) <= 80 or len(body) > 200:
+            raise ApiError(400, "Write a title (3–80 characters) and at most 200 characters of text.")
+        res = await hooks["push_send"](topic, title, body, "index.html")
+        store.log_event("admin", f"Phone notification sent from the dashboard: “{title}”", who_id(request), who(request))
+        return web.json_response(res)
+
+    @routes.post("/api/weekly")
+    async def weekly_now(request):
+        try:
+            ch = await hooks["post_weekly"](True)
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        except discord.HTTPException as exc:
+            raise ApiError(502, f"Discord refused: {exc.text or exc}")
+        return web.json_response({"ok": True, "channel": ch.name})
+
+    @routes.get("/api/reasons")
+    async def reasons(request):
+        return web.json_response({"items": [{"key": k, "text": v} for k, v in store.REJECT_PRESETS.items() if v]})
+
+    @routes.get("/api/emojis")
+    async def emojis(request):
+        return web.json_response(hooks["emoji_status"]())
+
+    @routes.get("/api/emojis/{id}.gif")
+    async def emoji_gif(request):
+        eid = request.match_info["id"]
+        path = Path(__file__).with_name("assets") / "emojis" / f"{eid}.gif"
+        if not re.fullmatch(r"[a-z0-9_]{2,40}", eid) or not path.is_file():
+            raise ApiError(404, "Not found.")
+        return web.FileResponse(path, headers={"Cache-Control": "private, max-age=86400"})
+
+    @routes.post("/api/emojis/install")
+    async def emojis_install(request):
+        try:
+            return web.json_response(await hooks["install_emojis"](None, who_id(request), who(request)))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+
     @routes.get("/api/stickers")
     async def stickers(request):
         return web.json_response(hooks["sticker_status"]())
@@ -1004,7 +1073,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         return {"id": r["id"], "text": r["text"], "status": r["status"], "created_at": r["created_at"],
                 "author_id": str(r["author_id"]), "author": person(r["author_id"], r["author_name"]) or "Unknown player",
                 "mod_url": jump("mod_channel_id", r["msg_id"]), "public_url": jump("suggestions_channel_id", r["public_msg_id"]),
-                "changes": r["changes"] or "", "changed_at": r["changed_at"], "changed_by": r["changed_by"] or "",
+                "reason": r["reject_reason"] or "", "changes": r["changes"] or "", "changed_at": r["changed_at"], "changed_by": r["changed_by"] or "",
                 "changes_url": jump("suggestions_channel_id", r["changes_msg_id"])}
 
     @routes.get("/api/suggestions")
@@ -1041,7 +1110,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(400, "Status must be accepted or rejected.")
         if r["status"] != "new":
             raise ApiError(409, "This suggestion has already been decided.")
-        r = await hooks["decide_suggestion"](r, status, who_id(request), who(request))
+        r = await hooks["decide_suggestion"](r, status, who_id(request), who(request),
+                                             reason=str(data.get("reason") or "").strip()[:900] or None)
         return web.json_response(sug_dict(r))
 
     @routes.delete("/api/suggestions/{id}")
@@ -1430,6 +1500,36 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if not store.cfg("changelog_enabled"):
             raise ApiError(404, "The changelog is switched off.")
         return web.json_response({"items": store.changelog(20)}, headers={"Cache-Control": "max-age=60"})
+
+    push_hits = collections.defaultdict(list)
+
+    @routes.get("/public/push/key")
+    async def push_key(request):
+        key = hooks["push_key"]() if "push_key" in hooks else None
+        return web.json_response({"enabled": bool(key), "key": key}, headers={"Cache-Control": "max-age=300"})
+
+    @routes.post("/public/push/subscribe")
+    async def push_subscribe(request):
+        ip = request.headers.get("X-Real-IP") or request.headers.get("CF-Connecting-IP") or request.remote or "?"
+        now = time.time()
+        push_hits[ip] = [t for t in push_hits[ip] if now - t < 600]
+        if len(push_hits[ip]) >= 20:
+            raise ApiError(429, "Too many tries. Please wait a few minutes.")
+        push_hits[ip].append(now)
+        if "push_key" not in hooks or not hooks["push_key"]():
+            raise ApiError(404, "Notifications are switched off.")
+        data = await body_json(request)
+        topics = [t for t in (data.get("topics") or []) if isinstance(t, str)]
+        try:
+            store.push_subscribe(data.get("subscription") or {}, topics, str(data.get("lang") or "en"))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        return web.json_response({"ok": True})
+
+    @routes.post("/public/push/unsubscribe")
+    async def push_unsubscribe(request):
+        data = await body_json(request)
+        return web.json_response({"ok": store.push_unsubscribe(str(data.get("endpoint") or ""))})
 
     @routes.get("/public/ideas")
     async def public_ideas(request):

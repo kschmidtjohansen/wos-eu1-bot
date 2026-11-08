@@ -23,6 +23,7 @@ Welcome:   new members are greeted (and tagged) in the welcome channel; edit the
 Channels, toggles and limits are stored in the database and edited from the dashboard.
 """
 import asyncio
+from datetime import timedelta
 import json
 import re
 import base64
@@ -126,6 +127,10 @@ def bug_embed(r, note: Optional[str] = None) -> discord.Embed:
         e.add_field(name="Contact", value=r["contact"][:200], inline=True)
     if r["duplicate_of"]:
         e.add_field(name="Duplicate of", value=f"Bug #{r['duplicate_of']}", inline=True)
+    if r["status"] in ("rejected", "admin_rejected") and r["reject_reason"]:
+        e.add_field(name="💬 Reason (sent to the player)", value=r["reject_reason"][:1024], inline=False)
+    if r["dup_suggest"] and r["status"] in store.OPEN_STATUSES and not r["duplicate_of"]:
+        e.add_field(name="🔁 Looks like a duplicate", value=f"of bug #{r['dup_suggest']} ({r['dup_score']}% match)", inline=False)
     votes = store.vote_count(r["id"])
     if votes:
         e.add_field(name="👥 Players affected", value=f"{votes} more said “I have this too”", inline=True)
@@ -173,12 +178,13 @@ def ilang(interaction: discord.Interaction) -> str:
     return lang_for(interaction.user.id)
 
 
-async def dm_t(user_id: int, key: str, **kw):
-    """DM a player in their own language (texts.py / the dashboard's Translations page)."""
+async def dm_t(user_id: int, key: str, reason: Optional[str] = None, **kw):
+    """DM a player in their own language (texts.py / the dashboard's Translations page). A reason from the
+    team (why a report was closed) is added underneath."""
     if not user_id:
         return
     lg = lang_for(user_id)
-    await dm(user_id, T(key, lg, **kw))
+    await dm(user_id, T(key, lg, **kw) + (T("dm.reason", lg, reason=reason[:900]) if reason else ""))
 
 
 # ------------------------------------------- player: bug ticket (private thread)
@@ -520,6 +526,7 @@ class PreviewView(discord.ui.View):
                       interaction.user.id, name)
             return
         log_event("bug", f"Bug #{r['id']} submitted by {name}", interaction.user.id, name)
+        await safe_check_duplicate(r["id"])
 
         done = interaction.message.embeds[0]
         done.title = T("sub.bug_done_title", lg, id=r["id"])
@@ -628,6 +635,9 @@ async def send_form_report(interaction: discord.Interaction, report: dict, lg: O
         return await interaction.edit_original_response(content=T("sub.bug_fail", lg).replace("**Submit**", "**" + T("form.bug_btn", lg) + "**"), view=None)
     log_event("bug", f"Bug #{r['id']} submitted by {member.display_name} (form)", member.id, member.display_name)
     done = T("form.bug_done", lg, id=r["id"])
+    if await safe_check_duplicate(r["id"]) == "auto":
+        dup = get_bug(r["id"])
+        done = T("form.bug_dup", lg, id=r["id"], original=dup["duplicate_of"])
     if report.get("player_uid") and store.get_link(member.id) is None:
         try:
             store.set_link(member.id, report["player_uid"], report.get("chief_name") or "")
@@ -888,13 +898,7 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
         await dm_t(r["reporter_id"], "dm.passed", id=r["id"])
 
     elif emoji == REJECT_EMOJI:
-        set_bug(r["id"], status="rejected")
-        record_action("bug", r["id"], "rejected", member.id, who)
-        r = get_bug(r["id"])
-        await msg.edit(embed=bug_embed(r, f"Rejected by {who}"))
-        await msg.clear_reactions()
-        log_event("mod", f"Bug #{r['id']} rejected (duplicate / as intended) by {who}", member.id, who)
-        await dm_t(r["reporter_id"], "dm.rejected", id=r["id"])
+        await prompt_reason(channel, "bug", r["id"], member, "rejected")
 
     elif emoji == INVESTIGATE_EMOJI:
         if not cfg("investigate_enabled") or r["ticket_thread_id"]:
@@ -945,6 +949,8 @@ async def handle_admin(payload: discord.RawReactionActionEvent, emoji: str):
 
     new = {ADMIN_INVESTIGATING_EMOJI: "being_investigated", ADMIN_FIXED_EMOJI: "fixed",
            ADMIN_REJECT_EMOJI: "admin_rejected"}[emoji]
+    if new == "admin_rejected":
+        return await prompt_reason(channel, "bug", r["id"], member, "admin_rejected")
     if new == "being_investigated" and r["status"] == "being_investigated":
         return
     set_bug(r["id"], status=new)
@@ -983,6 +989,8 @@ def suggestion_embed(r, note: Optional[str] = None) -> discord.Embed:
     e = discord.Embed(title=f"Suggestion #{r['id']}", description=r["text"], color=color)
     e.add_field(name="From", value=f"<@{r['author_id']}>", inline=True)
     e.add_field(name="Status", value="🛠️ Added – see what changed" if r["changes"] else label, inline=True)
+    if r["status"] == "rejected" and r["reject_reason"]:
+        e.add_field(name="💬 Reason", value=r["reject_reason"][:1024], inline=False)
     if r["changes"]:
         e.add_field(name="🛠️ What we changed", value=r["changes"][:1024], inline=False)
         e.color = 0x9B59B6
@@ -1052,12 +1060,14 @@ async def handle_suggestion(payload: discord.RawReactionActionEvent, emoji: str)
     member = payload.member
     if member is None or not is_mod(member) or r["status"] != "new":
         return
-    await decide_suggestion(r, "accepted" if emoji == SUGGEST_ACCEPT_EMOJI else "rejected", member.id, member.display_name)
+    if emoji != SUGGEST_ACCEPT_EMOJI:
+        return await prompt_reason(channel, "suggestion", r["id"], member, "rejected")
+    await decide_suggestion(r, "accepted", member.id, member.display_name)
 
 
-async def decide_suggestion(r, new: str, actor_id, who: str):
+async def decide_suggestion(r, new: str, actor_id, who: str, reason: Optional[str] = None):
     """Accept or reject a suggestion (from a reaction or the dashboard): updates Discord, logs and tells the author."""
-    set_suggestion(r["id"], status=new)
+    set_suggestion(r["id"], status=new, reject_reason=(reason or None) if new == "rejected" else None)
     record_action("suggestion", r["id"], new, actor_id, who)
     r = get_suggestion(r["id"])
     mod = chan("mod_channel_id")
@@ -1080,8 +1090,9 @@ async def decide_suggestion(r, new: str, actor_id, who: str):
                 set_suggestion(r["id"], public_msg_id=pub.id)
             except discord.HTTPException as exc:
                 log_event("system", f"Could not post accepted suggestion #{r['id']}: {exc}", actor_id, who)
-    log_event("mod", f"Suggestion #{r['id']} {new} by {who}", actor_id, who)
-    await dm_t(r["author_id"], "dm.sug_accepted" if new == "accepted" else "dm.sug_rejected", id=r["id"])
+    log_event("mod", f"Suggestion #{r['id']} {new} by {who}" + (f" – “{reason[:120]}”" if reason else ""), actor_id, who)
+    await dm_t(r["author_id"], "dm.sug_accepted" if new == "accepted" else "dm.sug_rejected", id=r["id"],
+               reason=reason if new == "rejected" else None)
     return get_suggestion(r["id"])
 
 
@@ -1434,6 +1445,7 @@ class WosBot(discord.Client):
         self.add_view(GiftCopyView())  # ...and the Copy button under gift codes
         self.add_view(GiftListView())  # ...and the Link button under the gift-codes list
         self.add_view(BoardView())     # ...and the Known issues menu
+        self.add_view(DupView())       # ...and the duplicate buttons on bug posts
         await self.tree.sync(guild=discord.Object(id=GUILD_ID))
         if not reminder_loop.is_running():
             reminder_loop.start()
@@ -1461,7 +1473,7 @@ class WosBot(discord.Client):
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
                          "drive_backup": drive_backup, "fill_translations": fill_translations,
-                         "publish_info": publish_info, "sticker_status": sticker_status, "install_stickers": install_stickers, "suggestion_changes": post_suggestion_changes, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
+                         "publish_info": publish_info, "push_key": lambda: vapid_keys()[1] if push_ready() else None, "push_send": push_send, "post_weekly": post_weekly, "invite_perm": lambda: bool(_invite_uses) or bool(bot.get_guild(GUILD_ID) and bot.get_guild(GUILD_ID).me.guild_permissions.manage_guild), "sticker_status": sticker_status, "install_stickers": install_stickers, "emoji_status": emoji_status, "install_emojis": install_emojis, "suggestion_changes": post_suggestion_changes, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
                          "refresh_board": safe_refresh_board, "redeem_one": redeem_one, "start_redeem": start_redeem,
                          "redeem_ready": redeem_ready}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
@@ -1486,6 +1498,8 @@ class WosBot(discord.Client):
             await safe_refresh_gift_list()
             await safe_refresh_board()
             start_redeem()
+            if not await cache_invites():
+                log_event("system", "Invite tracker: give the bot the “Manage Server” permission so it can see who invited whom.", None, brand())
             try:
                 await refresh_panel_buttons()
             except Exception as exc:  # noqa: BLE001
@@ -1508,6 +1522,10 @@ class WosBot(discord.Client):
             return
         store.record_members(member.guild.member_count, joined=1)
         try:
+            await track_join(member)
+        except Exception as exc:  # noqa: BLE001 – never block the welcome over invites
+            print(f"[invites] {exc!r}")
+        try:
             if await send_welcome(member):
                 log_event("welcome", f"Welcomed {member.display_name}", member.id, member.display_name)
         except discord.HTTPException as exc:
@@ -1517,10 +1535,27 @@ class WosBot(discord.Client):
         if member.guild.id != GUILD_ID or member.bot:
             return
         store.record_members(member.guild.member_count, left=1)
+        try:
+            await track_leave(member)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[invites] {exc!r}")
+
+    async def on_invite_create(self, invite: discord.Invite):
+        if invite.guild and invite.guild.id == GUILD_ID:
+            _invite_uses[invite.code] = (invite.uses or 0, invite.inviter.id if invite.inviter else None, invite.max_uses or 0)
+
+    async def on_invite_delete(self, invite: discord.Invite):
+        if invite.guild and invite.guild.id == GUILD_ID:
+            await cache_invites()
 
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
+        try:
+            if await guard_message(message):
+                return
+        except Exception as exc:  # noqa: BLE001 – the guard must never break normal chat
+            print(f"[guard] {exc!r}")
         if message.guild and cfg("translate_feed_on") and message.channel.id in translate.feed()["sources"]:
             try:
                 await feed_translation(message)
@@ -1618,7 +1653,7 @@ async def sync_bug_messages(r, note: Optional[str] = None):
 
 
 async def apply_bug_status(r, new: str, actor_name: str, actor_id: Optional[int] = None,
-                           duplicate_of: Optional[int] = None, log_kind: str = "admin"):
+                           duplicate_of: Optional[int] = None, log_kind: str = "admin", reason: Optional[str] = None):
     """Change a bug's status from the dashboard or a command and keep Discord in sync.
     new: passed | being_investigated | fixed | rejected | admin_rejected.  Returns the updated row."""
     if new not in ("passed", "being_investigated", "fixed", "rejected", "admin_rejected"):
@@ -1634,7 +1669,9 @@ async def apply_bug_status(r, new: str, actor_name: str, actor_id: Optional[int]
     if new != "rejected" and not r["admin_msg_id"] and chan("admin_channel_id") is None:
         raise ValueError("Choose the admin channel first (Channels tab).")
 
-    set_bug(r["id"], status=new, duplicate_of=dup["id"] if dup else None)
+    closing = new in ("rejected", "admin_rejected")
+    set_bug(r["id"], status=new, duplicate_of=dup["id"] if dup else None,
+            reject_reason=((reason or "").strip()[:900] or None) if closing else None, dup_suggest=None)
     if new == "fixed":
         stamp_fixed_version(r["id"])
     record_action("bug", r["id"], new, actor_id, actor_name)
@@ -1663,13 +1700,14 @@ async def apply_bug_status(r, new: str, actor_name: str, actor_id: Optional[int]
 
     label = STATUS[new][0].split(" ", 1)[1]
     suffix = f" (duplicate of #{dup['id']})" if dup else ""
-    log_event(log_kind, f"Bug #{r['id']} marked “{label}”{suffix} by {actor_name}", actor_id, actor_name)
+    why = f" – “{reason.strip()[:120]}”" if reason and closing else ""
+    log_event(log_kind, f"Bug #{r['id']} marked “{label}”{suffix} by {actor_name}{why}", actor_id, actor_name)
     if dup:
         lg = lang_for(r["reporter_id"])
         await dm_t(r["reporter_id"], "dm.duplicate", id=r["id"], original=dup["id"],
-                   status=T("st." + dup["status"], lg).split(" ", 1)[-1])
+                   status=T("st." + dup["status"], lg).split(" ", 1)[-1], reason=reason if closing else None)
     else:
-        await dm_t(r["reporter_id"], "dm." + new, id=r["id"])
+        await dm_t(r["reporter_id"], "dm." + new, id=r["id"], reason=reason if closing else None)
     if dup:
         await sync_bug_messages(dup)             # the original now shows how many others hit the same bug
     if new == "fixed":
@@ -1849,6 +1887,7 @@ async def submit_web_report(f: dict, files: list) -> int:
         store.save_file(bug_id, n, d)
     who = f["chief_name"] or "an anonymous player"
     log_event("bug", f"Bug #{bug_id} submitted from the website by {who}", None, "Website")
+    await safe_check_duplicate(bug_id)
     return bug_id
 
 
@@ -2321,6 +2360,11 @@ async def add_gift_codes(items, by_name: str, by_id=None, announce: bool = True)
     if rows:
         await safe_refresh_gift_list()
         start_redeem()
+        if announce:
+            first = rows[0]
+            push_soon("codes", "🎁 New gift code" + ("s" if len(rows) > 1 else "") + "!",
+                      (first["code"] + (f" – {first['reward']}" if first["reward"] else "")) if len(rows) == 1
+                      else ", ".join(r["code"] for r in rows[:4]) + (" …" if len(rows) > 4 else ""), "codes.html")
     return [store.get_gift_code(r["id"]) for r in rows], skipped, warning
 
 
@@ -2871,7 +2915,7 @@ async def changed_cmd(interaction: discord.Interaction, suggestion: int, text: a
 LOG_STYLE = {"bug": ("🐛", 0x4F46E5), "ticket": ("🎫", 0x0284C7), "mod": ("🛡️", 0xD97706), "admin": ("👑", 0xEA580C),
              "suggestion": ("💡", 0x0D9488), "welcome": ("👋", 0x0891B2), "panel": ("📌", 0x7C3AED), "settings": ("⚙️", 0x64748B),
              "patch": ("🩹", 0x16A34A), "block": ("⛔", 0xBE123C), "profile": ("🤖", 0xDB2777), "system": ("🖥️", 0xDC2626),
-             "backup": ("💾", 0x475569), "link": ("🔗", 0x0F766E)}
+             "backup": ("💾", 0x475569), "link": ("🔗", 0x0F766E), "invite": ("📨", 0x7DE3F4), "guard": ("🛡️", 0xFF6B81)}
 _log_queue: list = []
 
 
@@ -2993,6 +3037,649 @@ async def install_stickers(ids=None, actor_id=None, actor_name: str = "Dashboard
     return {"added": added, "skipped": skipped, "failed": failed}
 
 
+# ------------------------------------------------------------ reasons when closing bugs / suggestions
+REASON_LABELS = {"duplicate": "Already reported (duplicate)", "intended": "Works as intended", "cant_repro": "Can't reproduce",
+                 "not_bug": "Not a bug – game design", "missing_info": "Missing information", "game_side": "Comes from the game itself",
+                 "planned": "Already planned", "not_now": "Not right now", "other": "Other – I'll write it"}
+BUG_REASONS = ("duplicate", "intended", "cant_repro", "not_bug", "missing_info", "game_side", "other")
+SUG_REASONS = ("duplicate", "planned", "not_now", "game_side", "other")
+
+
+async def close_with_reason(kind: str, item_id: int, new: str, preset: Optional[str], message: str,
+                            duplicate_of: Optional[int], actor_id, who: str):
+    """Close a bug/suggestion and tell the player why. Returns a short confirmation for the moderator."""
+    text = " ".join(x for x in (store.REJECT_PRESETS.get(preset or "", ""), (message or "").strip()) if x).strip()
+    if kind == "suggestion":
+        r = get_suggestion(item_id)
+        if r is None or r["status"] != "new":
+            raise ValueError("That suggestion has already been decided.")
+        await decide_suggestion(r, "rejected", actor_id, who, reason=text or None)
+        return f"Suggestion #{item_id} closed" + (" – the reason was sent to the player." if text else ".")
+    r = get_bug(item_id)
+    if r is None:
+        raise ValueError("That bug no longer exists.")
+    if duplicate_of:
+        await apply_bug_status(r, "rejected", who, actor_id, duplicate_of=duplicate_of, log_kind="mod", reason=text or None)
+        return f"Bug #{item_id} closed as a duplicate of #{duplicate_of}."
+    if (new == "rejected" and r["status"] not in MOD_OPEN) or (new == "admin_rejected" and r["status"] not in ADMIN_OPEN):
+        raise ValueError("That bug has already moved on.")
+    await apply_bug_status(r, new, who, actor_id, log_kind="mod" if new == "rejected" else "admin", reason=text or None)
+    return f"Bug #{item_id} closed" + (" – the reason was sent to the player." if text else ".")
+
+
+class ReasonModal(discord.ui.Modal):
+    def __init__(self, kind: str, item_id: int, new: str, prompt_msg=None, dup_first: bool = False):
+        super().__init__(title=(f"Close bug #{item_id}" if kind == "bug" else f"Close suggestion #{item_id}")[:45], timeout=900)
+        self.kind, self.item_id, self.new, self.prompt_msg = kind, item_id, new, prompt_msg
+        keys = BUG_REASONS if kind == "bug" else SUG_REASONS
+        self.preset = discord.ui.Select(options=[discord.SelectOption(label=REASON_LABELS[k], value=k, default=(dup_first and k == "duplicate"))
+                                                 for k in keys], min_values=1, max_values=1)
+        self.msg = discord.ui.TextInput(style=discord.TextStyle.paragraph, required=False, max_length=600,
+                                        placeholder="Optional: a few words for the player, e.g. what to try instead")
+        self.add_item(discord.ui.Label(text="Why are you closing it?", component=self.preset))
+        self.add_item(discord.ui.Label(text="Message to the player", component=self.msg))
+        self.dup = None
+        if kind == "bug":
+            r = get_bug(item_id)
+            self.dup = discord.ui.TextInput(required=False, max_length=8, placeholder="e.g. 41",
+                                            default=str(r["dup_suggest"]) if r and r["dup_suggest"] else None)
+            self.add_item(discord.ui.Label(text="Duplicate of bug number", description="Only when it's already reported",
+                                           component=self.dup))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        preset = (self.preset.values or ["other"])[0]
+        dup_raw = str(self.dup.value or "").strip().lstrip("#") if self.dup else ""
+        if dup_raw and not dup_raw.isdigit():
+            return await interaction.response.send_message("The duplicate must be a bug number, e.g. 41.", ephemeral=True)
+        if preset == "other" and not str(self.msg.value or "").strip():
+            return await interaction.response.send_message("Write a short message for the player when you pick “Other”.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        try:
+            done = await close_with_reason(self.kind, self.item_id, self.new, preset, str(self.msg.value or ""),
+                                           int(dup_raw) if dup_raw and self.kind == "bug" else None,
+                                           interaction.user.id, interaction.user.display_name)
+        except ValueError as exc:
+            return await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
+        await interaction.followup.send(f"✅ {done}", ephemeral=True)
+        if self.prompt_msg is not None:
+            try:
+                await self.prompt_msg.delete()
+            except discord.HTTPException:
+                pass
+
+
+class ReasonPromptView(discord.ui.View):
+    """Shown after ❌ on a bug or suggestion: the player should learn why it was closed."""
+
+    def __init__(self, kind: str, item_id: int, new: str):
+        super().__init__(timeout=900)
+        self.kind, self.item_id, self.new = kind, item_id, new
+        if kind != "bug":
+            self.remove_item(self.dup)
+        self.message = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        ok = is_admin(interaction.user) if self.new == "admin_rejected" else is_mod(interaction.user)
+        if not ok:
+            await interaction.response.send_message("Only staff can close reports.", ephemeral=True)
+        return ok
+
+    @discord.ui.button(label="Give a reason", emoji="💬", style=discord.ButtonStyle.primary)
+    async def reason(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ReasonModal(self.kind, self.item_id, self.new, interaction.message))
+
+    @discord.ui.button(label="Duplicate of…", emoji="🔁", style=discord.ButtonStyle.secondary)
+    async def dup(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ReasonModal(self.kind, self.item_id, self.new, interaction.message, dup_first=True))
+
+    @discord.ui.button(label="Close without a reason", style=discord.ButtonStyle.secondary)
+    async def plain(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            done = await close_with_reason(self.kind, self.item_id, self.new, None, "", None, interaction.user.id, interaction.user.display_name)
+        except ValueError as exc:
+            return await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
+        await interaction.followup.send(f"✅ {done}", ephemeral=True)
+        try:
+            await interaction.message.delete()
+        except discord.HTTPException:
+            pass
+
+
+async def prompt_reason(channel, kind: str, item_id: int, member, new: str):
+    label = f"bug #{item_id}" if kind == "bug" else f"suggestion #{item_id}"
+    try:
+        await channel.send(f"{member.mention} why are you closing **{label}**? The player sees your reason in their DM.",
+                           view=ReasonPromptView(kind, item_id, new), delete_after=900,
+                           allowed_mentions=discord.AllowedMentions(users=[member]))
+    except discord.HTTPException as exc:
+        log_event("system", f"Could not ask for a reason for {label}: {exc}", None, brand())
+
+
+# ------------------------------------------------------------ automatic duplicate detection
+class DupView(discord.ui.View):
+    """Buttons on a bug in the mod channel: confirm a suspected duplicate, or reopen one closed automatically."""
+
+    def __init__(self, show: Optional[str] = None, target: Optional[int] = None):
+        super().__init__(timeout=None)
+        if target:
+            self.confirm.label = f"Close as duplicate of #{target}"
+        if show == "confirm":
+            self.remove_item(self.reopen)
+        elif show == "reopen":
+            self.remove_item(self.confirm)
+
+    @discord.ui.button(label="Close as duplicate", emoji="🔁", style=discord.ButtonStyle.secondary, custom_id="dup:confirm")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        r = get_bug_by_msg(interaction.message.id)
+        if not is_mod(interaction.user) or r is None:
+            return await interaction.response.send_message("Only moderators can do this.", ephemeral=True)
+        if r["status"] not in MOD_OPEN or not r["dup_suggest"]:
+            return await interaction.response.edit_message(view=None)
+        await interaction.response.send_modal(ReasonModal("bug", r["id"], "rejected", dup_first=True))
+
+    @discord.ui.button(label="Not a duplicate – reopen", emoji="↩️", style=discord.ButtonStyle.secondary, custom_id="dup:reopen")
+    async def reopen(self, interaction: discord.Interaction, button: discord.ui.Button):
+        r = get_bug_by_msg(interaction.message.id)
+        if not is_mod(interaction.user) or r is None:
+            return await interaction.response.send_message("Only moderators can do this.", ephemeral=True)
+        await interaction.response.defer()
+        await reopen_bug(r, interaction.user.display_name, interaction.user.id)
+        try:
+            await interaction.message.edit(view=None)
+        except discord.HTTPException:
+            pass
+
+
+async def reopen_bug(r, who: str, actor_id=None):
+    set_bug(r["id"], status="new", duplicate_of=None, reject_reason=None, dup_suggest=None, mod_pinged=None)
+    record_action("bug", r["id"], "reopened", actor_id, who)
+    r = get_bug(r["id"])
+    await sync_bug_messages(r, f"Reopened by {who}")
+    log_event("mod", f"Bug #{r['id']} reopened by {who} – not a duplicate", actor_id, who)
+    await dm_t(r["reporter_id"], "dm.reopened", id=r["id"])
+    return r
+
+
+async def check_duplicate(r):
+    """Right after a report arrives: close clear duplicates of an open bug (the player is told which one and gets
+    a message when it's fixed), or mark likely ones for the moderators. Returns 'auto', 'flag' or None."""
+    mode = cfg("dup_mode")
+    if mode == "off" or r is None:
+        return None
+    best, pct = store.find_duplicate(r)
+    if best is None or pct < 45:
+        return None
+    mod = chan("mod_channel_id")
+    if mode == "auto" and pct >= cfg("dup_auto_percent"):
+        await apply_bug_status(r, "rejected", brand(), None, duplicate_of=best["id"], log_kind="bug",
+                               reason=store.REJECT_PRESETS["duplicate"])
+        log_event("bug", f"Bug #{r['id']} closed automatically as a duplicate of #{best['id']} ({pct}% match)", None, brand())
+        if mod is not None and r["msg_id"]:
+            try:
+                await mod.get_partial_message(r["msg_id"]).edit(view=DupView("reopen"))
+            except discord.HTTPException:
+                pass
+        return "auto"
+    set_bug(r["id"], dup_suggest=best["id"], dup_score=pct)
+    r = get_bug(r["id"])
+    if mod is not None and r["msg_id"]:
+        try:
+            await mod.get_partial_message(r["msg_id"]).edit(embed=bug_embed(r), view=DupView("confirm", best["id"]))
+        except discord.HTTPException:
+            pass
+    return "flag"
+
+
+async def safe_check_duplicate(bug_id: int):
+    try:
+        return await check_duplicate(get_bug(bug_id))
+    except Exception as exc:  # noqa: BLE001 – the report itself is already safe
+        print(f"[duplicates] {exc!r}")
+        return None
+
+
+# ------------------------------------------------------------ ping moderators about untouched bugs
+async def ping_waiting_bugs(now: Optional[float] = None) -> int:
+    """Tag the moderator role once per bug that nobody has reacted to within N hours (default 4)."""
+    hours = cfg("mod_ping_hours")
+    ch = chan("mod_channel_id")
+    if not hours or ch is None:
+        return 0
+    now = int(now or time.time())
+    rows = db.execute("SELECT * FROM bug_reports WHERE status='new' AND msg_id IS NOT NULL AND mod_pinged IS NULL "
+                      "AND created_at<=? ORDER BY id", (now - hours * 3600,)).fetchall()
+    if not rows:
+        return 0
+    role = discord.Object(id=MOD_ROLE_ID)
+    link = lambda r: f"https://discord.com/channels/{GUILD_ID}/{ch.id}/{r['msg_id']}"
+    try:
+        if len(rows) == 1:
+            r = rows[0]
+            await ch.send(f"<@&{MOD_ROLE_ID}> ⏰ **Bug #{r['id']}** has waited {hours} h without a moderator – {store.bug_summary(r)[:80]}",
+                          reference=discord.MessageReference(message_id=r["msg_id"], channel_id=ch.id, fail_if_not_exists=False),
+                          allowed_mentions=discord.AllowedMentions(roles=[role]))
+        else:
+            lines = "\n".join(f"• [#{r['id']}]({link(r)}) {store.bug_summary(r)[:60]}" for r in rows[:15])
+            more = f"\n…and {len(rows) - 15} more" if len(rows) > 15 else ""
+            await ch.send(f"<@&{MOD_ROLE_ID}> ⏰ **{len(rows)} bugs** have waited {hours} h without a moderator:\n{lines}{more}"[:1990],
+                          allowed_mentions=discord.AllowedMentions(roles=[role]))
+    except discord.HTTPException as exc:
+        log_event("system", f"Could not tag the moderators about waiting bugs: {exc}", None, brand())
+        return 0
+    db.executemany("UPDATE bug_reports SET mod_pinged=? WHERE id=?", [(now, r["id"]) for r in rows])
+    db.commit()
+    log_event("system", f"Tagged the moderators: {len(rows)} bug(s) waited over {hours} h", None, brand())
+    return len(rows)
+
+
+# ------------------------------------------------------------ scam & phishing guard
+# Deletes messages that look like the usual Discord scams (fake Nitro/Steam/gems, look-alike links, hacked
+# accounts spamming the same link in several channels), times the sender out, and logs it for the staff.
+_URL = re.compile(r"(?:https?://|www\.)([^\s/<>\]\)\"']+)", re.I)
+_INVITE = re.compile(r"(?:discord(?:app)?\.com/invite|discord\.gg)/([a-z0-9-]+)", re.I)
+_SCAM_WORDS = re.compile(r"(free\s*nitro|nitro\s*(?:for\s*)?free|discord\s*nitro.*(?:free|gift|claim)|steam\s*(?:gift|community).*(?:free|claim)"
+                         r"|claim\s+(?:your|the)\s+(?:gift|reward|prize|nitro)|free\s*(?:gems|diamonds|gift\s*codes?|skins?)\s*(?:here|now|at|:)"
+                         r"|gift\s*code\s*generator|crypto\s*airdrop|airdrop.*(?:claim|free)|i'?m\s+leaving\s+cs|someone\s+gifted\s+you)", re.I)
+_LOOKALIKE = ("discord.com", "discord.gg", "discordapp.com", "discord.gift", "steamcommunity.com", "steampowered.com",
+              "centurygame.com", "whiteoutsurvival.com")
+_recent_posts: dict = {}          # user_id -> [(ts, channel_id, message_id, fingerprint)]
+
+
+def _edit_distance(a: str, b: str) -> int:
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _host(d: str) -> str:
+    d = d.lower().split("@")[-1].split(":")[0].strip(".")
+    return d[4:] if d.startswith("www.") else d
+
+
+def scam_reason(text: str) -> Optional[str]:
+    """Why this message looks like a scam, or None."""
+    text = text or ""
+    allow = {x.strip().lower() for x in (cfg("guard_allow_domains") or "").splitlines() if x.strip()}
+    own = re.match(r"https?://([^/:]+)", cfg("giftcodes_site_url") or "")
+    if own:
+        allow.add(own.group(1).lower())                  # the server's own website is always fine
+    hosts = [_host(m.group(1)) for m in _URL.finditer(text)]
+    ok = lambda h: any(h == a or h.endswith("." + a) for a in allow)
+    for h in hosts:
+        if ok(h):
+            continue
+        if h.startswith("xn--") or ".xn--" in h:
+            return f"disguised link ({h})"
+        for real in _LOOKALIKE:
+            if h != real and (_edit_distance(h, real) <= 3 or (real.split(".")[0] in h and not h.endswith(real))):
+                return f"look-alike of {real} ({h})"
+        if re.search(r"(nitro|free-?gift|steam-?gift|gift-?code|claim|airdrop)", h):
+            return f"scam-style address ({h})"
+    if hosts and _SCAM_WORDS.search(text):
+        return "fake giveaway / free Nitro or gems with a link"
+    if hosts and re.search(r"@(everyone|here)", text) and re.search(r"(free|gift|nitro|giveaway|claim)", text, re.I):
+        return "mass ping with a giveaway link"
+    if cfg("guard_block_invites"):
+        for code in _INVITE.findall(text):
+            if code.lower() not in {c.lower() for c in _invite_uses} | {"wos-eu1"}:
+                return f"invite to another server ({code})"
+    return None
+
+
+def _burst(message) -> list:
+    """The same link posted in 3+ channels within a minute (typical for hacked accounts): returns those messages."""
+    if not _URL.search(message.content or ""):
+        return []
+    now = time.time()
+    fp = re.sub(r"\s+", " ", (message.content or "").lower())[:200]
+    items = [x for x in _recent_posts.get(message.author.id, []) if now - x[0] < 60] + [(now, message.channel.id, message.id, fp)]
+    _recent_posts[message.author.id] = items[-10:]
+    same = [x for x in items if x[3] == fp]
+    return same if len({x[1] for x in same}) >= 3 else []
+
+
+def _defang(s: str) -> str:
+    return re.sub(r"https?://", "hxxp://", s).replace(".", "[.]")[:300]
+
+
+async def guard_message(message) -> bool:
+    """True when the message was removed."""
+    if not cfg("guard_enabled") or message.guild is None or message.guild.id != GUILD_ID:
+        return False
+    if is_mod(message.author) or getattr(message.author, "bot", False):
+        return False
+    reason = scam_reason(message.content)
+    burst = _burst(message) if not reason else []
+    if burst:
+        reason = f"same link posted in {len({x[1] for x in burst})} channels within a minute (hacked account?)"
+    if not reason:
+        return False
+    removed = 0
+    for cid, mid in ({(message.channel.id, message.id)} | {(x[1], x[2]) for x in burst}):
+        ch = bot.get_channel(cid)
+        try:
+            await (ch.get_partial_message(mid) if ch else message).delete()
+            removed += 1
+        except discord.HTTPException:
+            pass
+    minutes = cfg("guard_timeout_minutes")
+    timed = False
+    if minutes and isinstance(message.author, discord.Member):
+        try:
+            await message.author.timeout(timedelta(minutes=minutes), reason=f"Scam guard: {reason}")
+            timed = True
+        except discord.HTTPException:
+            pass
+    await dm_t(message.author.id, "dm.guard", minutes=minutes if timed else 0)
+    log_event("guard", f"Removed a message from {message.author.display_name} in #{getattr(message.channel, 'name', '?')}: {reason}"
+              + (f" – timed out for {minutes} min" if timed else "") + f". Text: {_defang(message.content)}",
+              message.author.id, message.author.display_name)
+    return True
+
+
+# ------------------------------------------------------------ invite tracker
+# Remembers how often each invite link was used; when someone joins, the link whose count went up is theirs.
+# Needs the bot permission "Manage Server" to read the invite list.
+_invite_uses: dict = {}            # code -> (uses, inviter_id, max_uses)
+_vanity_uses = [None]
+
+
+async def cache_invites(guild=None) -> bool:
+    g = guild or bot.get_guild(GUILD_ID)
+    if g is None:
+        return False
+    try:
+        invs = await g.invites()
+    except discord.HTTPException:
+        return False
+    _invite_uses.clear()
+    for i in invs:
+        _invite_uses[i.code] = (i.uses or 0, i.inviter.id if i.inviter else None, i.max_uses or 0)
+    if "VANITY_URL" in g.features:
+        try:
+            _vanity_uses[0] = (await g.vanity_invite()).uses
+        except discord.HTTPException:
+            pass
+    return True
+
+
+async def find_inviter(member):
+    """(inviter_id, code) for a member who just joined, or (None, None) / (None, 'vanity')."""
+    g = member.guild
+    before = dict(_invite_uses)
+    try:
+        invs = await g.invites()
+    except discord.HTTPException:
+        return None, None
+    now = {i.code: (i.uses or 0, i.inviter.id if i.inviter else None, i.max_uses or 0) for i in invs}
+    _invite_uses.clear(); _invite_uses.update(now)
+    used = [c for c, v in now.items() if v[0] > before.get(c, (0,))[0]]
+    if len(used) == 1:
+        return now[used[0]][1], used[0]
+    gone = [c for c, v in before.items() if c not in now and v[2] and v[0] + 1 >= v[2]]   # a one-time link that ran out
+    if len(gone) == 1 and not used:
+        return before[gone[0]][1], gone[0]
+    if "VANITY_URL" in g.features:
+        try:
+            v = (await g.vanity_invite()).uses
+            if _vanity_uses[0] is not None and v > _vanity_uses[0]:
+                _vanity_uses[0] = v
+                return None, "vanity"
+            _vanity_uses[0] = v
+        except discord.HTTPException:
+            pass
+    return None, None
+
+
+async def track_join(member):
+    if not cfg("invites_enabled"):
+        return
+    inviter_id, code = await find_inviter(member)
+    days = cfg("invites_fake_days")
+    fake = bool(days) and (discord.utils.utcnow() - member.created_at).days < days
+    store.record_join(member.id, member.display_name, inviter_id, code, fake)
+    if inviter_id:
+        c = store.invite_counts(inviter_id)
+        text = f"{member.display_name} joined – invited by <@{inviter_id}> ({c['regular']} invite{'s' if c['regular'] != 1 else ''})"
+        im = member.guild.get_member(inviter_id)
+        name = im.display_name if im else f"user …{str(inviter_id)[-4:]}"
+        log_event("invite", f"{member.display_name} joined – invited by {name} (now {c['regular']} invites, link {code})", inviter_id, name)
+    else:
+        text = f"{member.display_name} joined" + (" through the server's own link" if code == "vanity" else " – inviter unknown")
+        log_event("invite", text, member.id, member.display_name)
+    ch = chan("invites_channel_id")
+    if ch is not None:
+        e = discord.Embed(description=f"📥 {member.mention} joined" + (f" – invited by <@{inviter_id}>" if inviter_id else
+                          " via the server link" if code == "vanity" else ""), color=0x5BE0A8)
+        if inviter_id:
+            e.set_footer(text=f"{c['regular']} invites · {c['left']} left" + (f" · {c['fake']} new accounts" if c["fake"] else ""))
+        if fake:
+            e.description += f"\n-# ⚠️ New account ({(discord.utils.utcnow() - member.created_at).days} days old)"
+        try:
+            await ch.send(embed=e, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+
+
+async def track_leave(member):
+    if not cfg("invites_enabled"):
+        return
+    r = store.record_leave(member.id)
+    if r is not None and r["inviter_id"]:
+        im = member.guild.get_member(r["inviter_id"])
+        name = im.display_name if im else f"user …{str(r['inviter_id'])[-4:]}"
+        log_event("invite", f"{member.display_name} left – had been invited by {name}", r["inviter_id"], name)
+    ch = chan("invites_channel_id")
+    if ch is not None and r is not None:
+        try:
+            await ch.send(embed=discord.Embed(description=f"📤 {member.mention} left" + (f" – had been invited by <@{r['inviter_id']}>" if r["inviter_id"] else ""),
+                                              color=0x5C6370), allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+
+
+invites_group = app_commands.Group(name="invites", description="Who invited whom", guild_ids=[GUILD_ID], guild_only=True)
+
+
+@invites_group.command(name="show", description="How many people someone has invited")
+@app_commands.describe(user="Someone else (optional)")
+async def invites_show(interaction: discord.Interaction, user: Optional[discord.Member] = None):
+    who = user or interaction.user
+    c = store.invite_counts(who.id)
+    await interaction.response.send_message(
+        f"📨 {who.mention} has **{c['regular']}** invite{'s' if c['regular'] != 1 else ''}"
+        f" ({c['total']} joined · {c['left']} left" + (f" · {c['fake']} new accounts" if c["fake"] else "") + ")",
+        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+
+@invites_group.command(name="top", description="Who has invited the most people")
+async def invites_top(interaction: discord.Interaction):
+    rows = store.invite_top(10)
+    e = discord.Embed(title="📨 Top inviters", color=0x7DE3F4)
+    e.description = "\n".join(f"**{i + 1}.** <@{r['inviter_id']}> – **{r['regular']}**" + (f" ({r['left']} left)" if r["left"] else "")
+                              for i, r in enumerate(rows)) or "Nobody has invited anyone yet."
+    e.set_footer(text="Counts people who are still here, from the day the bot started tracking.")
+    await interaction.response.send_message(embed=e, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+
+bot.tree.add_command(invites_group)
+
+
+# ------------------------------------------------------------ phone notifications (web push)
+# Players who press "Notify me" on the website (or in the installed app) get a notification on their phone for
+# new gift codes and the weekly post. The keys are made once and kept in the database.
+try:
+    from pywebpush import webpush, WebPushException
+except ImportError:  # the update installs it; until then notifications are simply off
+    webpush = None
+
+
+def vapid_keys():
+    """(private PEM, public key for browsers) – created the first time they are needed."""
+    if get_raw("push_vapid_private") and get_raw("push_vapid_public"):
+        return get_raw("push_vapid_private"), get_raw("push_vapid_public")
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    key = ec.generate_private_key(ec.SECP256R1())
+    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+    raw = key.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    pub = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    put_raw("push_vapid_private", pem)
+    put_raw("push_vapid_public", pub)
+    return pem, pub
+
+
+def push_ready() -> bool:
+    return webpush is not None and bool(cfg("push_enabled"))
+
+
+async def push_send(topic: str, title: str, body: str, url: str = "index.html") -> dict:
+    """Send one notification to every device signed up for the topic. Dead devices are forgotten."""
+    counts = {"sent": 0, "gone": 0, "failed": 0}
+    if not push_ready():
+        return counts
+    rows = store.push_targets(topic)
+    if not rows:
+        return counts
+    pem, _ = vapid_keys()
+    from py_vapid import Vapid01
+    vapid = Vapid01.from_pem(pem.encode())
+    data = json.dumps({"title": title[:80], "body": body[:200], "url": url, "tag": topic})
+    loop = asyncio.get_running_loop()
+    sem = asyncio.Semaphore(8)
+
+    def one(r):
+        try:
+            webpush({"endpoint": r["endpoint"], "keys": {"p256dh": r["p256dh"], "auth": r["auth"]}}, data,
+                    vapid_private_key=vapid, vapid_claims={"sub": "mailto:noreply@wos-eu1.invalid"}, ttl=86400, timeout=10)
+            return "sent"
+        except WebPushException as exc:
+            code = getattr(getattr(exc, "response", None), "status_code", 0)
+            return "gone" if code in (404, 410) else "failed"
+        except Exception:  # noqa: BLE001
+            return "failed"
+
+    async def run(r):
+        async with sem:
+            res = await loop.run_in_executor(None, one, r)
+        counts[res] += 1
+        if res == "gone":
+            store.push_unsubscribe(r["endpoint"])
+
+    await asyncio.gather(*(run(r) for r in rows))
+    log_event("system", f"Phone notification “{title[:60]}” sent to {counts['sent']} device(s)"
+              + (f", {counts['gone']} removed" if counts["gone"] else "") + (f", {counts['failed']} failed" if counts["failed"] else ""), None, brand())
+    return counts
+
+
+def push_soon(topic: str, title: str, body: str, url: str = "index.html"):
+    """Fire and forget (never slows down what triggered it)."""
+    if not push_ready():
+        return
+    async def go():
+        try:
+            await push_send(topic, title, body, url)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[push] {exc!r}")
+    asyncio.get_running_loop().create_task(go())
+
+
+# ------------------------------------------------------------ weekly public post ("This week in WOS EU1")
+def weekly_embed(d: dict) -> discord.Embed:
+    from datetime import datetime
+    start = datetime.fromtimestamp(d["since"], store.tz()).strftime("%d %b")
+    end = datetime.now(store.tz()).strftime("%d %b")
+    e = discord.Embed(title=f"❄️ This week in {brand()}", description=f"{start} – {end} · thanks for playing, chiefs!", color=0x7DE3F4)
+    fx = f"**{d['fixed_total']}** bug{'s' if d['fixed_total'] != 1 else ''} fixed"
+    if d["fixed_public"]:
+        fx += "\n" + "\n".join(f"✔️ {x['title'][:80]}" for x in d["fixed_public"][:8])
+        if d["fixed_total"] > len(d["fixed_public"][:8]):
+            fx += f"\n-# …and {d['fixed_total'] - len(d['fixed_public'][:8])} more"
+    e.add_field(name="🩹 Fixes", value=fx[:1024], inline=False)
+    if d["codes"]:
+        e.add_field(name="🎁 New gift codes", value="\n".join(f"`{c['code']}`" + (f" – {c['reward']}" if c["reward"] else "")
+                                                       + (f" · until <t:{c['expires']}:R>" if c["expires"] else "") for c in d["codes"])[:1024]
+                    + f"\n-# {d['codes_active']} codes are active right now – /codes", inline=False)
+    if d["ideas"]:
+        e.add_field(name="💡 Your ideas we added", value="\n".join(f"• {x['changes'][:120]}" for x in d["ideas"][:5])[:1024], inline=False)
+    elif d["ideas_accepted"]:
+        e.add_field(name="💡 Ideas", value=f"{d['ideas_accepted']} player idea{'s' if d['ideas_accepted'] != 1 else ''} accepted this week", inline=False)
+    if d["known"]:
+        e.add_field(name="🔍 Still working on", value="\n".join(f"• {k['title'][:80]}" + (f" (👥 {k['votes']})" if k["votes"] else "")
+                                                         for k in d["known"])[:1024], inline=False)
+    e.add_field(name="🐛 Reports", value=f"{d['reports']} received – keep them coming", inline=True)
+    if d["members"]:
+        e.add_field(name="👥 Members", value=f"{d['members']:,}" + (f" ({d['joined'] - d['left']:+})" if d["joined"] or d["left"] else ""), inline=True)
+    site = (cfg("giftcodes_site_url") or "").rsplit("/", 1)[0]
+    e.set_footer(text=brand() + (f" · {site}/" if site.startswith("http") else ""))
+    return e
+
+
+async def post_weekly(force: bool = False):
+    ch = chan("weekly_channel_id")
+    if ch is None:
+        raise ValueError("Choose a channel for the weekly post first (Channels page).")
+    await ch.send(embed=weekly_embed(store.weekly_data()), allowed_mentions=discord.AllowedMentions.none())
+    log_event("system", "Weekly post published" + (" (sent manually)" if force else ""), None, brand())
+    if not force:
+        push_soon("news", "❄️ This week in " + brand(), "Fixes, new gift codes and more – have a look.", "index.html")
+    return ch
+
+
+# ------------------------------------------------------------ animated emoji pack
+EMOJI_DIR = Path(__file__).with_name("assets") / "emojis"
+
+
+def emoji_pack() -> list:
+    try:
+        return json.loads((EMOJI_DIR / "pack.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def emoji_status() -> dict:
+    g = bot.get_guild(GUILD_ID)
+    have = {e.name.lower() for e in (g.emojis if g else [])}
+    animated = sum(1 for e in (g.emojis if g else []) if e.animated)
+    return {"items": [{**e, "installed": e["name"].lower() in have} for e in emoji_pack()],
+            "used": animated, "limit": g.emoji_limit if g else 0}
+
+
+async def install_emojis(ids=None, actor_id=None, actor_name: str = "Dashboard") -> dict:
+    g = bot.get_guild(GUILD_ID)
+    if g is None:
+        raise ValueError("The bot can't see the server right now.")
+    if not g.me.guild_permissions.manage_expressions:
+        raise ValueError("Give the bot the “Manage Expressions” permission (Server Settings → Roles) and try again.")
+    have = {e.name.lower() for e in g.emojis}
+    free = g.emoji_limit - sum(1 for e in g.emojis if e.animated)
+    added, skipped, failed = [], [], []
+    for e in emoji_pack():
+        if ids and e["id"] not in ids:
+            continue
+        if e["name"].lower() in have:
+            skipped.append(e["name"])
+            continue
+        if free <= 0:
+            failed.append(f"{e['name']}: no free animated emoji slots")
+            continue
+        try:
+            await g.create_custom_emoji(name=e["name"], image=(EMOJI_DIR / f"{e['id']}.gif").read_bytes(), reason=f"Frostline emoji pack – {actor_name}")
+            added.append(e["name"])
+            free -= 1
+        except discord.HTTPException as exc:
+            failed.append(f"{e['name']}: {exc.text or exc}")
+    if added:
+        log_event("profile", f"Added {len(added)} animated emoji{'s' if len(added) != 1 else ''}: {', '.join(':' + a + ':' for a in added[:8])}"
+                  + (" …" if len(added) > 8 else ""), actor_id, actor_name)
+    return {"added": added, "skipped": skipped, "failed": failed}
+
+
 async def run_schedules(now=None):
     """Called every few minutes: posts the weekly digest when it is due.
     Returns the names of what was posted."""
@@ -3012,6 +3699,18 @@ async def run_schedules(now=None):
             except (ValueError, discord.HTTPException) as exc:
                 put_raw("digest_last", week)               # don't retry every 10 minutes
                 log_event("system", f"Could not post the weekly digest: {exc}", None, brand())
+    if cfg("weekly_enabled") and cfg("weekly_channel_id"):
+        days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        due = monday + timedelta(days=days.index(cfg("weekly_weekday")), hours=cfg("weekly_hour"))
+        week = f"{now.isocalendar()[0]}-W{now.isocalendar()[1]:02d}"
+        if due <= now < due + timedelta(hours=36) and get_raw("weekly_last") != week:
+            put_raw("weekly_last", week)
+            try:
+                await post_weekly()
+                done.append("weekly")
+            except (ValueError, discord.HTTPException) as exc:
+                log_event("system", f"Could not publish the weekly post: {exc}", None, brand())
     return done
 
 
@@ -3047,6 +3746,7 @@ async def schedule_loop():
         snapshot_members()
         await safe_refresh_board()
         start_redeem()
+        await ping_waiting_bugs()
         await check_info_tickets()
         await run_schedules()
     except Exception as exc:  # noqa: BLE001
@@ -3236,6 +3936,7 @@ async def publish_patchnotes(title: Optional[str], actor_name: str, actor_id: Op
     store.mark_patched([x["id"] for x in bugs], title, actor_name)
     log_event("patch", f"Patch notes “{title}” published with {len(bugs)} fixed bug(s) by {actor_name}",
               actor_id, actor_name)
+    push_soon("news", f"🩹 {title}"[:80], f"{len(bugs)} bug{'s' if len(bugs) != 1 else ''} fixed – see what changed.", "changelog.html")
     return bugs, msg
 
 

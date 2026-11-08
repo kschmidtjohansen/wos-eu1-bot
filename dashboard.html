@@ -131,10 +131,14 @@
 .w-dot{width:8px;height:8px;border-radius:50%;background:var(--w-ok);flex:none}
 .w-demo{background:var(--w-warn-soft);color:var(--w-warn);border-color:transparent}
 .w-stickers{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px}
+.w-emojis{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+.w-emojis .w-stk img{width:56px;height:56px}
 .w-stk{margin:0;padding:10px 6px 8px;border-radius:14px;border:1px solid var(--w-border);background:var(--w-surface-2);text-align:center;opacity:.6}
 .w-stk.on{opacity:1;border-color:color-mix(in srgb,var(--w-ok) 40%,var(--w-border))}
 .w-stk img{width:84px;height:84px;display:block;margin:0 auto 4px;object-fit:contain}
 .w-stk figcaption{font-size:12px;color:var(--w-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.w-reason .w-chips{margin:6px 0 8px}
+.w-reason .w-textarea{min-height:70px}
 .w-changes{margin:10px 0;padding:12px;border:1px dashed var(--w-border);border-radius:12px}
 .w-changes.done{border-style:solid;border-color:color-mix(in srgb,#9b59b6 45%,var(--w-border));background:color-mix(in srgb,#9b59b6 7%,transparent)}
 .w-changes .w-textarea{min-height:70px;margin-top:6px}
@@ -676,13 +680,13 @@ const S = {
 const NAV = [
   ['overview', 'Overview', 'grid', 'Daily work'], ['bugs', 'Bugs', 'bug', 'Daily work'], ['suggestions', 'Suggestions', 'bulb', 'Daily work'],
   ['codes', 'Gift codes', 'gift', 'Daily work'], ['players', 'Players', 'users', 'Daily work'], ['mod', 'Moderation', 'shield', 'Daily work'],
-  ['insights', 'Insights', 'chart', 'How it is going'], ['moderators', 'Moderators', 'timer', 'How it is going'], ['status', 'Server status', 'pulse', 'How it is going'], ['log', 'Activity log', 'list', 'How it is going'],
+  ['insights', 'Insights', 'chart', 'How it is going'], ['moderators', 'Moderators', 'timer', 'How it is going'], ['invites', 'Invites', 'userplus', 'How it is going'], ['status', 'Server status', 'pulse', 'How it is going'], ['log', 'Activity log', 'list', 'How it is going'],
   ['panel', 'Panel message', 'message', 'Set up'], ['channels', 'Channels', 'hash', 'Set up'], ['features', 'Features', 'sliders', 'Set up'],
   ['welcome', 'Welcome', 'userplus', 'Set up'], ['info', 'Info channel', 'list', 'Set up'], ['translations', 'Translations', 'globe', 'Set up'],
   ['patch', 'Patch notes', 'wrench', 'Set up'], ['bot', 'Bot profile', 'bot', 'Set up'], ['data', 'Data', 'db', 'Set up']
 ];
 // Moderators who log in with Discord see these pages; admins see everything.
-const MOD_TABS = ['overview', 'status', 'bugs', 'suggestions', 'players', 'insights', 'mod', 'log'];
+const MOD_TABS = ['overview', 'status', 'bugs', 'suggestions', 'players', 'insights', 'invites', 'mod', 'log'];
 const isMod = () => !!(S.user && S.user.role !== 'admin');
 const CHANNELS = [
   ['report_channel_id', 'Bug report channel', 'Where the panel message lives and where players open their private tickets.'],
@@ -694,10 +698,12 @@ const CHANNELS = [
   ['digest_channel_id', 'Weekly digest channel', 'Optional. Where the Monday summary is posted. Empty = the admin channel.'],
   ['giftcodes_channel_id', 'Gift codes channel', 'Optional. New gift codes are announced here. Give the bot “Mention @everyone” if you ping @everyone or @here.'],
   ['log_channel_id', 'Bot log channel', 'Optional, keep it staff-only. Everything the bot does is posted here too – who did what, and when (shown in each reader’s own time). Choose what to post on the Channels page below the list.'],
+  ['invites_channel_id', 'Invite log channel', 'Optional. Posts “Mira joined – invited by Jonas (12 invites)” and who left. Works like an invite-tracker bot, so you can remove that one.'],
+  ['weekly_channel_id', 'Weekly post channel', 'Optional. Where “This week in WOS EU1” is posted for players (turn it on under Features).'],
   ['board_channel_id', 'Known issues board channel', 'Optional. One message lists the open known issues (bugs you put on the public list). Players pick “I have this too” and get a DM when it is fixed.']
 ];
 const CHANNEL_KEYS = CHANNELS.map(c => c[0]);
-const FEATURE_KEYS = ['log_channel_kinds', 'bugs_enabled', 'suggestions_enabled', 'investigate_enabled', 'dm_notifications',
+const FEATURE_KEYS = ['weekly_enabled', 'weekly_weekday', 'weekly_hour', 'push_enabled', 'guard_enabled', 'guard_timeout_minutes', 'guard_block_invites', 'guard_allow_domains', 'invites_enabled', 'invites_fake_days', 'log_channel_kinds', 'dup_mode', 'dup_auto_percent', 'mod_ping_hours', 'bugs_enabled', 'suggestions_enabled', 'investigate_enabled', 'dm_notifications',
   'delete_ticket_on_close', 'report_cooldown_minutes', 'suggestion_max_length',
   'reminders_enabled', 'reminder_mod_hours', 'reminder_admin_hours', 'reminder_critical_hours',
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
@@ -708,7 +714,7 @@ const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
 const PLACEHOLDERS = [['{user}', 'Tags the new member'], ['{username}', 'Their name'], ['{server}', 'Server name'], ['{member_count}', 'Number of members']];
 const KINDS = {
-  backup: ['Backup', '#475569'], link: ['Link', '#0f766e'],
+  backup: ['Backup', '#475569'], link: ['Link', '#0f766e'], invite: ['Invites', '#0891b2'], guard: ['Scam guard', '#be123c'],
   bug: ['Bug', '#4f46e5'], ticket: ['Ticket', '#0284c7'], mod: ['Moderation', '#d97706'], admin: ['Admin', '#ea580c'],
   suggestion: ['Suggestion', '#0d9488'], welcome: ['Welcome', '#0891b2'], panel: ['Panel', '#7c3aed'], settings: ['Settings', '#64748b'],
   patch: ['Patch notes', '#16a34a'], block: ['Blocked', '#be123c'],
@@ -929,6 +935,9 @@ function viewFeatures() {
       ${numberRow('report_cooldown_minutes', 'Cooldown between reports', 'How long a player must wait after submitting a bug before sending another. 0 = no limit.', 0, 1440, 'minutes')}
       ${toggleRow('delete_ticket_on_close', 'Delete tickets after submitting', 'Off = the finished ticket thread is archived and locked instead of deleted.')}
       ${toggleRow('ticket_details_required', 'Require area and title', 'Players must pick an area and write a short title before they can submit.')}
+      ${selectRow('dup_mode', 'Duplicate check', 'Each new report is compared with the open bugs. Auto = clear duplicates are closed by themselves (the player is told which bug it matches, and moderators can reopen it). Flag = only marked for the moderators. Off = no check.', ['auto', 'flag', 'off'])}
+      ${numberRow('dup_auto_percent', 'Close automatically from', 'How similar a report must be to close it by itself. Lower matches are only marked for the moderators.', 50, 100, '% match')}
+      ${numberRow('mod_ping_hours', 'Tag moderators after', 'When nobody has reacted to a new bug for this long, the moderator role is tagged once. 0 = off.', 0, 72, 'hours')}
       ${textRow('game_version', 'Current game version', 'Filled in on new reports, and written on a bug as “fixed in” when it is marked fixed.', 'V5 · 1.33.9', 30)}
       <div class="w-row"><div><div class="w-row-label">Areas</div><div class="w-row-desc">The pick-list players see (one per line, max 25). Used for filters and insights.</div></div>
         <textarea class="w-textarea" style="min-height:150px;max-width:260px" data-k="bug_areas" aria-label="Areas">${S.draft.bug_areas || ''}</textarea></div>
@@ -964,6 +973,31 @@ function viewFeatures() {
       ${numberRow('digest_hour', 'Hour', '…at this hour (0–23) in the time zone below.', 0, 23, 'o\u2019clock')}
       ${textRow('timezone', 'Time zone', 'A name such as Europe/Copenhagen or Europe/Warsaw. Used for the weekly digest.', 'Europe/Copenhagen', 40)}
       <div class="w-actions" style="margin-top:10px"><button class="w-btn small" data-act="sendDigest">Send the digest now</button></div>
+    </section>
+    <section class="w-card w-pad"><div class="w-group-title">Weekly post for players</div>
+      ${toggleRow('weekly_enabled', 'Post “This week in WOS EU1”', 'Once a week in the channel you choose (Channels page): fixes, new gift codes, player ideas you added, what you’re still working on and member growth. Players with notifications on get a ping too.')}
+      ${selectRow('weekly_weekday', 'Day', 'In the time zone above.', ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])}
+      ${numberRow('weekly_hour', 'Hour', '0–23.', 0, 23, ':00')}
+      <div class="w-actions" style="margin-top:10px"><button class="w-btn small" data-act="weeklyNow">Post it now</button></div>
+    </section>
+    <section class="w-card w-pad"><div class="w-group-title">Phone notifications</div>
+      ${toggleRow('push_enabled', 'Let players turn on notifications', 'A “Notify me” button on the website and in the app. They get a notification for new gift codes, patch notes and the weekly post. Needs the website on https.')}
+      ${S.push ? html`<div class="w-row"><div><div class="w-row-label">Devices signed up</div><div class="w-row-desc">${S.push.ready ? 'Ready to send.' : 'Not ready – the update installs what’s needed; check again after “Update bugbot”.'}</div></div><b style="font-size:22px">${S.push.total}</b></div>
+      <div class="w-sect"><span class="w-label">Send a notification now</span>
+        <div class="w-form2" style="margin-top:8px"><div class="w-field"><input class="w-input" id="pn-title" maxlength="80" placeholder="Title, e.g. Server maintenance at 14:00" aria-label="Title"></div>
+          <div class="w-field"><input class="w-input" id="pn-body" maxlength="200" placeholder="Text (optional)" aria-label="Text"></div></div>
+        <div class="w-actions"><button class="w-btn primary" data-act="pushSend">${icon('send')} Send to ${S.push.total} device${S.push.total === 1 ? '' : 's'}</button></div></div>` : ''}
+    </section>
+    <section class="w-card w-pad"><div class="w-group-title">Scam &amp; phishing guard</div>
+      ${toggleRow('guard_enabled', 'Remove scam links', 'Deletes fake Nitro / Steam / free-gems messages, look-alike links (dlscord.com, steamcommunlty…) and the same link posted in 3+ channels within a minute (a hacked account). Staff are never touched. Every removal goes to the activity log.')}
+      ${numberRow('guard_timeout_minutes', 'Time out the sender for', 'Needs the bot permission “Timeout Members”. 0 = only delete the message.', 0, 10080, 'minutes')}
+      ${toggleRow('guard_block_invites', 'Remove invites to other servers', 'Deletes discord.gg links that aren’t for this server.')}
+      <div class="w-row"><div><div class="w-row-label">Always allowed sites</div><div class="w-row-desc">One per line. Links to these (and their sub-domains) are never removed. Your website is always allowed.</div></div>
+        <textarea class="w-textarea" style="min-height:150px;max-width:260px" data-k="guard_allow_domains" aria-label="Allowed sites">${S.draft.guard_allow_domains || ''}</textarea></div>
+    </section>
+    <section class="w-card w-pad"><div class="w-group-title">Invites</div>
+      ${toggleRow('invites_enabled', 'Track who invited whom', 'Needs the bot permission “Manage Server”. Choose an invite log channel on the Channels page to post joins and leaves.')}
+      ${numberRow('invites_fake_days', 'Don’t count accounts younger than', 'New accounts are marked and not counted – stops people inflating their invites with fresh accounts. 0 = count everyone.', 0, 90, 'days')}
     </section>
     <section class="w-card w-pad"><div class="w-group-title">Gift codes</div>
       ${toggleRow('giftcodes_enabled', 'Gift codes', 'Shows the Gift codes page on the website and lets players use /codes. Add codes on the Gift codes page.')}
@@ -1075,6 +1109,7 @@ function viewBot() {
       </div>
       <div class="w-actions"><button class="w-btn primary" data-act="saveBot">Save profile</button></div>
     </section>
+    ${emojiCard()}
     ${stickerCard()}
     ${loginCard()}`;
 }
@@ -1089,7 +1124,26 @@ function stickerCard() {
     <div class="w-actions" style="margin-top:14px">${missing ? html`<button class="w-btn primary" data-act="stickersInstall">Add ${missing} sticker${missing === 1 ? '' : 's'} to Discord</button>` : html`<span class="w-hint">All stickers are on the server.</span>`}</div>
   </section>`;
 }
+function emojiCard() {
+  const K = S.emojis; if (!K) return '';
+  const missing = K.items.filter(x => !x.installed).length;
+  return html`<section class="w-card w-pad" id="emojis"><div class="w-sec-head"><h3 class="w-h3">Animated emojis</h3>
+      <span class="w-badge ${missing ? 'info' : 'ok'}">${K.items.length - missing} of ${K.items.length} on the server</span></div>
+    <p class="w-sub" style="margin-bottom:14px">Frost stars, bear time, SvS, rally and more – animated, in the server’s colours (${K.used} of ${K.limit} animated slots used). Needs <b>Manage Expressions</b>.</p>
+    <div class="w-stickers w-emojis">${K.items.map(x => html`<figure class="w-stk${x.installed ? ' on' : ''}"><img data-emj="${x.id}" alt=":${x.name}:" width="64" height="64"><figcaption>:${x.name}:</figcaption></figure>`)}</div>
+    <div class="w-actions" style="margin-top:14px">${missing ? html`<button class="w-btn primary" data-act="emojisInstall">Add ${missing} emoji${missing === 1 ? '' : 's'} to Discord</button>` : html`<span class="w-hint">All emojis are on the server.</span>`}</div>
+  </section>`;
+}
 async function loadStickerImgs() {
+  for (const img of $$('img[data-emj]')) {
+    const id = img.dataset.emj;
+    if (S.demo) { img.src = 'assets/emojis/' + id + '.gif'; continue; }
+    try {
+      if (!fileUrls['emj-' + id]) { const r = await fetch(S.base.replace(/\/+$/, '') + '/api/emojis/' + id + '.gif', { headers: S.key ? { Authorization: 'Bearer ' + S.key } : {} });
+        if (!r.ok) throw new Error('x'); fileUrls['emj-' + id] = URL.createObjectURL(await r.blob()); }
+      img.src = fileUrls['emj-' + id];
+    } catch (e) { img.alt = 'Not available'; }
+  }
   for (const img of $$('img[data-stk]')) {
     const id = img.dataset.stk;
     if (S.demo) { img.src = 'assets/stickers/' + id + '.png'; continue; }
@@ -1182,6 +1236,7 @@ function selBar() {
     <select class="w-select w-fsel" id="sel-mark" aria-label="Mark selected bugs as"><option value="">Mark as…</option>
       <option value="passed">✅ Passed to admins</option>${isMod() ? '' : html`<option value="being_investigated">🔍 Being investigated</option><option value="fixed">✅ Fixed</option>`}
       ${isMod() ? '' : html`<option value="admin_rejected">❌ Rejected by admins</option>`}<option value="rejected">❌ Rejected</option></select>
+    <input class="w-input w-fsel" id="sel-reason" maxlength="900" placeholder="Reason (for rejects)" aria-label="Reason for the players" style="max-width:220px">
     <button class="w-btn small" data-act="bugMarkSel" ${B.sel.length ? '' : 'disabled'}>Mark</button>
     <label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="sel-discord" checked> Also delete their Discord messages</label>
     <button class="w-btn small danger" data-act="bugDelSel" ${B.sel.length ? '' : 'disabled'}>Delete ${B.sel.length || ''} selected</button></div>`;
@@ -1204,6 +1259,17 @@ async function loadBugs(reset) {
     B.items = reset ? r.items : B.items.concat(r.items); B.total = r.total; B.counts = r.counts;
   } catch (e) { toast(e.message, 'err'); }
   B.loading = false; renderBugList();
+}
+// Ready reasons the player sees when a report is closed (same list as the Discord buttons).
+const REASONS = [['duplicate', 'Already reported', "Already reported – we're tracking it in another report."], ['intended', 'Works as intended', 'This works as intended in the game.'],
+  ['cant_repro', "Can't reproduce", "We couldn't reproduce it with the information given."], ['not_bug', 'Game design', "This isn't a bug – it's part of the game's design."],
+  ['missing_info', 'Missing info', 'The report is missing the details we need. Please send a new one with steps and a screenshot.'],
+  ['game_side', 'From the game itself', 'This comes from the game itself, not something our server team can change.'],
+  ['planned', 'Already planned', 'We already have this planned.'], ['not_now', 'Not right now', "We won't take this forward right now."]];
+const BUG_REASON_KEYS = ['duplicate', 'intended', 'cant_repro', 'not_bug', 'missing_info', 'game_side'], SUG_REASON_KEYS = ['duplicate', 'planned', 'not_now', 'game_side'];
+function reasonBox(id, keys, value) {
+  return html`<div class="w-reason"><div class="w-chips">${REASONS.filter(r => keys.includes(r[0])).map(r => html`<button type="button" class="w-chip" data-act="reasonPick" data-for="${id}" data-text="${r[2]}">${r[1]}</button>`)}</div>
+    <textarea class="w-textarea" id="${id}" maxlength="900" placeholder="Why? The player gets this in their DM, e.g. “Already reported as #41 – we're on it.”">${value || ''}</textarea></div>`;
 }
 const STATUS_BTNS = [['passed', 'Pass to admins'], ['being_investigated', 'Being investigated'], ['fixed', 'Mark fixed'],
   ['admin_rejected', 'Reject (admins)'], ['rejected', 'Reject (closed)']];
@@ -1232,9 +1298,12 @@ function bugModal() {
       <div class="w-inline"><input class="w-input" id="m-sum" maxlength="100" value="${b.summary}"><button class="w-btn" data-act="bugSummary">Save title</button></div></div>
 
     <div class="w-sect"><span class="w-label">Change status</span>
+      ${b.dup_suggest && !b.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(b.status) ? html`<div class="w-banner warn w-card" style="margin:6px 0 12px">${icon('alert')}<div><b>Looks like a duplicate of #${b.dup_suggest}</b><div class="w-sub">${b.dup_score}% match – check it, then close it as a duplicate below.</div></div></div>` : ''}
       <div class="w-inline">${STATUS_BTNS.filter(s => s[0] !== b.status && (!isMod() || ['passed', 'rejected'].includes(s[0]))).map(s => html`<button class="w-btn small" data-act="bugSet" data-s="${s[0]}">${s[1]}</button>`)}</div>
       <div class="w-hint" style="margin-top:6px">Updates the Discord messages and tells the reporter (if DMs are on).</div>
-      <div class="w-inline" style="margin-top:12px"><input class="w-input" id="m-dup" inputmode="numeric" placeholder="Duplicate of bug number, e.g. 41" aria-label="Original bug number"><button class="w-btn small" data-act="bugDup">Close as duplicate</button></div></div>
+      <label class="w-label" for="m-reason" style="display:block;margin-top:14px">Reason for the player <span class="w-hint">– sent when you reject or close as a duplicate</span></label>
+      ${reasonBox('m-reason', BUG_REASON_KEYS, b.reason)}
+      <div class="w-inline" style="margin-top:12px"><input class="w-input" id="m-dup" inputmode="numeric" placeholder="Duplicate of bug number, e.g. 41" aria-label="Original bug number" value="${b.dup_suggest && !b.duplicate_of ? b.dup_suggest : ''}"><button class="w-btn small" data-act="bugDup">Close as duplicate</button></div></div>
 
     <div class="w-sect"><label class="w-label" for="m-reply">Message the reporter</label>
       <div class="w-inline" style="margin-bottom:8px"><select class="w-select" id="m-canned" data-act-change="canned" aria-label="Ready-made reply">
@@ -1424,6 +1493,27 @@ function redeemCard() {
   </section>`;
 }
 
+/* ---- invites ---- */
+function viewInvites() {
+  const V = S.invites;
+  if (!V) return html`<div class="w-pagehead"><h2>Invites</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  const tile = (n, l, c) => html`<div class="w-card w-tile ${c || ''}"><b>${n}</b><span>${l}</span></div>`;
+  return html`
+    <div class="w-pagehead"><h2>Invites</h2><p>Who invited whom. People who leave, and brand-new accounts, don’t count towards an invite total. Players can check theirs with <code>/invites show</code> and <code>/invites top</code>.</p></div>
+    ${!V.can_read ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>The bot can’t read the invite links</b><div class="w-sub">Give the bot’s role the <b>Manage Server</b> permission in Discord – it needs it to see which link someone used.</div></div></div>` : ''}
+    ${!V.enabled ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>Invite tracking is switched off</b><div class="w-sub">Turn it on under Features → Invites.</div></div><button class="w-btn small" data-act="goto" data-tab="features">Fix</button></div>` : ''}
+    <div class="w-tiles w-tiles4">${tile(V.joins30, 'Joined, last 30 days')}${tile(V.known30, 'With a known inviter', 'ok')}${tile(V.inviters, 'People who invited someone')}${tile(V.top.length ? V.top[0].regular : 0, V.top.length ? 'Top: ' + V.top[0].name : 'No inviters yet')}</div>
+    <section class="w-card w-pad"><h3 class="w-h3">Top inviters</h3><p class="w-sub" style="margin-bottom:8px">Counted from the day this bot started tracking.</p>
+      ${V.top.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Member</th><th>Invites</th><th>Joined</th><th>Left</th><th>New accounts</th></tr></thead><tbody>
+        ${V.top.map(r => html`<tr><td>${r.name}</td><td><b>${r.regular}</b></td><td>${r.total}</td><td>${r.left || '–'}</td><td>${r.fake || '–'}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">Nobody has joined through an invite yet.</div>`}
+    </section>
+    <section class="w-card w-pad"><h3 class="w-h3">Recent joins</h3>
+      ${V.recent.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Member</th><th style="text-align:left">Invited by</th><th>Link</th><th>Joined</th><th>Status</th></tr></thead><tbody>
+        ${V.recent.map(r => html`<tr><td>${r.member}</td><td style="text-align:left">${r.inviter || (r.code === 'vanity' ? 'Server link' : 'Unknown')}</td><td>${r.code && r.code !== 'vanity' ? html`<code>${r.code}</code>` : '–'}</td><td title="${full(r.ts)}">${ago(r.ts)}</td>
+          <td>${r.left ? html`<span class="w-badge todo">Left</span>` : r.fake ? html`<span class="w-badge warn">New account</span>` : html`<span class="w-badge ok">Here</span>`}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">No joins recorded yet.</div>`}
+    </section>`;
+}
+
 /* ---- players (linked game accounts) ---- */
 function viewPlayers() {
   const P = S.players;
@@ -1602,13 +1692,16 @@ function sugList() {
     <div class="w-sugbody"><div class="w-sughead"><b>#${x.id}</b> <span class="w-sub">${x.author} · <time title="${full(x.created_at)}">${ago(x.created_at)}</time></span>
       <span class="w-badge ${SUG_BADGE[x.status]}">${SUG_LABEL[x.status]}</span></div>
       <p class="w-sugtext">${x.text}</p>
+      ${x.status === 'rejected' && x.reason ? html`<div class="w-hint" style="margin:-4px 0 10px">💬 Reason sent: ${x.reason}</div>` : ''}
+      ${x.status === 'new' ? html`<div class="w-changes" id="rej-${x.id}" hidden><label class="w-label" for="rr-${x.id}">Why are you rejecting it?</label>${reasonBox('rr-' + x.id, SUG_REASON_KEYS, '')}
+        <div class="w-inline" style="margin-top:8px"><span class="w-hint">The player gets this reason in their DM.</span><div class="w-spacer"></div><button class="w-btn small danger" data-act="sugDecide" data-id="${x.id}" data-s="rejected">Reject with this reason</button></div></div>` : ''}
       ${x.status === 'accepted' ? html`<div class="w-changes${x.changes ? ' done' : ''}">
         <label class="w-label" for="chg-${x.id}">🛠️ What we changed ${x.changes ? html`<span class="w-hint">· posted ${ago(x.changed_at)}${x.changed_by ? ' by ' + x.changed_by : ''}${x.changes_url ? html` · <a href="${x.changes_url}" target="_blank" rel="noopener">see in Discord</a>` : ''}</span>` : html`<span class="w-hint">– tell players what you actually changed</span>`}</label>
         <textarea class="w-textarea" id="chg-${x.id}" maxlength="1000" placeholder="e.g. Bear Trap now has a 10-minute warning in alliance chat (from version 1.34).">${x.changes || ''}</textarea>
         <div class="w-inline" style="margin-top:8px"><span class="w-hint">Posted as a reply under the suggestion in Discord${x.changes ? ' (updated in place)' : ' and sent to the player by DM'}.</span><div class="w-spacer"></div>
           <button class="w-btn small primary" data-act="sugChanges" data-id="${x.id}">${icon('send')} ${x.changes ? 'Update' : 'Post update'}</button></div></div>` : ''}
       <div class="w-inline">${x.status === 'new' ? html`<button class="w-btn small" data-act="sugDecide" data-id="${x.id}" data-s="accepted">${icon('check')} Accept</button>
-        <button class="w-btn small" data-act="sugDecide" data-id="${x.id}" data-s="rejected">Reject</button>` : ''}
+        <button class="w-btn small" data-act="sugReject" data-id="${x.id}">Reject…</button>` : ''}
         ${x.mod_url ? html`<a class="w-btn small" href="${x.mod_url}" target="_blank" rel="noopener">Open in Discord</a>` : ''}
         <div class="w-spacer"></div><button class="w-btn small danger" data-act="sugDelete" data-id="${x.id}">Delete</button></div></div></div>`)}`;
 }
@@ -1908,16 +2001,19 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+const VIEWS = { invites: viewInvites, players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
   features: viewFeatures, welcome: viewWelcome, patch: viewPatch, mod: viewMod, bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
   codes: async () => { const [c, r] = await Promise.all([call('GET', '/api/giftcodes'), call('GET', '/api/redeem').catch(() => null)]); S.codes = c; S.redeem = r; },
+  invites: async () => { S.invites = await call('GET', '/api/invites'); },
+  features: async () => { try { S.push = isMod() ? null : await call('GET', '/api/push'); } catch (e) { S.push = null; } },
   players: async () => { const q = S.players ? S.players.q || '' : ''; S.players = Object.assign(await call('GET', '/api/links?q=' + encodeURIComponent(q)), { q }); },
   moderators: async () => { const d = S.modstats ? S.modstats.days : 30; S.modstats = await call('GET', '/api/modstats?days=' + d); },
   translations: () => loadTr(S.tr && S.tr.data ? S.tr.data.lang : null),
   bot: async () => { try { S.auth = S.user && S.user.role !== 'admin' ? null : await call('GET', '/api/auth/settings'); } catch (e) { S.auth = null; }
-    try { S.stickers = isMod() ? null : await call('GET', '/api/stickers'); } catch (e) { S.stickers = null; } },
+    try { S.stickers = isMod() ? null : await call('GET', '/api/stickers'); } catch (e) { S.stickers = null; }
+    try { S.emojis = isMod() ? null : await call('GET', '/api/emojis'); } catch (e) { S.emojis = null; } },
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
@@ -2177,12 +2273,33 @@ root.addEventListener('click', async e => {
     else if (act === 'palette') openPalette();
     else if (act === 'palBg') { if (e.target === el) closePalette(); }
     else if (act === 'palGo') palGo(parseInt(el.dataset.i, 10));
+    else if (act === 'emojisInstall') {
+      busy(el, true, 'Adding emojis…');
+      try { const r = await call('POST', '/api/emojis/install', {});
+        toast(r.added.length ? 'Added ' + r.added.length + ' emoji' + (r.added.length === 1 ? '' : 's') + ' to Discord.' + (r.failed.length ? ' ' + r.failed.length + ' failed: ' + r.failed[0] : '') : (r.failed[0] || 'Nothing to add.'), r.failed.length ? 'warn' : undefined);
+        S.emojis = await call('GET', '/api/emojis'); renderMain(); loadStickerImgs(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
     else if (act === 'stickersInstall') {
       busy(el, true, 'Adding stickers…');
       try { const r = await call('POST', '/api/stickers/install', {});
         toast(r.added.length ? 'Added ' + r.added.length + ' sticker' + (r.added.length === 1 ? '' : 's') + ' to Discord.' + (r.failed.length ? ' ' + r.failed.length + ' failed: ' + r.failed[0] : '') : (r.failed[0] || 'Nothing to add.'), r.failed.length ? 'warn' : undefined);
         S.stickers = await call('GET', '/api/stickers'); renderMain(); loadStickerImgs(); }
       catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'weeklyNow') {
+      busy(el, true, 'Posting…');
+      try { const r = await call('POST', '/api/weekly'); toast('Weekly post published in #' + r.channel + '.'); } catch (err) { toast(err.message, 'err'); }
+      busy(el, false);
+    }
+    else if (act === 'pushSend') {
+      const title = $('#pn-title').value.trim(), body = $('#pn-body').value.trim();
+      if (title.length < 3) return toast('Write a title first.', 'err');
+      if (!el.dataset.armed) { el.dataset.armed = '1'; const t = el.innerHTML; el.textContent = 'Click again to send to everyone'; setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.innerHTML = t; } }, 4000); return; }
+      busy(el, true, 'Sending…');
+      try { const r = await call('POST', '/api/push/send', { title, body }); toast('Sent to ' + r.sent + ' device' + (r.sent === 1 ? '' : 's') + (r.failed ? ' · ' + r.failed + ' failed' : '') + '.'); $('#pn-title').value = ''; $('#pn-body').value = ''; }
+      catch (err) { toast(err.message, 'err'); }
+      busy(el, false);
     }
     else if (act === 'logKind') {
       const v = el.dataset.v; let L = logKinds();
@@ -2349,8 +2466,9 @@ root.addEventListener('click', async e => {
     else if (act === 'sugPick') { const id = parseInt(el.dataset.id, 10), L = S.sugs.sel, i = L.indexOf(id); if (i >= 0) L.splice(i, 1); else L.push(id); renderSugList(); }
     else if (act === 'sugSelAll') { S.sugs.sel = S.sugs.items.map(x => x.id); renderSugList(); }
     else if (act === 'sugDecide') {
+      const reason = el.dataset.s === 'rejected' ? ($('#rr-' + el.dataset.id) || { value: '' }).value.trim() : '';
       busy(el, true, 'Working…');
-      try { await call('PUT', '/api/suggestions/' + el.dataset.id, { status: el.dataset.s }); toast('Suggestion #' + el.dataset.id + ' ' + el.dataset.s + '.'); loadSugs(true); }
+      try { await call('PUT', '/api/suggestions/' + el.dataset.id, Object.assign({ status: el.dataset.s }, reason ? { reason } : {})); toast('Suggestion #' + el.dataset.id + ' ' + el.dataset.s + (reason ? ' – the reason was sent to the player.' : '.')); loadSugs(true); }
       catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'sugChanges') {
@@ -2377,6 +2495,11 @@ root.addEventListener('click', async e => {
         toast('Deleted ' + r.deleted + ' suggestion' + (r.deleted === 1 ? '' : 's') + '.'); S.sugs.selecting = false; S.sugs.sel = []; loadSugs(true);
       } catch (err) { busy(el, false); delete el.dataset.armed; toast(err.message, 'err'); }
     }
+    else if (act === 'bugQuick' && ['rejected', 'admin_rejected'].includes(el.dataset.s)) {
+      e.stopPropagation(); await openBug(parseInt(el.dataset.id, 10));          // closing needs a reason: open the bug
+      const t = $('#m-reason'); if (t) { t.scrollIntoView({ block: 'center' }); t.focus(); }
+      toast('Write why you close it – the player sees the reason.');
+    }
     else if (act === 'bugQuick') {
       e.stopPropagation(); busy(el, true, '…');
       try {
@@ -2388,7 +2511,8 @@ root.addEventListener('click', async e => {
       const st = $('#sel-mark').value, ids = S.bugs.sel.slice();
       if (!st) return toast('Choose what to mark them as.', 'err');
       busy(el, true, 'Marking…'); let ok = 0; const bad = [];
-      for (const id of ids) { try { await call('PUT', '/api/bugs/' + id, { status: st }); ok++; } catch (err) { bad.push('#' + id + ': ' + err.message); } }
+      const why = ['rejected', 'admin_rejected'].includes(st) ? $('#sel-reason').value.trim() : '';
+      for (const id of ids) { try { await call('PUT', '/api/bugs/' + id, Object.assign({ status: st }, why ? { reason: why } : {})); ok++; } catch (err) { bad.push('#' + id + ': ' + err.message); } }
       toast('Marked ' + ok + ' bug' + (ok === 1 ? '' : 's') + ' as ' + BUG_LABEL[st] + '.'); bad.slice(0, 3).forEach(m => toast(m, 'warn'));
       S.bugs.selecting = false; S.bugs.sel = []; loadBugs(true);
     }
@@ -2427,11 +2551,21 @@ root.addEventListener('click', async e => {
       } catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'bugSummary') changeBug({ summary: $('#m-sum').value }, 'Title saved.', el);
-    else if (act === 'bugSet') changeBug({ status: el.dataset.s }, 'Status changed.', el);
+    else if (act === 'bugSet') {
+      const closing = ['rejected', 'admin_rejected'].includes(el.dataset.s), reason = closing ? $('#m-reason').value.trim() : '';
+      if (closing && !reason && !el.dataset.armed) { el.dataset.armed = '1'; const t = el.textContent; el.textContent = 'No reason – click again';
+        $('#m-reason').focus(); setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = t; } }, 4000); return; }
+      changeBug(Object.assign({ status: el.dataset.s }, reason ? { reason } : {}), closing && reason ? 'Closed – the reason was sent to the player.' : 'Status changed.', el);
+    }
     else if (act === 'bugDup') {
       const v = $('#m-dup').value.trim().replace(/^#/, '');
       if (!/^\d+$/.test(v)) return toast('Enter the number of the original bug.', 'err');
-      changeBug({ duplicate_of: v }, 'Closed as a duplicate of #' + v + '.', el);
+      changeBug({ duplicate_of: v, reason: $('#m-reason').value.trim() || REASONS[0][2] }, 'Closed as a duplicate of #' + v + '.', el);
+    }
+    else if (act === 'reasonPick') { const t = $('#' + el.dataset.for); if (t) { t.value = el.dataset.text; t.focus(); } }
+    else if (act === 'sugReject') {
+      const box = $('#rej-' + el.dataset.id);
+      if (box) { box.hidden = !box.hidden; if (!box.hidden) $('#rr-' + el.dataset.id).focus(); }
     }
     else if (act === 'bugReply') {
       const text = $('#m-reply').value.trim();
@@ -2625,7 +2759,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, log_channel_kinds: 'all', board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, weekly_enabled: false, weekly_channel_id: null, weekly_weekday: 'sunday', weekly_hour: 18, push_enabled: true, guard_enabled: true, guard_timeout_minutes: 60, guard_block_invites: false, guard_allow_domains: 'discord.com\ndiscord.gg\ndiscordapp.com\nyoutube.com\ntenor.com', log_channel_kinds: 'all', dup_mode: 'auto', dup_auto_percent: 75, mod_ping_hours: 4, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
     backup_channel_id: null, bug_areas: 'City\nAlliance\nCombat\nHeroes\nEvents\nShop & payments\nChat\nLogin & connection\nUI & display\nOther',
@@ -2699,11 +2833,13 @@ function makeMock() {
     history: STs[i % STs.length] === 'new' ? [] : [{ ts: now - i * 3600 * 6, action: 'passed', actor: 'Sofie' }].concat(
       ['fixed', 'being_investigated', 'admin_rejected'].includes(STs[i % STs.length]) ? [{ ts: now - i * 3600 * 4, action: STs[i % STs.length], actor: 'Kasper' }] : [])
   }));
+  const emj = { used: 31, limit: 250, items: [{"id": "frost_star", "name": "frost_star", "emoji": "⭐", "installed": false}, {"id": "snowflake", "name": "frost_flake", "emoji": "❄️", "installed": false}, {"id": "bear_time", "name": "bear_time", "emoji": "🐻‍❄️", "installed": false}, {"id": "svs", "name": "svs", "emoji": "⚔️", "installed": false}, {"id": "rally", "name": "rally", "emoji": "🚩", "installed": false}, {"id": "bug", "name": "bug_found", "emoji": "🐛", "installed": false}, {"id": "furnace", "name": "furnace", "emoji": "🔥", "installed": false}, {"id": "gift_code", "name": "gift_code", "emoji": "🎁", "installed": false}, {"id": "frostbit_wave", "name": "frostbit_wave", "emoji": "👋", "installed": false}, {"id": "fixed", "name": "fixed_check", "emoji": "✅", "installed": false}, {"id": "siren", "name": "siren", "emoji": "🚨", "installed": false}, {"id": "gg", "name": "gg_frost", "emoji": "🎉", "installed": false}, {"id": "warm_heart", "name": "warm_heart", "emoji": "❤️", "installed": false}, {"id": "lag", "name": "lagging", "emoji": "⏳", "installed": false}, {"id": "new", "name": "new_badge", "emoji": "🆕", "installed": false}, {"id": "chief", "name": "chief_crown", "emoji": "👑", "installed": false}] };
   const stk = { used: 9, limit: 60, items: [{"id": "gg", "name": "GG!", "emoji": "🎉", "desc": "Good game, chief!", "title": "Gg", "installed": true}, {"id": "new-code", "name": "NEW CODE", "emoji": "🎁", "desc": "A new gift code is out", "title": "New Code", "installed": true}, {"id": "copied", "name": "COPIED", "emoji": "✅", "desc": "Code copied, redeeming now", "title": "Copied", "installed": true}, {"id": "bug-spotted", "name": "BUG?!", "emoji": "🐛", "desc": "Found something broken", "title": "Bug", "installed": true}, {"id": "fixed", "name": "FIXED", "emoji": "🔧", "desc": "The bug is fixed", "title": "Fixed", "installed": false}, {"id": "on-it", "name": "ON IT", "emoji": "🫡", "desc": "Staff are on it", "title": "On It", "installed": false}, {"id": "known-issue", "name": "KNOWN ISSUE", "emoji": "🤷", "desc": "We already know about this one", "title": "Known Issue", "installed": false}, {"id": "brrr", "name": "BRRR", "emoji": "🥶", "desc": "So cold out there", "title": "Brrr", "installed": false}, {"id": "cozy", "name": "COZY", "emoji": "🔥", "desc": "Warm by the fire", "title": "Cozy", "installed": false}, {"id": "rally", "name": "RALLY!", "emoji": "🚩", "desc": "Join the rally", "title": "Rally", "installed": false}, {"id": "bear-time", "name": "BEAR TIME", "emoji": "🐾", "desc": "Bear hunt is starting", "title": "Bear Time", "installed": false}, {"id": "thanks-chief", "name": "THANKS CHIEF", "emoji": "❤️", "desc": "Thank you!", "title": "Thanks Chief", "installed": false}, {"id": "report-it", "name": "REPORT IT", "emoji": "📣", "desc": "Please report that bug", "title": "Report It", "installed": false}, {"id": "afk", "name": "AFK", "emoji": "😴", "desc": "Away for a bit", "title": "Afk", "installed": false}, {"id": "hype", "name": "HYPE", "emoji": "✨", "desc": "So hyped", "title": "Hype", "installed": false}, {"id": "gm-chief", "name": "GM CHIEF", "emoji": "☕", "desc": "Good morning", "title": "Gm Chief", "installed": false}, {"id": "svs-time", "name": "SVS TIME", "emoji": "⚔️", "desc": "State vs State is on", "title": "Svs Time", "installed": false}, {"id": "lag", "name": "LAG...", "emoji": "🐌", "desc": "The game is lagging", "title": "Lag", "installed": false}, {"id": "nice", "name": "NICE", "emoji": "👍", "desc": "Nice one", "title": "Nice", "installed": false}, {"id": "level-up", "name": "LEVEL UP", "emoji": "🔥", "desc": "Furnace levelled up", "title": "Level Up", "installed": false}] };
   const links = Array.from({ length: 14 }, (_, i) => ({ discord_id: '7000' + i, name: NAMES[i % 8], uid: String(41000000 + i * 7919), chief: 'Chief ' + NAMES[i % 8], ts: now - i * 86400 * 2, bugs: i % 4, redeemed: 30 + i % 9 }));
   const rdm = { settings: { redeem_enabled: false, redeem_url: '', redeem_method: 'POST', redeem_body: '{"uid": "{uid}", "code": "{code}"}', redeem_ok_text: '', redeem_already_text: 'already', redeem_delay: 2, redeem_dm: false },
     header_set: false, linked: 14, codes: [{ code: 'WOSEU1GIFT', ok: 12, already: 1, failed: 1 }, { code: 'FROST500K', ok: 13, already: 0, failed: 0 }],
     failures: [{ code: 'WOSEU1GIFT', uid: '41007919', chief: 'Chief Jonas', message: 'HTTP 404: {"msg": "no such player"}', ts: now - 3600 }] };
+  bugs.forEach(b => { b.reason = ''; b.dup_suggest = null; }); bugs[0].dup_suggest = 60; bugs[0].dup_score = 68;
   bugs.forEach((b, i) => { b.votes = b.public && ['passed', 'being_investigated'].includes(b.status) ? (i * 7) % 13 : 0; });
   const briefBug = b => ({ votes: b.votes, id: b.id, summary: b.summary, status: b.status, reporter_id: b.reporter_id, reporter: b.reporter, created_at: b.created_at, duplicate_of: b.duplicate_of, announced: b.announced, area: b.area, version: b.version, severity: b.severity, source: b.source });
   const replies = [{ id: 1, title: 'Duplicate report', text: 'Thanks for your report! This is a duplicate of a bug we already know about ({bug}). We are working on it.' },
@@ -2772,6 +2908,14 @@ function makeMock() {
         known: Object.keys(names).map(c => ({ code: c, name: names[c] })) };
     }
     if (p === '/api/translations') { trOver[body.lang] = Object.assign(trOver[body.lang] || {}, body.items); Object.keys(trOver[body.lang]).forEach(k => { if (!trOver[body.lang][k]) delete trOver[body.lang][k]; }); return { ok: true }; }
+    if (p === '/api/push' && method === 'GET') return { enabled: true, ready: true, total: 142, codes: 142, news: 118 };
+    if (p === '/api/push/send') return { sent: 139, gone: 2, failed: 1 };
+    if (p === '/api/weekly') return { ok: true, channel: 'announcements' };
+    if (p === '/api/invites') return { enabled: true, can_read: true, joins30: 86, known30: 79, inviters: 23,
+      top: [['Jonas', 14, 17, 2, 1], ['Mira', 11, 12, 1, 0], ['Freja', 7, 9, 1, 1], ['Lars', 4, 4, 0, 0], ['Sofie', 3, 5, 2, 0]].map(a => ({ inviter_id: '9', name: a[0], regular: a[1], total: a[2], left: a[3], fake: a[4] })),
+      recent: Array.from({ length: 12 }, (_, i) => ({ member_id: '8' + i, member: ['Ragnar', 'Ida', 'Theo', 'Nova', 'Kai', 'Liv'][i % 6] + (i > 5 ? ' ' + i : ''), inviter_id: i % 5 === 3 ? null : '9', inviter: i % 5 === 3 ? null : ['Jonas', 'Mira', 'Freja'][i % 3], code: i % 5 === 3 ? 'vanity' : ['wos-eu1', 'aB3xY', 'frost'][i % 3], ts: now - i * 9000, left: i === 4 ? now - 600 : null, fake: i === 2 })) };
+    if (p === '/api/emojis' && method === 'GET') return emj;
+    if (p === '/api/emojis/install') { const add = emj.items.filter(x => !x.installed); add.forEach(x => { x.installed = true; }); emj.used += add.length; return { added: add.map(x => x.name), skipped: [], failed: [] }; }
     if (p === '/api/stickers' && method === 'GET') return stk;
     if (p === '/api/stickers/install') { const add = stk.items.filter(x => !x.installed); add.forEach(x => { x.installed = true; }); stk.used += add.length; return { added: add.map(x => x.title), skipped: [], failed: [] }; }
     if (p === '/api/links' && method === 'GET') { const t = (q.get('q') || '').toLowerCase();
@@ -2836,7 +2980,7 @@ function makeMock() {
         if ('changes' in body) { if (sugs[i].status !== 'accepted') throw new Error('Only accepted suggestions can get a “what we changed” update.');
           Object.assign(sugs[i], { changes: body.changes, changed_at: Math.floor(Date.now() / 1000), changed_by: 'Dashboard', changes_url: '#' }); return Object.assign({}, sugs[i]); }
         if (sugs[i].status !== 'new') throw new Error('This suggestion has already been decided.');
-        sugs[i].status = body.status; addLog('mod', 'Suggestion #' + ms[1] + ' ' + body.status + ' by Dashboard'); return Object.assign({}, sugs[i]); } }
+        sugs[i].reason = body.reason || ''; sugs[i].status = body.status; addLog('mod', 'Suggestion #' + ms[1] + ' ' + body.status + ' by Dashboard'); return Object.assign({}, sugs[i]); } }
     if (p === '/api/bugs/delete') {
       const ids = body.all ? bugs.map(b => b.id) : body.ids.map(Number); let n = 0;
       ids.forEach(id => { const i = bugs.findIndex(b => b.id === id); if (i >= 0) { bugs.splice(i, 1); n++; } });
@@ -2853,7 +2997,7 @@ function makeMock() {
         if ('game_version' in body) b.version = body.game_version;
         const st = body.duplicate_of ? 'rejected' : body.status;
         if (st) {
-          b.status = st; b.duplicate_of = body.duplicate_of ? +body.duplicate_of : null;
+          b.status = st; b.duplicate_of = body.duplicate_of ? +body.duplicate_of : null; b.reason = ['rejected', 'admin_rejected'].includes(st) ? (body.reason || '') : ''; b.dup_suggest = null;
           b.history.push({ ts: Math.floor(Date.now() / 1000), action: st, actor: 'Dashboard' }); addLog('admin', 'Bug #' + b.id + ' marked “' + (BUG_LABEL[st] || st) + '” by Dashboard');
           if (st !== 'fixed') b.announced = false;
         }

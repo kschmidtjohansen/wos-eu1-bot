@@ -9,17 +9,17 @@
   <div id="box" aria-live="polite"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
   <section class="sec card banner" id="notify">
     <div><span class="ic" id="n-ic"></span><div><h3 data-i="nH"></h3><span class="muted" data-i="nT"></span></div></div>
-    <a class="btn pri" id="dc" rel="noopener" data-i="nB"></a></section>
+    <div class="btns" id="n-btns"><a class="btn" id="dc" rel="noopener" data-i="nB"></a></div></section>
 </main>
 <script src="config.js"></script><script src="app.js"></script>
 <script>
 const S = {
  en: { h1: 'Gift codes', lead: 'Free rewards for everyone. Tap Copy, then paste the code in the game under Settings › Gift code.', newH: 'New', newT: 'Added in the last day',
   allH: 'Still working', none: 'No active codes right now. New ones are posted on Discord first.',
-  off: 'Gift codes are not shown here right now.', err: 'Could not load the gift codes.', nH: 'Never miss a code', nT: 'New codes are posted on our Discord the moment they go live.', nB: 'Join our Discord' },
+  off: 'Gift codes are not shown here right now.', err: 'Could not load the gift codes.', nH: 'Never miss a code', nT: 'Get a notification on your phone the moment a new code goes live – or follow our Discord.', nB: 'Join our Discord' },
  pl: { h1: 'Kody prezentowe', lead: 'Darmowe nagrody dla wszystkich. Stuknij Kopiuj i wklej kod w grze w Ustawienia › Kod prezentowy.', newH: 'Nowe', newT: 'Dodane w ciągu ostatniego dnia',
   allH: 'Nadal działają', none: 'Obecnie nie ma aktywnych kodów. Nowe publikujemy najpierw na Discordzie.',
-  off: 'Kody prezentowe nie są teraz tutaj pokazywane.', err: 'Nie udało się wczytać kodów.', nH: 'Nie przegap żadnego kodu', nT: 'Nowe kody publikujemy na Discordzie, gdy tylko się pojawią.', nB: 'Dołącz do Discorda' } };
+  off: 'Kody prezentowe nie są teraz tutaj pokazywane.', err: 'Nie udało się wczytać kodów.', nH: 'Nie przegap żadnego kodu', nT: 'Dostań powiadomienie na telefon, gdy tylko pojawi się nowy kod – albo obserwuj nasz Discord.', nB: 'Dołącz do Discorda' } };
 let data = null, error = null;
 const $ = id => document.getElementById(id);
 $('n-ic').append(WOS.icon('chat'));
@@ -34,7 +34,9 @@ function draw() {
 }
 WOS.init(S).then(async () => {
   const C = window.WOS_CONFIG || {};
-  if (C.DISCORD_URL) $('dc').href = C.DISCORD_URL; else $('notify').hidden = true;
+  if (C.DISCORD_URL) $('dc').href = C.DISCORD_URL; else $('dc').hidden = true;
+  try { if ((await WOS.api('/public/push/key')).enabled) $('n-btns').prepend(WOS.bell()); else if (!C.DISCORD_URL) $('notify').hidden = true; }
+  catch (e) { if (!C.DISCORD_URL) $('notify').hidden = true; }
   try { data = await WOS.api('/public/giftcodes'); WOS.markCodesSeen(Math.max(0, ...data.items.map(c => c.added))); }
   catch (e) { error = e.status === 404 ? 'off' : 'err'; }
   WOS.onLang.push(draw); draw();

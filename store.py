@@ -175,6 +175,24 @@ db.executescript(
         ts INTEGER NOT NULL,
         PRIMARY KEY (code, uid)
     );
+    CREATE TABLE IF NOT EXISTS invite_joins (  -- who invited whom (one row per join)
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        member_id INTEGER NOT NULL,
+        member_name TEXT,
+        inviter_id INTEGER,                        -- NULL = unknown / vanity link
+        code TEXT,
+        ts INTEGER NOT NULL,
+        left_ts INTEGER,
+        fake INTEGER NOT NULL DEFAULT 0            -- account younger than the "new account" limit
+    );
+    CREATE TABLE IF NOT EXISTS push_subs (     -- phones/browsers that asked for notifications on the website
+        endpoint TEXT PRIMARY KEY,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        topics TEXT NOT NULL DEFAULT 'codes,news',
+        lang TEXT,
+        ts INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,6 +220,9 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "severity TEXT"), ("bug_reports", "fixed_version TEXT"),
                      ("bug_reports", "public INTEGER NOT NULL DEFAULT 0"),
                      ("bug_reports", "ip_hash TEXT"),
+                     ("bug_reports", "reject_reason TEXT"), ("suggestions", "reject_reason TEXT"),
+                     ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"),
+                     ("bug_reports", "mod_pinged INTEGER"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
                      ("tickets", "area TEXT"), ("tickets", "title TEXT"), ("tickets", "chief_name TEXT"),
@@ -351,6 +372,23 @@ SCHEMA = {
     "giftcodes_site_url": {"type": "text", "default": "", "min": 0, "max": 300},
     "board_channel_id": {"type": "channel", "default": None},
     "log_channel_id": {"type": "channel", "default": None},
+    "push_enabled": {"type": "bool", "default": True},
+    "weekly_enabled": {"type": "bool", "default": False},
+    "weekly_channel_id": {"type": "channel", "default": None},
+    "weekly_weekday": {"type": "choice", "default": "sunday",
+                       "choices": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
+    "weekly_hour": {"type": "int", "default": 18, "min": 0, "max": 23},
+    "guard_enabled": {"type": "bool", "default": True},
+    "guard_timeout_minutes": {"type": "int", "default": 60, "min": 0, "max": 10080},
+    "guard_block_invites": {"type": "bool", "default": False},
+    "guard_allow_domains": {"type": "lines", "default": "discord.com\ndiscord.gg\ndiscordapp.com\ndiscordapp.net\ndiscord.media\ndiscord.gift\ndiscord.new\nyoutube.com\nyoutu.be\ntwitch.tv\ntenor.com\ngiphy.com\nimgur.com\nreddit.com\nx.com\ntwitter.com\ngoogle.com\ncenturygame.com\nwhiteoutsurvival.com",
+                            "max_lines": 60, "max_len": 80},
+    "invites_enabled": {"type": "bool", "default": True},
+    "invites_channel_id": {"type": "channel", "default": None},
+    "invites_fake_days": {"type": "int", "default": 7, "min": 0, "max": 90},
+    "dup_mode": {"type": "choice", "default": "auto", "choices": ["off", "flag", "auto"]},
+    "dup_auto_percent": {"type": "int", "default": 75, "min": 50, "max": 100},
+    "mod_ping_hours": {"type": "int", "default": 4, "min": 0, "max": 72},
     "log_channel_kinds": {"type": "lines", "default": "all", "max_lines": 20, "max_len": 20},
     "redeem_enabled": {"type": "bool", "default": False},
     "redeem_url": {"type": "text", "default": "", "min": 0, "max": 500},
@@ -458,7 +496,7 @@ def put_raw(key: str, value: str):
 
 # ------------------------------------------------------------ activity log
 LOG_KINDS = ("bug", "backup", "link", "ticket", "mod", "admin", "suggestion", "welcome", "patch", "block", "panel", "settings",
-             "profile", "system")
+             "profile", "system", "invite", "guard")
 LOG_KEEP = 5000
 log_listeners = []          # the bot adds a function here to copy every entry to the Discord log channel
 
@@ -876,6 +914,114 @@ def link_count() -> int:
     return db.execute("SELECT COUNT(*) FROM links").fetchone()[0]
 
 
+# ------------------------------------------------------------ weekly public post
+def weekly_data(days: int = 7) -> dict:
+    """What happened for players in the last week – only public information."""
+    now = int(time.time())
+    since = now - days * 86400
+    one = lambda sql, *a: db.execute(sql, a).fetchone()[0] or 0
+    fixed_ids = [r[0] for r in db.execute("SELECT DISTINCT item_id FROM actions WHERE kind='bug' AND action='fixed' AND ts>=?", (since,))]
+    fixed = [get_bug(i) for i in fixed_ids]
+    fixed = [r for r in fixed if r is not None and r["status"] == "fixed"]
+    g = member_growth(30)
+    week = [i for i in g["items"] if i["day"] >= time.strftime("%Y-%m-%d", time.localtime(since))]
+    return {
+        "days": days, "since": since,
+        "reports": one("SELECT COUNT(*) FROM bug_reports WHERE created_at>=?", since),
+        "fixed_total": len(fixed),
+        "fixed_public": [{"id": r["id"], "title": bug_summary(r), "area": r["area"]} for r in fixed if r["public"]][:10],
+        "codes": [{"code": r["code"], "reward": r["reward"], "expires": r["expires_at"]} for r in active_gift_codes(now) if r["created_at"] >= since][:10],
+        "codes_active": len(active_gift_codes(now)),
+        "ideas": [x for x in ideas_added(10) if (x["ts"] or 0) >= since],
+        "ideas_accepted": one("SELECT COUNT(*) FROM actions WHERE kind='suggestion' AND action='accepted' AND ts>=?", since),
+        "known": [{"id": r["id"], "title": bug_summary(r), "votes": r["votes"]} for r in board_bugs(5)],
+        "members": g["current"], "joined": sum(i["joins"] for i in week), "left": sum(i["leaves"] for i in week),
+    }
+
+
+# ------------------------------------------------------------ phone notifications (web push)
+PUSH_HOSTS = ("fcm.googleapis.com", "updates.push.services.mozilla.com", "push.services.mozilla.com", "web.push.apple.com",
+              "notify.windows.com", "push.apple.com")
+PUSH_TOPICS = ("codes", "news")
+
+
+def push_endpoint_ok(url: str) -> bool:
+    """Only the real push services – the bot must never be made to send requests anywhere else."""
+    m = re.match(r"https://([a-z0-9.-]+)(?::443)?/", url or "", re.I)
+    return bool(m) and any(m.group(1).lower() == h or m.group(1).lower().endswith("." + h) for h in PUSH_HOSTS)
+
+
+def push_subscribe(sub: dict, topics, lang: str) -> None:
+    ep, keys = str(sub.get("endpoint") or ""), sub.get("keys") or {}
+    if not push_endpoint_ok(ep) or len(ep) > 800:
+        raise ValueError("This browser's notification address isn't supported.")
+    p, a = str(keys.get("p256dh") or ""), str(keys.get("auth") or "")
+    if not (20 <= len(p) <= 200 and 8 <= len(a) <= 100):
+        raise ValueError("Missing notification keys.")
+    t = ",".join(x for x in PUSH_TOPICS if x in (topics or PUSH_TOPICS)) or "codes"
+    if db.execute("SELECT COUNT(*) FROM push_subs").fetchone()[0] >= 50000:
+        raise ValueError("Too many devices are signed up right now.")
+    db.execute("INSERT OR REPLACE INTO push_subs (endpoint, p256dh, auth, topics, lang, ts) VALUES (?,?,?,?,?,?)",
+               (ep, p, a, t, (lang or "en")[:10], int(time.time())))
+    db.commit()
+
+
+def push_unsubscribe(endpoint: str) -> bool:
+    cur = db.execute("DELETE FROM push_subs WHERE endpoint=?", (str(endpoint or ""),))
+    db.commit()
+    return cur.rowcount > 0
+
+
+def push_targets(topic: str):
+    return db.execute("SELECT * FROM push_subs WHERE ',' || topics || ',' LIKE ?", (f"%,{topic},%",)).fetchall()
+
+
+def push_count() -> dict:
+    rows = db.execute("SELECT topics FROM push_subs").fetchall()
+    return {"total": len(rows), "codes": sum("codes" in r[0] for r in rows), "news": sum("news" in r[0] for r in rows)}
+
+
+# ------------------------------------------------------------ invite tracker
+def record_join(member_id: int, name: str, inviter_id, code, fake: bool) -> int:
+    cur = db.execute("INSERT INTO invite_joins (member_id, member_name, inviter_id, code, ts, fake) VALUES (?,?,?,?,?,?)",
+                     (member_id, (name or "")[:60], inviter_id, code, int(time.time()), 1 if fake else 0))
+    db.commit()
+    return cur.lastrowid
+
+
+def record_leave(member_id: int):
+    """Marks the member's latest join as left. Returns that row (to say who had invited them) or None."""
+    r = db.execute("SELECT * FROM invite_joins WHERE member_id=? AND left_ts IS NULL ORDER BY id DESC LIMIT 1", (member_id,)).fetchone()
+    if r is not None:
+        db.execute("UPDATE invite_joins SET left_ts=? WHERE id=?", (int(time.time()), r["id"]))
+        db.commit()
+    return r
+
+
+def invite_counts(inviter_id: int) -> dict:
+    """Per inviter, counting each member once (their latest join): regular = still here and not a new account."""
+    rows = db.execute("SELECT j.* FROM invite_joins j JOIN (SELECT member_id, MAX(id) AS id FROM invite_joins WHERE inviter_id=? "
+                      "GROUP BY member_id) l ON l.id=j.id", (inviter_id,)).fetchall()
+    left = sum(1 for r in rows if r["left_ts"])
+    fake = sum(1 for r in rows if r["fake"] and not r["left_ts"])
+    return {"total": len(rows), "left": left, "fake": fake, "regular": len(rows) - left - fake}
+
+
+def invite_top(limit: int = 10, since: Optional[int] = None) -> list:
+    sql = ("SELECT j.inviter_id, COUNT(*) AS total, SUM(j.left_ts IS NOT NULL) AS left_n, "
+           "SUM(j.fake=1 AND j.left_ts IS NULL) AS fake_n FROM invite_joins j JOIN (SELECT member_id, MAX(id) AS id FROM invite_joins "
+           "WHERE inviter_id IS NOT NULL" + (" AND ts>=?" if since else "") + " GROUP BY member_id) l ON l.id=j.id GROUP BY j.inviter_id")
+    rows = db.execute(sql, (since,) if since else ()).fetchall()
+    out = [{"inviter_id": r["inviter_id"], "total": r["total"], "left": r["left_n"] or 0, "fake": r["fake_n"] or 0,
+            "regular": r["total"] - (r["left_n"] or 0) - (r["fake_n"] or 0)} for r in rows]
+    out.sort(key=lambda x: (-x["regular"], -x["total"]))
+    return out[:limit]
+
+
+def recent_joins(limit: int = 50):
+    return db.execute("SELECT * FROM invite_joins ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
 # ------------------------------------------------------------ "I have this too"
 def toggle_vote(bug_id: int, user_id: int) -> bool:
     """Add or remove the player's vote. Returns True when they now have a vote on the bug."""
@@ -1110,6 +1256,60 @@ _STOP = set("the and for with that this when after before have has had not but a
 def _tokens(text: str) -> set:
     words = re.findall(r"[a-z0-9ąćęłńóśźż]{3,}", (text or "").lower())
     return {w[:6] for w in words if w not in _STOP}        # crude stemming: first 6 letters
+
+
+OPEN_STATUSES = ("new", "investigating", "passed", "being_investigated")
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"\W+", " ", (text or "").lower()).strip()
+
+
+def duplicate_score(a, b) -> int:
+    """0–100: how much two bug reports look like the same problem (title counts most)."""
+    if _norm(a["text"]) and _norm(a["text"]) == _norm(b["text"]):
+        return 100
+    ta, tb = _tokens(a["summary"] or ""), _tokens(b["summary"] or "")
+    da, db_ = _tokens((a["text"] or "")[:400]), _tokens((b["text"] or "")[:400])
+    title = 0.0
+    if len(ta) >= 2 and len(tb) >= 2:
+        common = len(ta & tb)
+        title = common / min(len(ta), len(tb)) if common >= 2 else 0.0
+    A, B = ta | da, tb | db_
+    dice = 2 * len(A & B) / (len(A) + len(B)) if A and B else 0.0
+    score = max(title * 0.92, dice, (title + dice) / 2 + 0.1 if title and dice > 0.3 else 0)
+    if a["area"] and b["area"] and a["area"] != b["area"]:
+        score *= 0.8
+    return int(round(min(score, 1.0) * 100))
+
+
+def find_duplicate(r, days: int = 120):
+    """The open bug this new report most likely duplicates: (row, percent) or (None, 0)."""
+    since = int(time.time()) - days * 86400
+    rows = db.execute(f"SELECT * FROM bug_reports WHERE id<>? AND id<? AND duplicate_of IS NULL AND status IN "
+                      f"({','.join('?' * len(OPEN_STATUSES))}) AND created_at>=? ORDER BY id DESC LIMIT 400",
+                      (r["id"], r["id"], *OPEN_STATUSES, since)).fetchall()
+    best, best_s = None, 0
+    for c in rows:
+        s = duplicate_score(r, c)
+        if r["reporter_id"] and c["reporter_id"] == r["reporter_id"]:
+            s = min(100, s + 15)                       # the same player sending it again
+        if s > best_s:
+            best, best_s = c, s
+    return best, best_s
+
+
+REJECT_PRESETS = {
+    "duplicate": "Already reported – we're tracking it in another report.",
+    "intended": "This works as intended in the game.",
+    "cant_repro": "We couldn't reproduce it with the information given.",
+    "not_bug": "This isn't a bug – it's part of the game's design.",
+    "missing_info": "The report is missing the details we need. Please send a new one with steps and a screenshot.",
+    "game_side": "This comes from the game itself, not something our server team can change.",
+    "planned": "We already have this planned.",
+    "not_now": "We won't take this forward right now.",
+    "other": "",
+}
 
 
 def similar_bugs(text: str, limit: int = 3, area: Optional[str] = None) -> list:

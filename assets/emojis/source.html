@@ -1,0 +1,92 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:U;font-weight:200 900;src:url(file:///home/claude/wos-eu1-bot/site/fonts/unbounded.woff2)}
+html,body{margin:0;background:transparent}#s{width:128px;height:128px}
+</style></head><body><div id="s"></div><script>
+const INK = '#0b1630', OR = '#ff8a3d', GOLD = '#ffc15e', ICE = '#7de3f4', NAVY = '#1b2f57', NAVY2 = '#2a4680', RED = '#ff5d6c', GREEN = '#5be08a';
+const S = (w = 5) => `stroke="${INK}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"`;
+const sin = x => Math.sin(x * 2 * Math.PI), cos = x => Math.cos(x * 2 * Math.PI);
+const star = (cx, cy, r, ri, rot = 0) => { let d = ''; for (let i = 0; i < 10; i++) { const a = (i * 36 - 90 + rot) * Math.PI / 180, rr = i % 2 ? ri : r; d += (i ? 'L' : 'M') + (cx + rr * Math.cos(a)).toFixed(2) + ',' + (cy + rr * Math.sin(a)).toFixed(2); } return d + 'Z'; };
+const twinkle = (x, y, s, c) => `<path transform="translate(${x} ${y}) scale(${Math.max(0, s).toFixed(3)})" d="M0,-10 C1.5,-2.5 2.5,-1.5 10,0 C2.5,1.5 1.5,2.5 0,10 C-1.5,2.5 -2.5,1.5 -10,0 C-2.5,-1.5 -1.5,-2.5 0,-10Z" fill="${c}" ${S(2.2)}/>`;
+const E = {
+  frost_star: t => { const s = 1 + 0.08 * sin(t); return `<g transform="translate(64 66) rotate(${(6 * sin(t)).toFixed(2)}) scale(${s.toFixed(3)}) translate(-64 -66)">
+      <path d="${star(64, 66, 44, 20)}" fill="${GOLD}" ${S(6)}/><path d="${star(64, 66, 26, 12)}" fill="#fff3c9"/>
+      <path d="M64,48 v36 M48.4,57 l31.2,18 M79.6,57 l-31.2,18" stroke="${ICE}" stroke-width="4" stroke-linecap="round"/></g>
+      ${twinkle(20, 24, 0.9 * Math.abs(sin(t)), ICE)}${twinkle(108, 30, 0.8 * Math.abs(sin(t + .33)), '#fff')}${twinkle(106, 104, 0.7 * Math.abs(sin(t + .66)), ICE)}`; },
+  snowflake: t => { const arm = a => `<g transform="rotate(${a} 64 64)"><path d="M64,64 V18 M64,30 l-10,-10 M64,30 l10,-10 M64,46 l-8,-7 M64,46 l8,-7" stroke="${INK}" stroke-width="12" stroke-linecap="round" fill="none"/>
+      <path d="M64,64 V18 M64,30 l-10,-10 M64,30 l10,-10 M64,46 l-8,-7 M64,46 l8,-7" stroke="${ICE}" stroke-width="6" stroke-linecap="round" fill="none"/></g>`;
+      return `<g transform="translate(64 64) rotate(${(60 * t).toFixed(2)}) scale(${(1 + .05 * sin(t)).toFixed(3)}) translate(-64 -64)">${[0, 60, 120, 180, 240, 300].map(arm).join('')}<circle cx="64" cy="64" r="9" fill="#fff" ${S(4)}/></g>`; },
+  bear_time: t => { const r = 9 * sin(t * 2) * (t < .5 ? 1 : .3), pop = t < .5 ? 1 : 1 + .25 * Math.abs(sin(t * 2)); return `
+      <g transform="rotate(${r.toFixed(2)} 60 74)">
+        <circle cx="30" cy="40" r="15" fill="#fff" ${S(5)}/><circle cx="90" cy="40" r="15" fill="#fff" ${S(5)}/><circle cx="30" cy="40" r="7" fill="#cfe8f5"/><circle cx="90" cy="40" r="7" fill="#cfe8f5"/>
+        <ellipse cx="60" cy="72" rx="44" ry="40" fill="#fff" ${S(6)}/>
+        <ellipse cx="60" cy="88" rx="22" ry="16" fill="#e3f2fb" ${S(4)}/><ellipse cx="60" cy="80" rx="9" ry="6.5" fill="${INK}"/>
+        <path d="M60,86 v6 M52,94 q8,6 16,0" fill="none" ${S(3.5)}/>
+        <ellipse cx="44" cy="64" rx="5.5" ry="7" fill="${INK}"/><ellipse cx="76" cy="64" rx="5.5" ry="7" fill="${INK}"/>
+        <path d="M34,52 l14,5 M86,52 l-14,5" ${S(4)}/></g>
+      <g transform="translate(106 26) scale(${pop.toFixed(3)})"><circle r="17" fill="${OR}" ${S(4)}/><path d="M0,-9 v9 M0,8 v1" stroke="#fff" stroke-width="6" stroke-linecap="round"/></g>`; },
+  svs: t => { const p = t < .5 ? t * 2 : 2 - t * 2, a = 42 - 26 * (p * p), flash = Math.max(0, 1 - Math.abs(t - .5) * 7); const sword = (side) => `<g transform="rotate(${side * a} 64 104)">
+        <path d="M64,104 V22" stroke="${INK}" stroke-width="14" stroke-linecap="round"/><path d="M64,100 V24" stroke="#d9e6f5" stroke-width="7" stroke-linecap="round"/><path d="M64,96 V30" stroke="#fff" stroke-width="2"/>
+        <path d="M50,96 H78" stroke="${INK}" stroke-width="11" stroke-linecap="round"/><path d="M50,96 H78" stroke="${GOLD}" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="64" cy="112" r="6" fill="${OR}" ${S(4)}/></g>`;
+      return sword(-1) + sword(1) + (flash > 0 ? `<g transform="translate(64 40) scale(${(0.4 + flash).toFixed(3)})"><path d="${star(0, 0, 22, 8)}" fill="#fff" ${S(3)}/><path d="${star(0, 0, 14, 5)}" fill="${GOLD}"/></g>` : ''); },
+  rally: t => { let top = 'M40,18', bot = ''; const pts = []; for (let i = 0; i <= 10; i++) { const x = 40 + i * 7, y = 20 + 6 * sin(t - i / 12) * (i / 10); pts.push([x, y]); }
+      top = 'M' + pts.map(p => p.map(v => v.toFixed(1)).join(',')).join(' L'); const back = pts.slice().reverse().map(([x, y]) => [x, y + 38]); bot = ' L' + back.map(p => p.map(v => v.toFixed(1)).join(',')).join(' L') + 'Z';
+      return `<path d="M38,14 V118" stroke="${INK}" stroke-width="11" stroke-linecap="round"/><path d="M38,14 V118" stroke="#d9e6f5" stroke-width="5" stroke-linecap="round"/><circle cx="38" cy="12" r="7" fill="${GOLD}" ${S(4)}/>
+      <path d="${top + bot}" fill="${OR}" ${S(5)}/><path d="M56,${(36 + 3 * sin(t - .2)).toFixed(1)} l8,-6 l8,6 l-3,-9 l7,-5 h-9 l-3,-9 l-3,9 h-9 l7,5 z" fill="${GOLD}" ${S(2.5)}/>`; },
+  bug: t => { const b = 3 * sin(t * 2), l = 18 * sin(t * 2); const leg = (y, s, ph) => `<path d="M${64 - 18},${y} l-16,${(-4 + s * ph).toFixed(1)}" ${S(5)}/><path d="M${64 + 18},${y} l16,${(-4 - s * ph).toFixed(1)}" ${S(5)}/>`;
+      return `<g transform="translate(0 ${b.toFixed(2)})">${leg(64, l / 3, 1)}${leg(78, l / 3, -1)}${leg(92, l / 3, 1)}
+      <path d="M54,30 q-6,-14 -16,-16 M74,30 q6,-14 16,-${(16 + 3 * sin(t * 2)).toFixed(1)}" fill="none" ${S(5)}/><circle cx="38" cy="14" r="5" fill="${GOLD}" ${S(3)}/><circle cx="90" cy="${(14 - 3 * sin(t * 2)).toFixed(1)}" r="5" fill="${GOLD}" ${S(3)}/>
+      <ellipse cx="64" cy="80" rx="26" ry="32" fill="${GREEN}" ${S(6)}/><path d="M64,52 V110" ${S(4)}/><circle cx="52" cy="76" r="5" fill="${INK}"/><circle cx="76" cy="92" r="5" fill="${INK}"/><circle cx="74" cy="68" r="4" fill="${INK}"/>
+      <ellipse cx="64" cy="42" rx="18" ry="15" fill="${GREEN}" ${S(6)}/><circle cx="57" cy="40" r="4.5" fill="#fff" ${S(2)}/><circle cx="71" cy="40" r="4.5" fill="#fff" ${S(2)}/><circle cx="58" cy="41" r="2" fill="${INK}"/><circle cx="72" cy="41" r="2" fill="${INK}"/></g>`; },
+  furnace: t => { const f = (k, ph) => 1 + k * sin(t * 2 + ph) + k * .6 * sin(t * 3 + ph * 2); return `
+      <path d="M22,112 h84 l-8,-16 h-68 z" fill="${NAVY2}" ${S(5)}/><path d="M34,104 l20,-10 l20,10 l20,-10" stroke="#8a5a3c" stroke-width="8" stroke-linecap="round" fill="none"/>
+      <g transform="translate(64 98) scale(${(0.95 + .05 * f(.5, 0)).toFixed(3)} ${f(.07, .1).toFixed(3)}) skewX(${(5 * sin(t * 2)).toFixed(2)})">
+        <path d="M0,0 C-40,-4 -42,-42 -12,-82 C-12,-56 6,-58 4,-80 C34,-52 42,-8 0,0Z" fill="${OR}" ${S(5)}/>
+        <g transform="scale(${f(.1, .5).toFixed(3)})"><path d="M0,-4 C-22,-6 -22,-30 -6,-48 C-4,-32 10,-34 8,-44 C22,-28 24,-6 0,-4Z" fill="${GOLD}"/></g>
+        <path d="M0,-6 C-8,-8 -8,-18 -2,-24 C0,-18 6,-20 4,-22 C10,-16 8,-8 0,-6Z" fill="#fff6d8"/></g>
+      ${twinkle(24, 30 - 14 * t, .5 * (1 - t), GOLD)}${twinkle(104, 46 - 14 * ((t + .5) % 1), .5 * (1 - (t + .5) % 1), OR)}`; },
+  gift_code: t => { const j = Math.abs(sin(t)), y = -14 * j, lid = -10 * Math.max(0, j - .55) * 2.2, sq = 1 + (j < .1 ? .06 * (1 - j * 10) : 0); return `
+      <ellipse cx="64" cy="118" rx="${(34 - 10 * j).toFixed(1)}" ry="5" fill="${INK}" opacity=".25"/>
+      <g transform="translate(64 ${(104 + y).toFixed(2)}) scale(${sq.toFixed(3)} ${(2 - sq).toFixed(3)}) translate(-64 -104)">
+        <rect x="26" y="56" width="76" height="48" rx="8" fill="${OR}" ${S(6)}/><rect x="56" y="56" width="16" height="48" fill="${ICE}" ${S(4)}/>
+        <g transform="translate(0 ${lid.toFixed(2)})"><rect x="20" y="40" width="88" height="20" rx="7" fill="${GOLD}" ${S(6)}/><rect x="56" y="40" width="16" height="20" fill="${ICE}" ${S(4)}/>
+        <path d="M64,40 C44,14 26,30 56,40 M64,40 C84,14 102,30 72,40" fill="${ICE}" ${S(4.5)}/></g></g>
+      ${twinkle(20, 30, j > .6 ? (j - .6) * 2.2 : 0, GOLD)}${twinkle(108, 26, j > .6 ? (j - .6) * 2 : 0, ICE)}`; },
+  frostbit_wave: t => { const w = 26 * sin(t * 2); return `
+      <circle cx="58" cy="70" r="40" fill="#f2faff" ${S(5)}/>
+      <path d="M20,58 C20,18 96,18 96,58 Z" fill="${NAVY}" ${S(5)}/><rect x="14" y="50" width="88" height="16" rx="8" fill="${NAVY2}" ${S(5)}/><circle cx="58" cy="18" r="9" fill="${OR}" ${S(4)}/>
+      <ellipse cx="45" cy="78" rx="4.5" ry="6" fill="${INK}"/><ellipse cx="71" cy="78" rx="4.5" ry="6" fill="${INK}"/><path d="M50,92 q8,8 16,0" fill="none" ${S(4)}/>
+      <ellipse cx="37" cy="90" rx="6" ry="3.5" fill="#ff9fb2"/><ellipse cx="79" cy="90" rx="6" ry="3.5" fill="#ff9fb2"/>
+      <path d="M26,102 Q58,120 92,102 L90,112 Q58,128 28,112 Z" fill="${OR}" ${S(4.5)}/>
+      <g transform="rotate(${w.toFixed(2)} 104 92)"><ellipse cx="108" cy="70" rx="12" ry="11" fill="${OR}" ${S(4.5)}/><ellipse cx="100" cy="63" rx="5" ry="6" fill="${OR}" ${S(3.5)}/></g>`; },
+  fixed: t => { const p = Math.min(1, t / .45), len = 80; const s = t > .45 ? 1 + .12 * Math.max(0, sin((t - .45) * 1.8)) : 1; return `
+      <g transform="translate(64 64) scale(${s.toFixed(3)}) translate(-64 -64)"><circle cx="64" cy="64" r="48" fill="${GREEN}" ${S(6)}/>
+      <path d="M40,66 L57,82 L90,46" fill="none" stroke="${INK}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${len}" stroke-dashoffset="${(len * (1 - p)).toFixed(1)}"/>
+      <path d="M40,66 L57,82 L90,46" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${len}" stroke-dashoffset="${(len * (1 - p)).toFixed(1)}"/></g>
+      ${twinkle(110, 22, t > .5 ? Math.sin((t - .5) * 2 * Math.PI) * .9 : 0, GOLD)}${twinkle(18, 104, t > .6 ? Math.sin((t - .6) * 2.5 * Math.PI) * .7 : 0, ICE)}`; },
+  siren: t => { const on = (t * 2) % 1 < .5; const beam = a => `<path d="M64,58 L${(64 + 70 * Math.cos(a)).toFixed(1)},${(58 + 70 * Math.sin(a)).toFixed(1)} L${(64 + 70 * Math.cos(a + .35)).toFixed(1)},${(58 + 70 * Math.sin(a + .35)).toFixed(1)} Z" fill="${RED}" opacity=".35"/>`;
+      const a = t * 2 * Math.PI; return `${beam(a - Math.PI / 2)}${beam(a + Math.PI / 2)}
+      <rect x="28" y="96" width="72" height="18" rx="6" fill="${NAVY2}" ${S(5)}/>
+      <path d="M36,98 V64 a28,28 0 0 1 56,0 V98 Z" fill="${on ? RED : '#c23a48'}" ${S(6)}/><path d="M50,62 a14,14 0 0 1 14,-14" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity="${on ? 1 : .6}"/>
+      <path d="M64,24 v-10 M30,36 l-8,-8 M98,36 l8,-8" stroke="${on ? GOLD : '#c9d6e8'}" stroke-width="6" stroke-linecap="round"/>`; },
+  gg: t => { const s = 1 + .1 * Math.abs(sin(t)), r = 5 * sin(t); return `<g transform="translate(64 70) rotate(${r.toFixed(2)}) scale(${s.toFixed(3)})">
+      <text x="0" y="16" text-anchor="middle" font-family="U" font-weight="900" font-size="52" fill="${GOLD}" stroke="${INK}" stroke-width="11" paint-order="stroke" stroke-linejoin="round" letter-spacing="-2">GG</text></g>
+      ${twinkle(16, 26, Math.abs(sin(t)), ICE)}${twinkle(112, 22, Math.abs(sin(t + .3)), GOLD)}${twinkle(110, 106, Math.abs(sin(t + .6)), '#fff')}${twinkle(18, 104, Math.abs(sin(t + .15)) * .8, OR)}`; },
+  warm_heart: t => { const b = t < .3 ? Math.sin(t / .3 * Math.PI) : t < .55 ? .6 * Math.sin((t - .3) / .25 * Math.PI) : 0, s = 1 + .14 * b; return `
+      <g transform="translate(64 68) scale(${s.toFixed(3)}) translate(-64 -68)"><path d="M64,108 C18,80 18,34 46,30 C56,28 62,36 64,42 C66,36 72,28 82,30 C110,34 110,80 64,108Z" fill="${RED}" ${S(6)}/>
+      <path d="M40,46 q6,-8 14,-6" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".8"/></g>
+      <path d="M46,${(22 - 8 * t).toFixed(1)} q-6,-6 0,-12 M64,${(18 - 8 * ((t + .3) % 1)).toFixed(1)} q-6,-6 0,-12 M82,${(22 - 8 * ((t + .6) % 1)).toFixed(1)} q-6,-6 0,-12" fill="none" stroke="${OR}" stroke-width="4" stroke-linecap="round" opacity=".8"/>`; },
+  lag: t => `<g transform="rotate(${(360 * t).toFixed(1)} 64 64)">${[0, 1, 2, 3, 4, 5, 6, 7].map(i => `<circle cx="${(64 + 38 * Math.cos(i * Math.PI / 4)).toFixed(1)}" cy="${(64 + 38 * Math.sin(i * Math.PI / 4)).toFixed(1)}" r="${(6 + i * 1.1).toFixed(1)}" fill="${ICE}" fill-opacity="${(.25 + i * .1).toFixed(2)}" ${S(3.5)}/>`).join('')}</g>
+      <text x="64" y="76" text-anchor="middle" font-family="U" font-weight="900" font-size="30" fill="#fff" stroke="${INK}" stroke-width="8" paint-order="stroke">…</text>`,
+  new: t => { const x = -60 + 240 * t; return `<defs><clipPath id="c"><rect x="10" y="40" width="108" height="50" rx="25"/></clipPath></defs>
+      <g transform="rotate(-8 64 64)"><rect x="10" y="40" width="108" height="50" rx="25" fill="${OR}" ${S(6)}/>
+      <g clip-path="url(#c)"><path d="M${x},30 l22,0 l-30,70 l-22,0 z" fill="#fff" opacity=".55"/></g>
+      <text x="64" y="76" text-anchor="middle" font-family="U" font-weight="900" font-size="28" fill="#fff" stroke="${INK}" stroke-width="7" paint-order="stroke">NEW</text></g>`; },
+  chief: t => { const y = 3 * sin(t); return `<g transform="translate(0 ${y.toFixed(2)})"><path d="M18,96 L14,40 L40,64 L64,28 L88,64 L114,40 L110,96 Z" fill="${GOLD}" ${S(6)}/>
+      <rect x="16" y="92" width="96" height="18" rx="6" fill="${OR}" ${S(6)}/><circle cx="64" cy="70" r="9" fill="${ICE}" ${S(4)}/><circle cx="36" cy="80" r="6" fill="${RED}" ${S(3.5)}/><circle cx="92" cy="80" r="6" fill="${RED}" ${S(3.5)}/>
+      <circle cx="14" cy="38" r="6" fill="${GOLD}" ${S(4)}/><circle cx="64" cy="26" r="7" fill="${GOLD}" ${S(4)}/><circle cx="114" cy="38" r="6" fill="${GOLD}" ${S(4)}/></g>
+      ${twinkle(66, 66, Math.max(0, sin(t)) * .9, '#fff')}${twinkle(106, 14, Math.max(0, sin(t + .5)) * .7, ICE)}`; }
+};
+window.IDS = Object.keys(E);
+window.render = (id, t) => { document.getElementById('s').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">${E[id](t)}</svg>`; };
+</script></body></html>

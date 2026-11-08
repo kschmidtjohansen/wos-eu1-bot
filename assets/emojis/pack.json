@@ -1,0 +1,82 @@
+[
+ {
+  "id": "frost_star",
+  "name": "frost_star",
+  "emoji": "⭐"
+ },
+ {
+  "id": "snowflake",
+  "name": "frost_flake",
+  "emoji": "❄️"
+ },
+ {
+  "id": "bear_time",
+  "name": "bear_time",
+  "emoji": "🐻‍❄️"
+ },
+ {
+  "id": "svs",
+  "name": "svs",
+  "emoji": "⚔️"
+ },
+ {
+  "id": "rally",
+  "name": "rally",
+  "emoji": "🚩"
+ },
+ {
+  "id": "bug",
+  "name": "bug_found",
+  "emoji": "🐛"
+ },
+ {
+  "id": "furnace",
+  "name": "furnace",
+  "emoji": "🔥"
+ },
+ {
+  "id": "gift_code",
+  "name": "gift_code",
+  "emoji": "🎁"
+ },
+ {
+  "id": "frostbit_wave",
+  "name": "frostbit_wave",
+  "emoji": "👋"
+ },
+ {
+  "id": "fixed",
+  "name": "fixed_check",
+  "emoji": "✅"
+ },
+ {
+  "id": "siren",
+  "name": "siren",
+  "emoji": "🚨"
+ },
+ {
+  "id": "gg",
+  "name": "gg_frost",
+  "emoji": "🎉"
+ },
+ {
+  "id": "warm_heart",
+  "name": "warm_heart",
+  "emoji": "❤️"
+ },
+ {
+  "id": "lag",
+  "name": "lagging",
+  "emoji": "⏳"
+ },
+ {
+  "id": "new",
+  "name": "new_badge",
+  "emoji": "🆕"
+ },
+ {
+  "id": "chief",
+  "name": "chief_crown",
+  "emoji": "👑"
+ }
+]

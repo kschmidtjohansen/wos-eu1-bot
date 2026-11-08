@@ -1,6 +1,6 @@
 /* WOS EU1 app: works offline with what was loaded last time, and always tries the network first
    so players see new codes and fixes straight away. Bump VERSION when the file list changes. */
-const VERSION = 'wos-eu1-v1';
+const VERSION = 'wos-eu1-v2';
 const SHELL = ['index.html', 'codes.html', 'known-issues.html', 'report.html', 'changelog.html', 'style.css', 'app.js', 'config.js',
   'manifest.json', 'fonts/unbounded.woff2', 'fonts/figtree.woff2', 'fonts/figtree-ext.woff2', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -22,4 +22,19 @@ self.addEventListener('fetch', e => {
     if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
     return res;
   }).catch(() => caches.match(req).then(hit => hit || (req.mode === 'navigate' ? caches.match('index.html') : Response.error()))));
+});
+
+// Phone notifications (new gift codes, the weekly post)
+self.addEventListener('push', e => {
+  let d = {}; try { d = e.data ? e.data.json() : {}; } catch (x) { d = { title: 'WOS EU1', body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'WOS EU1', { body: d.body || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png',
+    tag: d.tag || 'wos', renotify: true, data: { url: d.url || 'index.html' } }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = new URL(e.notification.data && e.notification.data.url || 'index.html', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) { if (c.url.startsWith(self.registration.scope) && 'focus' in c) { c.navigate(url); return c.focus(); } }
+    return self.clients.openWindow(url);
+  }));
 });

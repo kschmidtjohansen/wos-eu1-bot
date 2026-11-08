@@ -7,13 +7,19 @@
       newBadge: 'NEW', discord: 'Join our Discord', status: 'Server status', skip: 'Skip to content', rights: 'Made for the players of',
       netErr: 'Could not reach the server. Please try again later.', install: 'Install app', copy: 'Copy', copied: 'Copied',
       left: 'Expires in', never: 'Never expires', d: 'd', h: 'h', m: 'min',
-      iosHint: 'On iPhone: tap the Share button, then “Add to Home Screen”.', offline: 'You are offline – showing what was saved last time.' },
+      iosHint: 'On iPhone: tap the Share button, then “Add to Home Screen”.', offline: 'You are offline – showing what was saved last time.',
+      bellOn: 'Notify me', bellIsOn: 'Notifications on', bellOff: 'Turn off notifications', bellDenied: 'Notifications are blocked for this site – allow them in your browser settings.',
+      bellIOS: 'On iPhone, add the app to your Home Screen first (Share → Add to Home Screen), then turn notifications on there.',
+      bellNo: "This browser can't show notifications.", bellHttps: 'Notifications need the secure (https) version of this site.', bellDone: "Done – you'll get a notification for new codes." },
     pl: { nav_home: 'Start', nav_report: 'Zgłoś błąd', nav_known: 'Znane problemy', nav_fixed: 'Co naprawiono', nav_codes: 'Kody',
       tab_home: 'Start', tab_codes: 'Kody', tab_known: 'Problemy', tab_report: 'Zgłoś', tab_fixed: 'Poprawki',
       newBadge: 'NOWE', discord: 'Dołącz do Discorda', status: 'Status serwera', skip: 'Przejdź do treści', rights: 'Stworzone dla graczy',
       netErr: 'Nie można połączyć się z serwerem. Spróbuj później.', install: 'Zainstaluj aplikację', copy: 'Kopiuj', copied: 'Skopiowano',
       left: 'Wygasa za', never: 'Nie wygasa', d: 'd', h: 'godz.', m: 'min',
-      iosHint: 'Na iPhonie: stuknij Udostępnij, a potem „Do ekranu początkowego”.', offline: 'Jesteś offline – pokazujemy ostatnio zapisane dane.' }
+      iosHint: 'Na iPhonie: stuknij Udostępnij, a potem „Do ekranu początkowego”.', offline: 'Jesteś offline – pokazujemy ostatnio zapisane dane.',
+      bellOn: 'Powiadamiaj mnie', bellIsOn: 'Powiadomienia włączone', bellOff: 'Wyłącz powiadomienia', bellDenied: 'Powiadomienia są zablokowane dla tej strony – zezwól na nie w ustawieniach przeglądarki.',
+      bellIOS: 'Na iPhonie najpierw dodaj aplikację do ekranu początkowego (Udostępnij → Do ekranu początkowego), a potem włącz tam powiadomienia.',
+      bellNo: 'Ta przeglądarka nie obsługuje powiadomień.', bellHttps: 'Powiadomienia działają tylko w bezpiecznej (https) wersji strony.', bellDone: 'Gotowe – dostaniesz powiadomienie o nowych kodach.' }
   };
   const ICON = {
     home: '<path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
@@ -23,6 +29,7 @@
     fixed: '<path d="M20 6 9 17l-5-5"/>',
     download: '<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>',
     chat: '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
     spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>'
   };
   let lang = 'en';
@@ -81,6 +88,42 @@
     const to = +el.textContent; if (!to || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const t0 = performance.now(); const step = n => { const p = Math.min(1, (n - t0) / 800); el.textContent = String(Math.round(to * (1 - Math.pow(1 - p, 3)))); if (p < 1) requestAnimationFrame(step); };
     requestAnimationFrame(step);
+  };
+
+  /* ---- phone notifications ---- */
+  const b64 = s => { const p = '='.repeat((4 - s.length % 4) % 4), r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
+  W.pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  W.pushState = async () => {
+    if (!W.pushSupported()) return false;
+    try { const reg = await navigator.serviceWorker.getRegistration(); const sub = reg && await reg.pushManager.getSubscription(); return !!sub; } catch (e) { return false; }
+  };
+  W.pushOn = async () => {
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') throw new Error(W.t('bellHttps'));
+    if (isIOS() && !standalone()) throw new Error(W.t('bellIOS'));
+    if (!W.pushSupported()) throw new Error(W.t('bellNo'));
+    const k = await W.api('/public/push/key'); if (!k.enabled) throw new Error(W.t('bellNo'));
+    const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error(W.t('bellDenied'));
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(k.key) });
+    await W.api('/public/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON(), topics: ['codes', 'news'], lang: W.lang }) });
+  };
+  W.pushOff = async () => {
+    const reg = await navigator.serviceWorker.getRegistration(); const sub = reg && await reg.pushManager.getSubscription();
+    if (sub) { const ep = sub.endpoint; await sub.unsubscribe(); try { await W.api('/public/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: ep }) }); } catch (e) { /* ignore */ } }
+  };
+  // A "Notify me" button that shows its own state and explains what to do when it can't work.
+  W.bell = () => {
+    const btn = W.el('button', { class: 'btn pri bell', type: 'button' }), note = W.el('div', { class: 'ios', role: 'status' });
+    let on = false;
+    const draw = () => { btn.classList.toggle('pri', !on); btn.replaceChildren(W.icon('bell'), on ? W.t('bellIsOn') + ' ✓' : W.t('bellOn')); btn.title = on ? W.t('bellOff') : ''; };
+    btn.onclick = async () => {
+      btn.disabled = true; note.textContent = '';
+      try { if (on) { await W.pushOff(); on = false; } else { await W.pushOn(); on = true; note.textContent = W.t('bellDone'); } }
+      catch (e) { note.textContent = e.message; }
+      btn.disabled = false; draw();
+    };
+    W.pushState().then(v => { on = v; draw(); }); draw(); W.onLang.push(draw);
+    return W.el('div', { class: 'bellbox' }, btn, note);
   };
 
   /* ---- install as an app ---- */

@@ -34,7 +34,7 @@
     <button class="btn pri" type="button" id="app-b" data-i="install"></button></section>
   <section class="sec card banner" id="dc" hidden>
     <div><span class="ic" id="dc-ic"></span><div><h3 data-i="dcH"></h3><span class="muted" data-i="dcT"></span></div></div>
-    <a class="btn" id="dc-a" rel="noopener" data-i="dcB"></a></section>
+    <div class="btns" id="dc-btns"><a class="btn" id="dc-a" rel="noopener" data-i="dcB"></a></div></section>
 </main>
 <script src="config.js"></script><script src="app.js"></script>
 <script>
@@ -46,7 +46,7 @@ const S = {
   aFixH: "What's fixed", aFix: 'Every update and the bugs it fixed, with the game version.', nFixed: 'fixed so far',
   latestH: 'Fixed lately', all: 'See all', none: 'Nothing published yet.', ideasH: 'Ideas from players we added',
   appH: 'Get the app', appT: 'Add WOS EU1 to your home screen – codes and known issues one tap away.',
-  dcH: 'Never miss a code', dcT: 'New codes are posted on our Discord the moment they go live.', dcB: 'Join our Discord' },
+  dcH: 'Never miss a code', dcT: 'Get a notification on your phone for new gift codes and the weekly news – or follow our Discord.', dcB: 'Join our Discord' },
  pl: { h1: 'Trzymaj się ciepło.', lead: 'Dzisiejsze kody prezentowe, błędy, o których już wiemy, i szybki sposób, by zgłosić, że coś w grze nie działa.',
   cta1: 'Zgłoś błąd', cta2: 'Znane problemy', todayH: 'Dzisiejsze kody', allCodes: 'Wszystkie kody',
   aRepH: 'Zgłoś błąd', aRep: 'Coś nie działa? Krótki formularz, zrzut ekranu i gotowe. Moderatorzy czytają każde zgłoszenie.',
@@ -54,7 +54,7 @@ const S = {
   aFixH: 'Co naprawiono', aFix: 'Każda aktualizacja i naprawione w niej błędy, z wersją gry.', nFixed: 'naprawionych',
   latestH: 'Ostatnio naprawione', all: 'Zobacz wszystkie', none: 'Nic jeszcze nie opublikowano.', ideasH: 'Pomysły graczy, które dodaliśmy',
   appH: 'Pobierz aplikację', appT: 'Dodaj WOS EU1 do ekranu głównego – kody i znane problemy na wyciągnięcie ręki.',
-  dcH: 'Nie przegap żadnego kodu', dcT: 'Nowe kody publikujemy na Discordzie, gdy tylko się pojawią.', dcB: 'Dołącz do Discorda' } };
+  dcH: 'Nie przegap żadnego kodu', dcT: 'Dostawaj powiadomienia o nowych kodach i cotygodniowych nowościach – albo obserwuj nasz Discord.', dcB: 'Dołącz do Discorda' } };
 const $ = id => document.getElementById(id);
 const C = window.WOS_CONFIG || {};
 $('srv').textContent = C.SERVER_NAME || 'WOS EU1';
@@ -76,7 +76,8 @@ function draw() {
 }
 WOS.init(S).then(async cfg => {
   if (cfg.version) { $('ver-t').textContent = cfg.version; $('ver').hidden = false; }
-  if (C.DISCORD_URL) { $('dc-a').href = C.DISCORD_URL; $('dc').hidden = false; }
+  if (C.DISCORD_URL) { $('dc-a').href = C.DISCORD_URL; $('dc').hidden = false; } else $('dc-a').hidden = true;
+  try { if ((await WOS.api('/public/push/key')).enabled) { $('dc-btns').prepend(WOS.bell()); $('dc').hidden = false; } } catch (e) { /* off */ }
   const get = async (on, path) => { if (!on) return []; try { return (await WOS.api(path)).items; } catch (e) { return []; } };
   [codes, known, changes, ideas] = await Promise.all([get(cfg.giftcodes, '/public/giftcodes'), get(cfg.known_issues, '/public/known-issues'),
     get(cfg.changelog, '/public/changelog'), get(cfg.ideas, '/public/ideas')]);
