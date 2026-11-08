@@ -134,8 +134,16 @@ fi
 step "Installing Python (the language the bot is written in)"
 export DEBIAN_FRONTEND=noninteractive
 APT=(apt-get -o DPkg::Lock::Timeout=600 -qq)
-"${APT[@]}" update >/dev/null
-"${APT[@]}" install -y python3 python3-venv python3-pip ca-certificates >/dev/null
+if ((UPDATE)) && [[ -x $APP/venv/bin/python ]] && python3 -c 'import venv, ensurepip' 2>/dev/null; then
+  :   # update: Python is already there – don't touch apt (Ubuntu's own updates often hold its lock)
+else
+  for _ in $(seq 1 60); do   # wait (max 10 min) while Ubuntu's own updater is busy
+    fuser /var/lib/apt/lists/lock /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+    info "Ubuntu is installing its own updates – waiting…"; sleep 10
+  done
+  "${APT[@]}" update >/dev/null || warn "Couldn't refresh the package list – carrying on"
+  "${APT[@]}" install -y python3 python3-venv python3-pip ca-certificates >/dev/null || die "Couldn't install Python – Ubuntu's package tool is busy or broken. Try again in a few minutes."
+fi
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' || die "Python 3.10 or newer is needed (found $(python3 -V)). Use Ubuntu 22.04/24.04 or Debian 12."
 ok "$(python3 -V)"
 
