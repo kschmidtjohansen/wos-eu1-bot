@@ -193,6 +193,40 @@ db.executescript(
         lang TEXT,
         ts INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS role_menus (    -- "pick your alliance / language / pings" messages
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER, message_id INTEGER,
+        title TEXT NOT NULL, description TEXT,
+        style TEXT NOT NULL DEFAULT 'buttons',     -- buttons | select
+        mode TEXT NOT NULL DEFAULT 'multi',        -- multi | single (only one role of the menu at a time)
+        roles TEXT NOT NULL DEFAULT '[]'           -- [{"role_id", "label", "emoji", "desc"}]
+    );
+    CREATE TABLE IF NOT EXISTS mod_cases (     -- warnings, timeouts, kicks and bans: the history per player
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL, user_name TEXT,
+        kind TEXT NOT NULL,                        -- warn | timeout | kick | ban | unban | pardon
+        reason TEXT, moderator_id INTEGER, moderator_name TEXT,
+        ts INTEGER NOT NULL, minutes INTEGER,
+        active INTEGER NOT NULL DEFAULT 1,         -- a warning that still counts
+        auto INTEGER NOT NULL DEFAULT 0            -- given by the bot (auto-mod / escalation)
+    );
+    CREATE TABLE IF NOT EXISTS giveaways (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL, message_id INTEGER,
+        prize TEXT NOT NULL, winners INTEGER NOT NULL DEFAULT 1,
+        ends_at INTEGER NOT NULL, role_id INTEGER,
+        host_id INTEGER, host_name TEXT, created INTEGER NOT NULL,
+        ended INTEGER NOT NULL DEFAULT 0, winner_ids TEXT, entries INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS timers (        -- messages the bot posts on a schedule
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL, channel_id INTEGER NOT NULL, content TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'daily',        -- daily | interval
+        at TEXT, days TEXT,                        -- "18:30" and "mon,tue,…" (daily) – server time zone
+        every_minutes INTEGER,                     -- interval
+        role_id INTEGER, delete_previous INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1, next_run INTEGER, last_run INTEGER, last_msg_id INTEGER
+    );
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -378,6 +412,17 @@ SCHEMA = {
     "weekly_weekday": {"type": "choice", "default": "sunday",
                        "choices": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
     "weekly_hour": {"type": "int", "default": 18, "min": 0, "max": 23},
+    "warn_timeout_at": {"type": "int", "default": 3, "min": 0, "max": 20},
+    "warn_timeout_minutes": {"type": "int", "default": 60, "min": 1, "max": 40320},
+    "warn_ban_at": {"type": "int", "default": 0, "min": 0, "max": 50},
+    "warn_expire_days": {"type": "int", "default": 30, "min": 0, "max": 365},
+    "automod_badwords_on": {"type": "bool", "default": False},
+    "automod_badwords": {"type": "lines", "default": "badword", "max_lines": 300, "max_len": 40},
+    "automod_caps_on": {"type": "bool", "default": True},
+    "automod_mentions_on": {"type": "bool", "default": True},
+    "automod_mentions_max": {"type": "int", "default": 5, "min": 2, "max": 50},
+    "automod_repeat_on": {"type": "bool", "default": True},
+    "automod_warn": {"type": "bool", "default": True},
     "guard_enabled": {"type": "bool", "default": True},
     "guard_timeout_minutes": {"type": "int", "default": 60, "min": 0, "max": 10080},
     "guard_block_invites": {"type": "bool", "default": False},
@@ -979,6 +1024,126 @@ def push_targets(topic: str):
 def push_count() -> dict:
     rows = db.execute("SELECT topics FROM push_subs").fetchall()
     return {"total": len(rows), "codes": sum("codes" in r[0] for r in rows), "news": sum("news" in r[0] for r in rows)}
+
+
+# ------------------------------------------------------------ role menus
+def role_menus():
+    return db.execute("SELECT * FROM role_menus ORDER BY id").fetchall()
+
+
+def get_role_menu(mid: int):
+    return db.execute("SELECT * FROM role_menus WHERE id=?", (mid,)).fetchone()
+
+
+def save_role_menu(mid, **f) -> int:
+    if mid:
+        db.execute(f"UPDATE role_menus SET {', '.join(k + '=?' for k in f)} WHERE id=?", (*f.values(), mid))
+    else:
+        mid = db.execute(f"INSERT INTO role_menus ({', '.join(f)}) VALUES ({', '.join('?' * len(f))})", tuple(f.values())).lastrowid
+    db.commit()
+    return mid
+
+
+def delete_role_menu(mid: int):
+    db.execute("DELETE FROM role_menus WHERE id=?", (mid,))
+    db.commit()
+
+
+# ------------------------------------------------------------ warnings and cases
+def add_case(user_id: int, user_name: str, kind: str, reason: str, mod_id, mod_name: str, minutes=None, auto: bool = False) -> int:
+    cid = db.execute("INSERT INTO mod_cases (user_id, user_name, kind, reason, moderator_id, moderator_name, ts, minutes, active, auto) "
+                     "VALUES (?,?,?,?,?,?,?,?,?,?)", (user_id, (user_name or "")[:60], kind, (reason or "")[:500] or None, mod_id,
+                                                      (mod_name or "")[:60], int(time.time()), minutes, 1 if kind == "warn" else 0,
+                                                      1 if auto else 0)).lastrowid
+    db.commit()
+    return cid
+
+
+def active_warnings(user_id: int) -> int:
+    days = cfg("warn_expire_days")
+    since = int(time.time()) - days * 86400 if days else 0
+    return db.execute("SELECT COUNT(*) FROM mod_cases WHERE user_id=? AND kind='warn' AND active=1 AND ts>=?", (user_id, since)).fetchone()[0]
+
+
+def cases_for(user_id: int, limit: int = 25):
+    return db.execute("SELECT * FROM mod_cases WHERE user_id=? ORDER BY id DESC LIMIT ?", (user_id, limit)).fetchall()
+
+
+def recent_cases(limit: int = 60, q: str = ""):
+    if q:
+        return db.execute("SELECT * FROM mod_cases WHERE user_name LIKE ? OR CAST(user_id AS TEXT)=? OR reason LIKE ? ORDER BY id DESC LIMIT ?",
+                          (f"%{q}%", q, f"%{q}%", limit)).fetchall()
+    return db.execute("SELECT * FROM mod_cases ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+def pardon_case(case_id: int):
+    r = db.execute("SELECT * FROM mod_cases WHERE id=?", (case_id,)).fetchone()
+    if r is None or r["kind"] != "warn" or not r["active"]:
+        return None
+    db.execute("UPDATE mod_cases SET active=0 WHERE id=?", (case_id,))
+    db.commit()
+    return r
+
+
+# ------------------------------------------------------------ giveaways
+def get_giveaway(gid: int):
+    return db.execute("SELECT * FROM giveaways WHERE id=?", (gid,)).fetchone()
+
+
+def giveaways(limit: int = 50):
+    return db.execute("SELECT * FROM giveaways ORDER BY ended, ends_at DESC LIMIT ?", (limit,)).fetchall()
+
+
+def due_giveaways(now=None):
+    return db.execute("SELECT * FROM giveaways WHERE ended=0 AND ends_at<=?", (now or int(time.time()),)).fetchall()
+
+
+# ------------------------------------------------------------ timed messages
+WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def timer_next_run(t, after: int) -> Optional[int]:
+    """The next time a timer fires after `after` (unix seconds), in the server's time zone."""
+    from datetime import datetime, timedelta
+    if t["kind"] == "interval":
+        every = max(5, int(t["every_minutes"] or 60)) * 60
+        return after + every
+    try:
+        hh, mm = (int(x) for x in str(t["at"] or "").split(":"))
+    except ValueError:
+        return None
+    days = [d for d in str(t["days"] or "").split(",") if d in WEEKDAYS] or list(WEEKDAYS)
+    z = tz()
+    base = datetime.fromtimestamp(after, z)
+    for i in range(0, 8):
+        d = (base + timedelta(days=i)).replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if WEEKDAYS[d.weekday()] in days and d.timestamp() > after:
+            return int(d.timestamp())
+    return None
+
+
+def timers():
+    return db.execute("SELECT * FROM timers ORDER BY id").fetchall()
+
+
+def get_timer(tid: int):
+    return db.execute("SELECT * FROM timers WHERE id=?", (tid,)).fetchone()
+
+
+def save_timer(tid, **f) -> int:
+    if tid:
+        db.execute(f"UPDATE timers SET {', '.join(k + '=?' for k in f)} WHERE id=?", (*f.values(), tid))
+    else:
+        tid = db.execute(f"INSERT INTO timers ({', '.join(f)}) VALUES ({', '.join('?' * len(f))})", tuple(f.values())).lastrowid
+    db.commit()
+    t = get_timer(tid)
+    db.execute("UPDATE timers SET next_run=? WHERE id=?", (timer_next_run(t, int(time.time())), tid))
+    db.commit()
+    return tid
+
+
+def due_timers(now=None):
+    return db.execute("SELECT * FROM timers WHERE enabled=1 AND next_run IS NOT NULL AND next_run<=?", (now or int(time.time()),)).fetchall()
 
 
 # ------------------------------------------------------------ invite tracker

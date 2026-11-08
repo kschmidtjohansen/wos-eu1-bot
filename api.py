@@ -8,6 +8,7 @@ import hmac
 import os
 import io
 import collections
+import json
 import re
 import time
 import asyncio
@@ -120,7 +121,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             return web.json_response({"error": "Something went wrong in the bot. Check its console."}, status=500)
 
     AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout"}
-    MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("PUT", r"/api/suggestions/\d+"),
+    MOD_WRITE = [("POST", r"/api/cases/warn"), ("POST", r"/api/cases/\d+/pardon"), (None, r"/api/giveaways(/\d+/(end|reroll))?"),
+                 ("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("PUT", r"/api/suggestions/\d+"),
                  (None, r"/api/replies(/\d+)?"), (None, r"/api/blocklist(/\d+)?"), ("DELETE", r"/api/webblocks")]
     MOD_HIDDEN = [r"/api/backups/.*", r"/api/auth/settings", r"/api/translate", r"/api/drive/.*", r"/api/redeem.*",
                   r"/api/modstats", r"/api/stickers.*", r"/api/emojis.*", r"/api/push.*", r"/api/weekly"]
@@ -1007,6 +1009,189 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         except discord.HTTPException as exc:
             raise ApiError(502, f"Discord refused: {exc.text or exc}")
         return web.json_response({"ok": True, "channel": ch.name})
+
+    # ---------------------------------------------------------- community tools
+    @routes.get("/api/roles")
+    async def roles_list(request):
+        g = get_guild()
+        top = g.me.top_role.position if g and g.me else 0
+        return web.json_response({"roles": [{"id": str(r.id), "name": r.name, "color": f"#{r.color.value:06x}" if r.color.value else None,
+                                             "assignable": (not r.managed) and r.position < top}
+                                            for r in sorted(g.roles, key=lambda r: -r.position) if not r.is_default()]})
+
+    def menu_dict(m):
+        return {"id": m["id"], "channel_id": str(m["channel_id"]) if m["channel_id"] else None, "message_id": str(m["message_id"]) if m["message_id"] else None,
+                "title": m["title"], "description": m["description"] or "", "style": m["style"], "mode": m["mode"],
+                "roles": json.loads(m["roles"] or "[]"), "url": f"https://discord.com/channels/{guild_id}/{m['channel_id']}/{m['message_id']}" if m["message_id"] else None}
+
+    @routes.get("/api/rolemenus")
+    async def rolemenus(request):
+        return web.json_response({"items": [menu_dict(m) for m in store.role_menus()]})
+
+    @routes.post("/api/rolemenus")
+    async def rolemenu_save(request):
+        d = await body_json(request)
+        title = str(d.get("title") or "").strip()
+        if not 2 <= len(title) <= 200:
+            raise ApiError(400, "Give the menu a title (2–200 characters).")
+        if not str(d.get("channel_id") or "").isdigit():
+            raise ApiError(400, "Choose the channel to post it in.")
+        roles = []
+        for r in (d.get("roles") or [])[:25]:
+            rid = str(r.get("role_id") or "")
+            if not rid.isdigit():
+                continue
+            roles.append({"role_id": rid, "label": str(r.get("label") or "").strip()[:80] or "Role",
+                          "emoji": str(r.get("emoji") or "").strip()[:60], "desc": str(r.get("desc") or "").strip()[:100]})
+        if not roles:
+            raise ApiError(400, "Add at least one role.")
+        mid = int(d["id"]) if str(d.get("id") or "").isdigit() else None
+        old = store.get_role_menu(mid) if mid else None
+        f = {"channel_id": int(d["channel_id"]), "title": title, "description": str(d.get("description") or "").strip()[:2000],
+             "style": "select" if d.get("style") == "select" else "buttons", "mode": "single" if d.get("mode") == "single" else "multi",
+             "roles": json.dumps(roles)}
+        if old and old["channel_id"] != f["channel_id"]:
+            await hooks["remove_role_menu"](mid)          # moved to another channel: post it again there
+            mid = None
+        mid = store.save_role_menu(mid, **f)
+        try:
+            await hooks["publish_role_menu"](mid)
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        except discord.HTTPException as exc:
+            raise ApiError(502, f"Discord refused: {exc.text or exc}")
+        store.log_event("panel", f"Role menu “{title}” published", who_id(request), who(request))
+        return web.json_response(menu_dict(store.get_role_menu(mid)))
+
+    @routes.delete("/api/rolemenus/{id}")
+    async def rolemenu_delete(request):
+        await hooks["remove_role_menu"](int_param(request, "id"))
+        return web.json_response({"ok": True})
+
+    def case_dict(r):
+        return {"id": r["id"], "user_id": str(r["user_id"]), "user": person(r["user_id"], r["user_name"]) or r["user_name"], "kind": r["kind"],
+                "reason": r["reason"] or "", "moderator": r["moderator_name"] or "", "ts": r["ts"], "minutes": r["minutes"],
+                "active": bool(r["active"]), "auto": bool(r["auto"])}
+
+    @routes.get("/api/cases")
+    async def cases(request):
+        q = (request.query.get("q") or "").strip()[:60]
+        rows = store.recent_cases(80, q)
+        users = {}
+        for r in rows:
+            users.setdefault(r["user_id"], store.active_warnings(r["user_id"]))
+        return web.json_response({"items": [dict(case_dict(r), warnings=users[r["user_id"]]) for r in rows],
+                                  "rules": {k: store.cfg(k) for k in ("warn_timeout_at", "warn_timeout_minutes", "warn_ban_at", "warn_expire_days")}})
+
+    @routes.post("/api/cases/{id}/pardon")
+    async def case_pardon(request):
+        r = store.pardon_case(int_param(request, "id"))
+        if r is None:
+            raise ApiError(400, "That isn't an active warning.")
+        store.add_case(r["user_id"], r["user_name"], "pardon", f"Warning #{r['id']} removed", who_id(request), who(request))
+        store.log_event("mod", f"Warning #{r['id']} for {r['user_name']} removed from the dashboard", who_id(request), who(request))
+        return web.json_response({"ok": True})
+
+    @routes.post("/api/cases/warn")
+    async def case_warn(request):
+        d = await body_json(request)
+        g = get_guild()
+        m = g.get_member(int(d["user_id"])) if str(d.get("user_id") or "").isdigit() else None
+        reason = str(d.get("reason") or "").strip()
+        if m is None:
+            raise ApiError(400, "That member isn't on the server.")
+        if len(reason) < 3:
+            raise ApiError(400, "Write why (the member sees it).")
+        return web.json_response(await hooks["warn_member"](m, reason[:400], who_id(request), who(request)))
+
+    def give_dict(r):
+        return {"id": r["id"], "prize": r["prize"], "winners": r["winners"], "ends_at": r["ends_at"], "ended": bool(r["ended"]),
+                "channel_id": str(r["channel_id"]), "role_id": str(r["role_id"]) if r["role_id"] else None, "host": r["host_name"] or "",
+                "entries": r["entries"], "winner_names": [person(i) or f"User …{str(i)[-4:]}" for i in json.loads(r["winner_ids"] or "[]")],
+                "url": f"https://discord.com/channels/{guild_id}/{r['channel_id']}/{r['message_id']}" if r["message_id"] else None}
+
+    @routes.get("/api/giveaways")
+    async def giveaways(request):
+        return web.json_response({"items": [give_dict(r) for r in store.giveaways()]})
+
+    @routes.post("/api/giveaways")
+    async def giveaway_new(request):
+        d = await body_json(request)
+        try:
+            gid = await hooks["start_giveaway"](int(d.get("channel_id") or 0), str(d.get("prize") or ""), int(d.get("minutes") or 0),
+                                                int(d.get("winners") or 1), int(d["role_id"]) if str(d.get("role_id") or "").isdigit() else None,
+                                                who_id(request), who(request))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        except discord.HTTPException as exc:
+            raise ApiError(502, f"Discord refused: {exc.text or exc}")
+        return web.json_response(give_dict(store.get_giveaway(gid)))
+
+    @routes.post("/api/giveaways/{id}/{action}")
+    async def giveaway_action(request):
+        gid, action = int_param(request, "id"), request.match_info["action"]
+        if action not in ("end", "reroll"):
+            raise ApiError(404, "Unknown action.")
+        try:
+            await hooks["end_giveaway"](gid, reroll=action == "reroll")
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        except discord.HTTPException as exc:
+            raise ApiError(502, f"Discord refused: {exc.text or exc}")
+        return web.json_response(give_dict(store.get_giveaway(gid)))
+
+    def timer_dict(t):
+        return {"id": t["id"], "name": t["name"], "channel_id": str(t["channel_id"]), "content": t["content"], "kind": t["kind"], "at": t["at"] or "",
+                "days": (t["days"] or "").split(",") if t["days"] else [], "every_minutes": t["every_minutes"], "role_id": str(t["role_id"]) if t["role_id"] else None,
+                "delete_previous": bool(t["delete_previous"]), "enabled": bool(t["enabled"]), "next_run": t["next_run"], "last_run": t["last_run"]}
+
+    @routes.get("/api/timers")
+    async def timers(request):
+        return web.json_response({"items": [timer_dict(t) for t in store.timers()], "timezone": store.cfg("timezone")})
+
+    @routes.post("/api/timers")
+    async def timer_save(request):
+        d = await body_json(request)
+        name, content = str(d.get("name") or "").strip()[:60], str(d.get("content") or "").strip()
+        if not name or not 2 <= len(content) <= 1900:
+            raise ApiError(400, "Give it a name and a message (up to 1,900 characters).")
+        if not str(d.get("channel_id") or "").isdigit():
+            raise ApiError(400, "Choose the channel.")
+        kind = "interval" if d.get("kind") == "interval" else "daily"
+        f = {"name": name, "content": content, "channel_id": int(d["channel_id"]), "kind": kind,
+             "role_id": int(d["role_id"]) if str(d.get("role_id") or "").isdigit() else None,
+             "delete_previous": 1 if d.get("delete_previous") else 0, "enabled": 0 if d.get("enabled") is False else 1}
+        if kind == "daily":
+            at = str(d.get("at") or "")
+            if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", at):
+                raise ApiError(400, "Write the time like 18:30.")
+            days = [x for x in (d.get("days") or []) if x in store.WEEKDAYS]
+            f.update(at=at, days=",".join(days or store.WEEKDAYS), every_minutes=None)
+        else:
+            every = int(d.get("every_minutes") or 0)
+            if not 15 <= every <= 10080:
+                raise ApiError(400, "Repeat every 15 minutes to 7 days.")
+            f.update(every_minutes=every, at=None, days=None)
+        tid = store.save_timer(int(d["id"]) if str(d.get("id") or "").isdigit() else None, **f)
+        store.log_event("settings", f"Timed message “{name}” saved", who_id(request), who(request))
+        return web.json_response(timer_dict(store.get_timer(tid)))
+
+    @routes.delete("/api/timers/{id}")
+    async def timer_delete(request):
+        store.db.execute("DELETE FROM timers WHERE id=?", (int_param(request, "id"),)); store.db.commit()
+        return web.json_response({"ok": True})
+
+    @routes.post("/api/timers/{id}/send")
+    async def timer_send(request):
+        t = store.get_timer(int_param(request, "id"))
+        if t is None:
+            raise ApiError(404, "Not found.")
+        nxt = t["next_run"]
+        ok = await hooks["send_timer"](t)
+        store.db.execute("UPDATE timers SET next_run=? WHERE id=?", (nxt, t["id"])); store.db.commit()   # a test doesn't move the schedule
+        if not ok:
+            raise ApiError(502, "Discord didn't accept the message – check the channel and the bot's permissions.")
+        return web.json_response({"ok": True})
 
     @routes.get("/api/reasons")
     async def reasons(request):

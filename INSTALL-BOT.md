@@ -36,13 +36,14 @@ You need:
 1. Copy this link into your browser and replace `APPLICATION_ID` with the number from step 1:
 
    ```
-   https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot+applications.commands&permissions=1461362879584
+   https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot+applications.commands&permissions=1461631315044
    ```
 2. Choose your server → **Continue** → **Authorize**.
 3. In Discord: **Server Settings → Roles**. Drag the **WOS EU1** role **above** your Moderator and Admin roles.
 
-> 💡 **Already invited the bot earlier?** Some newer features need three extra permissions. In **Server Settings → Roles → WOS EU1**, turn on:
-> **Manage Server** (invite tracker), **Moderate Members** (the scam guard's timeout) and **Manage Expressions** (adding the sticker and emoji packs).
+> 💡 **Already invited the bot earlier?** Some newer features need extra permissions. In **Server Settings → Roles → WOS EU1**, turn on:
+> **Manage Server** (invite tracker), **Moderate Members** (timeouts), **Ban Members** (bans from warnings), **Manage Roles** (role menus) and **Manage Expressions** (adding the sticker and emoji packs).
+> For role menus the bot's role must also sit **above** the roles it hands out.
 > Or just open the link above again – Discord adds the missing ones.
 
 > ✅ The bot is listed in your server's member list (still offline – that's normal).

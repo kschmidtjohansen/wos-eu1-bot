@@ -1473,7 +1473,8 @@ class WosBot(discord.Client):
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
                          "drive_backup": drive_backup, "fill_translations": fill_translations,
-                         "publish_info": publish_info, "push_key": lambda: vapid_keys()[1] if push_ready() else None, "push_send": push_send, "post_weekly": post_weekly, "invite_perm": lambda: bool(_invite_uses) or bool(bot.get_guild(GUILD_ID) and bot.get_guild(GUILD_ID).me.guild_permissions.manage_guild), "sticker_status": sticker_status, "install_stickers": install_stickers, "emoji_status": emoji_status, "install_emojis": install_emojis, "suggestion_changes": post_suggestion_changes, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
+                         "publish_info": publish_info, "publish_role_menu": publish_role_menu, "remove_role_menu": remove_role_menu,
+                         "warn_member": warn_member, "start_giveaway": start_giveaway, "end_giveaway": end_giveaway, "send_timer": send_timer, "push_key": lambda: vapid_keys()[1] if push_ready() else None, "push_send": push_send, "post_weekly": post_weekly, "invite_perm": lambda: bool(_invite_uses) or bool(bot.get_guild(GUILD_ID) and bot.get_guild(GUILD_ID).me.guild_permissions.manage_guild), "sticker_status": sticker_status, "install_stickers": install_stickers, "emoji_status": emoji_status, "install_emojis": install_emojis, "suggestion_changes": post_suggestion_changes, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
                          "refresh_board": safe_refresh_board, "redeem_one": redeem_one, "start_redeem": start_redeem,
                          "redeem_ready": redeem_ready}
                 roles = {"Moderator role": MOD_ROLE_ID, "Admin role": ADMIN_ROLE_ID}
@@ -1510,6 +1511,12 @@ class WosBot(discord.Client):
                 print(f"[update notice] {exc!r}")
 
     async def on_interaction(self, interaction: discord.Interaction):
+        cid = (interaction.data or {}).get("custom_id", "") if interaction.type == discord.InteractionType.component else ""
+        if cid.startswith("rm:"):
+            try:
+                await handle_role_menu(interaction)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[role menu] {exc!r}")
         # talk to each player in their Discord language (unless they picked another one)
         if interaction.user and interaction.guild_id == GUILD_ID and not getattr(interaction.user, "bot", False):
             try:
@@ -1552,7 +1559,7 @@ class WosBot(discord.Client):
         if message.author.bot:
             return
         try:
-            if await guard_message(message):
+            if await guard_message(message) or await automod_message(message):
                 return
         except Exception as exc:  # noqa: BLE001 – the guard must never break normal chat
             print(f"[guard] {exc!r}")
@@ -3680,6 +3687,436 @@ async def install_emojis(ids=None, actor_id=None, actor_name: str = "Dashboard")
     return {"added": added, "skipped": skipped, "failed": failed}
 
 
+# ============================================================ community tools (MEE6-style, all in this one bot)
+# ------------------------------------------------------------ role menus: buttons or a dropdown to pick roles
+def role_menu_message(m):
+    roles = json.loads(m["roles"] or "[]")
+    e = discord.Embed(title=m["title"][:256], description=(m["description"] or "")[:3000], color=0x7DE3F4)
+    lines = [f"{r.get('emoji') or '•'} <@&{r['role_id']}>" + (f" – {r['desc']}" if r.get("desc") else "") for r in roles]
+    if lines:
+        e.add_field(name="Roles", value="\n".join(lines)[:1024], inline=False)
+    e.set_footer(text=f"{brand()} · " + ("pick one – picking another swaps it" if m["mode"] == "single" else "tap again to remove a role"))
+    view = discord.ui.View(timeout=None)
+    if m["style"] == "select" and roles:
+        opts = [discord.SelectOption(label=(r.get("label") or "Role")[:100], value=str(r["role_id"]), description=(r.get("desc") or None) and r["desc"][:100],
+                                     emoji=(discord.PartialEmoji.from_str(r["emoji"]) if r.get("emoji") else None)) for r in roles[:25]]
+        view.add_item(discord.ui.Select(custom_id=f"rm:{m['id']}:sel", placeholder="Pick your roles…", options=opts,
+                                        min_values=0, max_values=1 if m["mode"] == "single" else len(opts)))
+    else:
+        for r in roles[:25]:
+            view.add_item(discord.ui.Button(custom_id=f"rm:{m['id']}:{r['role_id']}", label=(r.get("label") or "Role")[:80],
+                                            emoji=(discord.PartialEmoji.from_str(r["emoji"]) if r.get("emoji") else None),
+                                            style=discord.ButtonStyle.secondary))
+    return e, view
+
+
+async def publish_role_menu(mid: int):
+    m = store.get_role_menu(mid)
+    ch = bot.get_channel(m["channel_id"]) if m and m["channel_id"] else None
+    if ch is None:
+        raise ValueError("Choose a channel the bot can see.")
+    e, view = role_menu_message(m)
+    if m["message_id"]:
+        try:
+            await ch.get_partial_message(m["message_id"]).edit(embed=e, view=view)
+            return m["message_id"]
+        except discord.NotFound:
+            pass
+    msg = await ch.send(embed=e, view=view)
+    store.save_role_menu(mid, message_id=msg.id)
+    return msg.id
+
+
+async def remove_role_menu(mid: int):
+    m = store.get_role_menu(mid)
+    if m and m["message_id"]:
+        ch = bot.get_channel(m["channel_id"])
+        if ch is not None:
+            try:
+                await ch.get_partial_message(m["message_id"]).delete()
+            except discord.HTTPException:
+                pass
+    store.delete_role_menu(mid)
+
+
+async def handle_role_menu(interaction: discord.Interaction):
+    parts = (interaction.data or {}).get("custom_id", "").split(":")
+    m = store.get_role_menu(int(parts[1])) if len(parts) == 3 and parts[1].isdigit() else None
+    member = interaction.user
+    if m is None or not isinstance(member, discord.Member):
+        return await interaction.response.send_message("This role menu isn't active any more.", ephemeral=True)
+    menu_ids = [int(r["role_id"]) for r in json.loads(m["roles"] or "[]")]
+    have = {r.id for r in member.roles}
+    if parts[2] == "sel":
+        want = {int(v) for v in (interaction.data.get("values") or []) if str(v).isdigit()} & set(menu_ids)
+        add, remove = [i for i in want if i not in have], [i for i in menu_ids if i in have and i not in want]
+    else:
+        rid = int(parts[2]) if parts[2].isdigit() else 0
+        if rid not in menu_ids:
+            return await interaction.response.send_message("That role isn't in this menu any more.", ephemeral=True)
+        if rid in have:
+            add, remove = [], [rid]
+        else:
+            add, remove = [rid], ([i for i in menu_ids if i in have and i != rid] if m["mode"] == "single" else [])
+    g = interaction.guild
+    try:
+        if add:
+            await member.add_roles(*[g.get_role(i) for i in add if g.get_role(i)], reason=f"Role menu: {m['title']}")
+        if remove:
+            await member.remove_roles(*[g.get_role(i) for i in remove if g.get_role(i)], reason=f"Role menu: {m['title']}")
+    except discord.Forbidden:
+        return await interaction.response.send_message("I'm not allowed to give that role – an admin needs to move my role above it.", ephemeral=True)
+    parts_txt = ([f"✅ Added {' '.join(f'<@&{i}>' for i in add)}"] if add else []) + ([f"➖ Removed {' '.join(f'<@&{i}>' for i in remove)}"] if remove else [])
+    await interaction.response.send_message("\n".join(parts_txt) or "Nothing changed.", ephemeral=True)
+
+
+# ------------------------------------------------------------ warnings with escalation + cases
+async def warn_member(member, reason: str, mod_id, mod_name: str, auto: bool = False) -> dict:
+    """Give a warning; at the thresholds the member is timed out / banned automatically. Returns what happened."""
+    cid = store.add_case(member.id, member.display_name, "warn", reason, mod_id, mod_name, auto=auto)
+    n = store.active_warnings(member.id)
+    out = {"case": cid, "warnings": n, "action": None}
+    t_at, b_at = cfg("warn_timeout_at"), cfg("warn_ban_at")
+    if b_at and n >= b_at:
+        try:
+            await dm_t(member.id, "dm.banned", reason=f"{n} warnings")
+            await member.ban(reason=f"{n} warnings – last: {reason}"[:500], delete_message_seconds=0)
+            store.add_case(member.id, member.display_name, "ban", f"Automatic: {n} warnings", None, brand(), auto=True)
+            out["action"] = "ban"
+        except discord.HTTPException:
+            out["action"] = "ban_failed"
+    elif t_at and n >= t_at:
+        minutes = cfg("warn_timeout_minutes")
+        try:
+            await member.timeout(timedelta(minutes=minutes), reason=f"{n} warnings – last: {reason}"[:500])
+            store.add_case(member.id, member.display_name, "timeout", f"Automatic: {n} warnings", None, brand(), minutes=minutes, auto=True)
+            out["action"] = "timeout"
+        except discord.HTTPException:
+            out["action"] = "timeout_failed"
+    if out["action"] != "ban":
+        await dm_t(member.id, "dm.warned", reason=None, n=n, why=reason or "–",
+                   next=T("warn.next_timeout", lang_for(member.id), n=t_at) if t_at and n < t_at else "")
+    extra = {"timeout": f" → timed out for {cfg('warn_timeout_minutes')} min", "ban": " → banned",
+             "timeout_failed": " (couldn't time out – check the bot's permissions)", "ban_failed": " (couldn't ban – check the bot's permissions)"}.get(out["action"], "")
+    log_event("mod", f"{member.display_name} warned by {mod_name} ({n} active): {reason or '–'}{extra}", mod_id, mod_name)
+    return out
+
+
+def cases_embed(user, rows) -> discord.Embed:
+    icon = {"warn": "⚠️", "timeout": "🔇", "kick": "👢", "ban": "⛔", "unban": "♻️", "pardon": "🕊️"}
+    e = discord.Embed(title=f"Cases – {getattr(user, 'display_name', user)}", color=0xFFC15E)
+    e.description = "\n".join(f"`#{r['id']}` {icon.get(r['kind'], '•')} **{r['kind']}**" + (f" {r['minutes']} min" if r["minutes"] else "")
+                              + (" ~~(pardoned)~~" if r["kind"] == "warn" and not r["active"] else "")
+                              + f" – {r['reason'] or 'no reason'} · {r['moderator_name'] or '?'} · <t:{r['ts']}:R>" for r in rows)[:4000] or "No cases."
+    e.set_footer(text=f"Active warnings: {store.active_warnings(user.id)}")
+    return e
+
+
+@bot.tree.command(name="warn", description="Warn a member (moderators) – they get a DM, repeat offenders are timed out or banned", guild=_GUILD)
+@app_commands.describe(member="Who", reason="Why – the member sees this")
+@app_commands.guild_only()
+async def warn_cmd(interaction: discord.Interaction, member: discord.Member, reason: app_commands.Range[str, 3, 400]):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    if is_mod(member) or member.bot:
+        return await interaction.response.send_message("You can't warn staff or bots.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+    r = await warn_member(member, reason, interaction.user.id, interaction.user.display_name)
+    extra = {"timeout": f" They were timed out for {cfg('warn_timeout_minutes')} minutes.", "ban": " They were banned.",
+             "timeout_failed": " ⚠️ I couldn't time them out (permissions).", "ban_failed": " ⚠️ I couldn't ban them (permissions)."}.get(r["action"], "")
+    await interaction.followup.send(f"⚠️ {member.mention} warned – case #{r['case']}, {r['warnings']} active warning(s).{extra}", ephemeral=True)
+
+
+@bot.tree.command(name="warnings", description="See a member's warnings and other cases (moderators)", guild=_GUILD)
+@app_commands.guild_only()
+async def warnings_cmd(interaction: discord.Interaction, member: discord.Member):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    await interaction.response.send_message(embed=cases_embed(member, store.cases_for(member.id)), ephemeral=True)
+
+
+@bot.tree.command(name="pardon", description="Remove a warning (moderators)", guild=_GUILD)
+@app_commands.describe(case="The case number, e.g. 12")
+@app_commands.guild_only()
+async def pardon_cmd(interaction: discord.Interaction, case: int):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    r = store.pardon_case(case)
+    if r is None:
+        return await interaction.response.send_message("That isn't an active warning.", ephemeral=True)
+    store.add_case(r["user_id"], r["user_name"], "pardon", f"Warning #{case} removed", interaction.user.id, interaction.user.display_name)
+    log_event("mod", f"Warning #{case} for {r['user_name']} removed by {interaction.user.display_name}", interaction.user.id, interaction.user.display_name)
+    await interaction.response.send_message(f"🕊️ Warning #{case} removed – {r['user_name']} now has {store.active_warnings(r['user_id'])}.", ephemeral=True)
+
+
+@bot.tree.command(name="timeout", description="Time a member out (moderators)", guild=_GUILD)
+@app_commands.describe(member="Who", minutes="How long", reason="Why")
+@app_commands.guild_only()
+async def timeout_cmd(interaction: discord.Interaction, member: discord.Member, minutes: app_commands.Range[int, 1, 40320], reason: Optional[str] = None):
+    if not is_mod(interaction.user) or is_mod(member):
+        return await interaction.response.send_message("Moderators only – and not on staff.", ephemeral=True)
+    try:
+        await member.timeout(timedelta(minutes=minutes), reason=(reason or "")[:500] or None)
+    except discord.HTTPException:
+        return await interaction.response.send_message("I couldn't – give me the “Moderate Members” permission and put my role above theirs.", ephemeral=True)
+    c = store.add_case(member.id, member.display_name, "timeout", reason, interaction.user.id, interaction.user.display_name, minutes=minutes)
+    log_event("mod", f"{member.display_name} timed out for {minutes} min by {interaction.user.display_name}: {reason or '–'}", interaction.user.id, interaction.user.display_name)
+    await interaction.response.send_message(f"🔇 {member.mention} timed out for {minutes} min – case #{c}.", ephemeral=True)
+
+
+@bot.tree.command(name="ban", description="Ban a member (admins)", guild=_GUILD)
+@app_commands.guild_only()
+async def ban_cmd(interaction: discord.Interaction, member: discord.Member, reason: str):
+    if not is_admin(interaction.user) or is_mod(member):
+        return await interaction.response.send_message("Admins only – and not on staff.", ephemeral=True)
+    await dm_t(member.id, "dm.banned", reason=reason)
+    try:
+        await member.ban(reason=reason[:500], delete_message_seconds=0)
+    except discord.HTTPException:
+        return await interaction.response.send_message("I couldn't – I need the “Ban Members” permission and a role above theirs.", ephemeral=True)
+    c = store.add_case(member.id, member.display_name, "ban", reason, interaction.user.id, interaction.user.display_name)
+    log_event("mod", f"{member.display_name} banned by {interaction.user.display_name}: {reason}", interaction.user.id, interaction.user.display_name)
+    await interaction.response.send_message(f"⛔ {member.display_name} banned – case #{c}.", ephemeral=True)
+
+
+# ------------------------------------------------------------ more auto-mod rules
+_LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i"})
+_recent_text: dict = {}           # user_id -> [(ts, normalized text)]
+
+
+def _badword_re():
+    words = [w.strip().lower() for w in (cfg("automod_badwords") or "").splitlines() if w.strip()]
+    if not words:
+        return None
+    parts = [re.escape(w[:-1]) + r"\w*" if w.endswith("*") else re.escape(w) for w in words]
+    return re.compile(r"(?<![a-z0-9])(" + "|".join(parts) + r")(?![a-z0-9])")
+
+
+def automod_reason(message) -> Optional[tuple]:
+    """(rule, what the member is told) or None."""
+    text = message.content or ""
+    if cfg("automod_badwords_on"):
+        rx = _badword_re()
+        norm = re.sub(r"(.)\1{2,}", r"\1\1", text.lower().translate(_LEET))
+        if rx and rx.search(norm):
+            return "bad words", "please keep the language friendly"
+    if cfg("automod_mentions_on"):
+        n = len({u.id for u in message.mentions if not u.bot}) + len(message.role_mentions)
+        if n >= cfg("automod_mentions_max"):
+            return f"mass mention ({n})", "please don't mention that many people at once"
+    if cfg("automod_caps_on"):
+        clean = re.sub(r"<[^>]+>|https?://\S+|:\w+:", "", text)
+        letters = [c for c in clean if c.isalpha()]
+        if len(letters) >= 15 and sum(c.isupper() for c in letters) / len(letters) >= 0.75:
+            return "ALL CAPS", "please don't write in ALL CAPS"
+    if cfg("automod_repeat_on"):
+        norm = re.sub(r"\s+", " ", text.lower()).strip()
+        if len(norm) >= 3:
+            now = time.time()
+            items = [x for x in _recent_text.get(message.author.id, []) if now - x[0] < 60] + [(now, norm)]
+            _recent_text[message.author.id] = items[-8:]
+            if sum(1 for x in items if x[1] == norm) >= 3:
+                return "repeated message", "please don't send the same message again and again"
+    return None
+
+
+async def automod_message(message) -> bool:
+    if message.guild is None or message.guild.id != GUILD_ID or is_mod(message.author) or getattr(message.author, "bot", False):
+        return False
+    hit = automod_reason(message)
+    if not hit:
+        return False
+    rule, tell = hit
+    try:
+        await message.delete()
+    except discord.HTTPException:
+        pass
+    try:
+        await message.channel.send(f"{message.author.mention}, {tell}.", delete_after=8,
+                                   allowed_mentions=discord.AllowedMentions(users=[message.author]))
+    except discord.HTTPException:
+        pass
+    log_event("guard", f"Auto-mod removed a message from {message.author.display_name} in #{getattr(message.channel, 'name', '?')} ({rule})",
+              message.author.id, message.author.display_name)
+    if cfg("automod_warn") and isinstance(message.author, discord.Member):
+        await warn_member(message.author, f"Auto-mod: {rule}", None, brand(), auto=True)
+    return True
+
+
+# ------------------------------------------------------------ giveaways
+GIVEAWAY_EMOJI = "🎉"
+
+
+def parse_duration(text: str) -> int:
+    """'30m', '2h', '1d 12h', '90' (minutes) -> minutes."""
+    text = (text or "").strip().lower()
+    if text.isdigit():
+        return int(text)
+    total = 0
+    for n, u in re.findall(r"(\d+)\s*([dhm])", text):
+        total += int(n) * {"d": 1440, "h": 60, "m": 1}[u]
+    if not total:
+        raise ValueError("Write the time like 30m, 2h or 1d.")
+    return total
+
+
+def giveaway_embed(g, winners=None) -> discord.Embed:
+    ended = bool(g["ended"])
+    e = discord.Embed(title=f"🎉 {g['prize'][:200]}", color=0x5C6370 if ended else 0xFF8A3D)
+    if ended:
+        w = winners if winners is not None else json.loads(g["winner_ids"] or "[]")
+        e.description = (f"**Winner{'s' if len(w) != 1 else ''}:** " + " ".join(f"<@{i}>" for i in w)) if w else "No valid entries – nobody won."
+        e.description += f"\n-# Ended <t:{g['ends_at']}:R> · {g['entries'] or 0} entries"
+    else:
+        e.description = (f"React with {GIVEAWAY_EMOJI} to enter!\nEnds <t:{g['ends_at']}:R> (<t:{g['ends_at']}:f>)\n"
+                         f"**{g['winners']}** winner{'s' if g['winners'] != 1 else ''}"
+                         + (f"\nOnly for <@&{g['role_id']}>" if g["role_id"] else ""))
+    e.set_footer(text=f"{brand()} · hosted by {g['host_name'] or 'the team'}")
+    return e
+
+
+async def start_giveaway(channel_id: int, prize: str, minutes: int, winners: int, role_id, host_id, host_name: str):
+    ch = bot.get_channel(int(channel_id))
+    if ch is None:
+        raise ValueError("Choose a channel the bot can see.")
+    if not (1 <= minutes <= 60 * 24 * 60) or not (1 <= winners <= 20) or not (2 <= len(prize.strip()) <= 200):
+        raise ValueError("Use 1 minute to 60 days, 1–20 winners and a prize of 2–200 characters.")
+    gid = store.db.execute("INSERT INTO giveaways (channel_id, prize, winners, ends_at, role_id, host_id, host_name, created) VALUES (?,?,?,?,?,?,?,?)",
+                           (ch.id, prize.strip(), winners, int(time.time()) + minutes * 60, role_id, host_id, host_name, int(time.time()))).lastrowid
+    store.db.commit()
+    msg = await ch.send(embed=giveaway_embed(store.get_giveaway(gid)))
+    await msg.add_reaction(GIVEAWAY_EMOJI)
+    store.db.execute("UPDATE giveaways SET message_id=? WHERE id=?", (msg.id, gid)); store.db.commit()
+    log_event("admin", f"Giveaway #{gid} started by {host_name}: {prize} ({winners} winner(s), {minutes} min)", host_id, host_name)
+    return gid
+
+
+async def end_giveaway(gid: int, reroll: bool = False) -> list:
+    """Draw the winners (or new ones). Returns the winner IDs."""
+    import random
+    g = store.get_giveaway(gid)
+    if g is None:
+        raise ValueError("Giveaway not found.")
+    ch = bot.get_channel(g["channel_id"])
+    if ch is None:
+        raise ValueError("The giveaway's channel is gone.")
+    msg = await ch.fetch_message(g["message_id"])
+    users = []
+    for r in msg.reactions:
+        if str(r.emoji) == GIVEAWAY_EMOJI:
+            users = [u async for u in r.users(limit=None)]
+    guild = ch.guild
+    old = set(json.loads(g["winner_ids"] or "[]")) if reroll else set()
+    pool = []
+    for u in users:
+        if u.bot or u.id in old:
+            continue
+        m = guild.get_member(u.id)
+        if m is None or (g["role_id"] and not any(r.id == g["role_id"] for r in m.roles)):
+            continue
+        pool.append(u.id)
+    winners = random.sample(pool, min(g["winners"], len(pool))) if pool else []
+    store.db.execute("UPDATE giveaways SET ended=1, winner_ids=?, entries=? WHERE id=?", (json.dumps(winners), len(pool) + len(old), gid))
+    store.db.commit()
+    g = store.get_giveaway(gid)
+    await msg.edit(embed=giveaway_embed(g, winners))
+    if winners:
+        await ch.send(f"🎉 Congratulations {' '.join(f'<@{i}>' for i in winners)}! You won **{g['prize']}**" + (" (reroll)" if reroll else "") + ".",
+                      reference=msg, allowed_mentions=discord.AllowedMentions(users=[discord.Object(id=i) for i in winners]))
+    else:
+        await ch.send("Nobody could win this giveaway – there were no valid entries.", reference=msg)
+    log_event("admin", f"Giveaway #{gid} {'rerolled' if reroll else 'ended'}: {len(winners)} winner(s) from {len(pool)} entries", None, brand())
+    return winners
+
+
+giveaway_group = app_commands.Group(name="giveaway", description="Giveaways (moderators)", guild_ids=[GUILD_ID], guild_only=True)
+
+
+@giveaway_group.command(name="start", description="Start a giveaway in this channel")
+@app_commands.describe(prize="What people can win", duration="How long, e.g. 30m, 2h, 1d", winners="How many winners", role="Only members with this role can win")
+async def giveaway_start(interaction: discord.Interaction, prize: str, duration: str, winners: app_commands.Range[int, 1, 20] = 1,
+                         role: Optional[discord.Role] = None):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    try:
+        gid = await start_giveaway(interaction.channel_id, prize, parse_duration(duration), winners, role.id if role else None,
+                                   interaction.user.id, interaction.user.display_name)
+    except (ValueError, discord.HTTPException) as exc:
+        return await interaction.response.send_message(f"⚠️ {exc}", ephemeral=True)
+    await interaction.response.send_message(f"🎉 Giveaway #{gid} started.", ephemeral=True)
+
+
+@giveaway_group.command(name="end", description="End a giveaway now and draw the winners")
+async def giveaway_end_cmd(interaction: discord.Interaction, giveaway: int):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+    try:
+        w = await end_giveaway(giveaway)
+    except (ValueError, discord.HTTPException) as exc:
+        return await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
+    await interaction.followup.send(f"Done – {len(w)} winner(s).", ephemeral=True)
+
+
+@giveaway_group.command(name="reroll", description="Draw new winners for an ended giveaway")
+async def giveaway_reroll_cmd(interaction: discord.Interaction, giveaway: int):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+    try:
+        w = await end_giveaway(giveaway, reroll=True)
+    except (ValueError, discord.HTTPException) as exc:
+        return await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
+    await interaction.followup.send(f"Rerolled – {len(w)} new winner(s).", ephemeral=True)
+
+
+bot.tree.add_command(giveaway_group)
+
+
+# ------------------------------------------------------------ timed messages
+async def send_timer(t, now: Optional[int] = None) -> bool:
+    ch = bot.get_channel(t["channel_id"])
+    now = int(now or time.time())
+    ok = False
+    if ch is not None:
+        if t["delete_previous"] and t["last_msg_id"]:
+            try:
+                await ch.get_partial_message(t["last_msg_id"]).delete()
+            except discord.HTTPException:
+                pass
+        content = (f"<@&{t['role_id']}> " if t["role_id"] else "") + t["content"]
+        try:
+            msg = await ch.send(content[:2000], allowed_mentions=discord.AllowedMentions(roles=[discord.Object(id=t["role_id"])] if t["role_id"] else []))
+            store.db.execute("UPDATE timers SET last_run=?, last_msg_id=? WHERE id=?", (now, msg.id, t["id"]))
+            ok = True
+        except discord.HTTPException as exc:
+            log_event("system", f"Timed message “{t['name']}” could not be posted: {exc}", None, brand())
+    else:
+        log_event("system", f"Timed message “{t['name']}”: its channel is gone", None, brand())
+    store.db.execute("UPDATE timers SET next_run=? WHERE id=?", (store.timer_next_run(t, now), t["id"]))
+    store.db.commit()
+    return ok
+
+
+async def run_timers(now: Optional[int] = None) -> int:
+    n = 0
+    for t in store.due_timers(now):
+        if await send_timer(t, now):
+            n += 1
+    return n
+
+
+async def community_tick():
+    """Every minute: finish giveaways and post timed messages."""
+    for g in store.due_giveaways():
+        try:
+            await end_giveaway(g["id"])
+        except Exception as exc:  # noqa: BLE001
+            store.db.execute("UPDATE giveaways SET ended=1 WHERE id=?", (g["id"],)); store.db.commit()
+            log_event("system", f"Giveaway #{g['id']} could not be drawn: {exc}", None, brand())
+    await run_timers()
+
+
 async def run_schedules(now=None):
     """Called every few minutes: posts the weekly digest when it is due.
     Returns the names of what was posted."""
@@ -3727,12 +4164,16 @@ def snapshot_members():
 
 @tasks.loop(minutes=1)
 async def gift_loop():
-    """Keeps the gift-code announcements and list exact to the minute."""
+    """Keeps the gift-code announcements and list exact to the minute; giveaways and timed messages too."""
     try:
         if cfg("giftcodes_enabled"):
             await sync_gift_messages()
     except Exception as exc:  # noqa: BLE001
         print(f"[gift codes] {exc!r}")
+    try:
+        await community_tick()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[community] {exc!r}")
 
 
 @gift_loop.before_loop
