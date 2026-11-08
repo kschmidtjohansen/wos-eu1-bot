@@ -392,6 +392,18 @@
 .w-arearow:first-of-type{border-top:0}
 .w-arearow .w-stack{grid-column:1/3}
 .w-arearow:hover span{color:var(--w-accent)}
+.w-duphint{margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13px;color:#ffc15e}
+.w-duphint .w-btn{padding:4px 10px;font-size:12.5px}
+.w-chip-dup[aria-pressed="false"]{border-color:rgba(255,193,94,.45);color:#ffc15e}
+.w-similar{margin:8px 0 14px;padding:12px 14px;border:1px solid rgba(255,193,94,.35);border-radius:14px;background:rgba(255,193,94,.06)}
+.w-simrow{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:start;padding:10px 0;border-top:1px solid var(--w-border)}
+.w-sec-head + .w-simrow{border-top:0}
+.w-simscore{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:12.5px;background:conic-gradient(#ffc15e calc(var(--p) * 1%),var(--w-surface-2) 0)}
+.w-simscore b{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--w-surface)}
+.w-simtext{min-width:0}
+.w-simsnip{font-size:13px;color:var(--w-muted);margin-top:4px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.w-simacts{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+@media (max-width:640px){.w-simrow{grid-template-columns:44px 1fr}.w-simacts{grid-column:1/3;flex-direction:row;justify-content:flex-end}}
 .w-steps{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px}
 .w-steps code{font-size:12.5px;background:var(--w-surface-2);padding:2px 6px;border-radius:6px;overflow-wrap:anywhere}
 .w-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border-radius:14px;background:var(--w-bad-soft);border:1px solid color-mix(in srgb,var(--w-bad) 35%,transparent)}
@@ -936,7 +948,8 @@ function viewOverview() {
     'Suggestions submitted': 'message', 'Awaiting decision': 'list', 'Accepted': 'check' };
   const tile = t => html`<div class="w-card w-tile ${t[2]}"><i class="w-tic">${icon(tIc[t[1]] || 'chart')}</i><b data-tick="${t[0]}">${t[0]}</b><span>${t[1]}</span></div>`;
   const sIc = { ok: 'check', warn: 'alert', bad: 'alert', todo: 'circle' };
-  const todo = [[B.awaiting, 'bug reports waiting for a moderator', 'bugs', 'new', 'bug'], [B.with_admins, 'bugs passed on, waiting for an admin', 'bugs', 'passed', 'shield'],
+  const todo = [[B.awaiting, 'bug reports waiting for a moderator', 'bugs', 'new', 'bug'], [B.dups || 0, (B.dups === 1 ? 'bug looks' : 'bugs look') + ' like a duplicate – merge with one tap', 'bugs', 'dups', 'list'],
+    [B.with_admins, 'bugs passed on, waiting for an admin', 'bugs', 'passed', 'shield'],
     [G.pending, 'suggestions waiting for a decision', 'suggestions', 'new', 'bulb'], [issues, issues === 1 ? 'setup problem to fix' : 'setup problems to fix', 'setup', '', 'alert']]
     .filter(t => t[0] && (!isMod() || t[2] === 'bugs') && !(isMod() && t[3] === 'passed'));
   const waiting = todo.reduce((a, t) => a + t[0], 0);
@@ -1373,8 +1386,8 @@ const ACTION_LABEL = { ticket_closed: 'Info ticket closed – no answer', passed
 const SEV = { critical: '🚨 Critical', major: '🟠 Major', minor: '🟡 Minor' };
 const areaList = () => String((S.settings && S.settings.bug_areas) || '').split('\n').map(x => x.trim()).filter(Boolean);
 function bugChips() {
-  const B = S.bugs, total = Object.values(B.counts).reduce((a, b) => a + b, 0);
-  return html`${S.user ? html`<button class="w-chip" data-act="bugMine" aria-pressed="${String(!!B.mine)}">👤 Handled by me${B.mine ? ' · ' + B.total : ''}</button>` : ''}<button class="w-chip" data-act="bugStatus" data-s="" aria-pressed="${String(B.status === '')}">All ${total}</button>
+  const B = S.bugs, total = Object.entries(B.counts).filter(e => e[0][0] !== '_').reduce((a, e) => a + e[1], 0);
+  return html`${S.user ? html`<button class="w-chip" data-act="bugMine" aria-pressed="${String(!!B.mine)}">👤 Handled by me${B.mine ? ' · ' + B.total : ''}</button>` : ''}${B.counts._dups || B.dups ? html`<button class="w-chip w-chip-dup" data-act="bugDups" aria-pressed="${String(!!B.dups)}">🔁 Possible duplicates ${B.counts._dups || 0}</button>` : ''}<button class="w-chip" data-act="bugStatus" data-s="" aria-pressed="${String(B.status === '' && !B.dups)}">All ${total}</button>
     ${Object.keys(BUG_LABEL).map(s => html`<button class="w-chip" data-act="bugStatus" data-s="${s}" aria-pressed="${String(B.status === s)}">${BUG_LABEL[s]} ${B.counts[s] || 0}</button>`)}`;
 }
 function bugList() {
@@ -1383,9 +1396,12 @@ function bugList() {
   if (!B.items.length) return html`<div class="w-empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`;
   return html`${B.items.map(b => html`<div class="w-bugrow${B.selecting ? ' sel' : ''}" role="button" tabindex="0" data-act="${B.selecting ? 'bugPick' : 'bugOpen'}" data-id="${b.id}" data-sev="${b.severity || ''}"${B.selecting ? html` aria-pressed="${String(B.sel.includes(b.id))}"` : ''}>
     <b>${B.selecting ? (B.sel.includes(b.id) ? '☑' : '☐') : ''} #${b.id}</b>
-    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}</div></div>
+    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}</div>
+      ${dupHint(b) ? html`<div class="w-duphint">🔁 Looks like <b>#${b.dup_suggest}</b> ${b.dup_title ? '“' + b.dup_title.slice(0, 60) + '”' : ''} · ${b.dup_score}% match
+        ${B.selecting ? '' : html`<button class="w-btn small" data-act="dupMerge" data-id="${b.id}" data-orig="${b.dup_suggest}">Merge into #${b.dup_suggest}</button>`}</div>` : ''}</div>
     ${bugBadge(b.status)}${B.selecting ? html`<span></span>` : quickBtns(b)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}`;
 }
+const dupHint = b => b.dup_suggest && !b.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(b.status);
 // The same choices as the reaction buttons in Discord: mod channel (new bugs) and admin channel (passed bugs).
 const QUICK = {
   mod: [['passed', '✅', 'Pass to admins'], ['rejected', '❌', 'Reject (duplicate / works as intended)']],
@@ -1443,6 +1459,7 @@ async function loadBugs(reset) {
     if (B.status) qs.set('status', B.status);
     if (B.q) qs.set('q', B.q);
     if (B.mine) qs.set('mine', '1');
+    if (B.dups) qs.set('dups', '1');
     ['area', 'version', 'severity'].forEach(k => { if (B[k]) qs.set(k, B[k]); });
     const r = await call('GET', '/api/bugs?' + qs);
     B.items = reset ? r.items : B.items.concat(r.items); B.total = r.total; B.counts = r.counts; B.error = '';
@@ -1499,7 +1516,7 @@ function bugModal() {
       <div class="w-inline"><input class="w-input" id="m-sum" maxlength="100" value="${b.summary}"><button class="w-btn" data-act="bugSummary">Save title</button></div></div>
 
     <div class="w-sect"><span class="w-label">Change status</span>
-      ${b.dup_suggest && !b.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(b.status) ? html`<div class="w-banner warn w-card" style="margin:6px 0 12px">${icon('alert')}<div><b>Looks like a duplicate of #${b.dup_suggest}</b><div class="w-sub">${b.dup_score}% match – check it, then close it as a duplicate below.</div></div></div>` : ''}
+      ${similarBox(b)}
       <div class="w-inline">${STATUS_BTNS.filter(s => s[0] !== b.status && (!isMod() || ['passed', 'rejected'].includes(s[0]))).map(s => html`<button class="w-btn small" data-act="bugSet" data-s="${s[0]}">${s[1]}</button>`)}</div>
       <div class="w-hint" style="margin-top:6px">Updates the Discord messages and tells the reporter (if DMs are on).</div>
       <label class="w-label" for="m-reason" style="display:block;margin-top:14px">Reason for the player <span class="w-hint">– sent when you reject or close as a duplicate</span></label>
@@ -1522,8 +1539,37 @@ function bugModal() {
   </div></div>`;
 }
 async function openBug(id) {
-  if (!S.replies) { try { S.replies = (await call('GET', '/api/replies')).items; } catch (e) { S.replies = []; } }
-  S.detail = await call('GET', '/api/bugs/' + id); showModal();
+  if (!S.replies) { try { S.replies = isMod() ? [] : (await call('GET', '/api/replies')).items; } catch (e) { S.replies = []; } }
+  S.detail = await call('GET', '/api/bugs/' + id); S.similar = null; showModal();
+  if (!S.detail.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(S.detail.status)) (async () => {   // in the background
+    try {
+      const r = await call('GET', '/api/bugs/' + id + '/similar');
+      if (!S.detail || S.detail.id !== id || !$('#wmodal')) return;
+      S.similar = r.items;
+      // keep what the moderator is doing: focus, typed text and scroll position survive the redraw
+      const a = document.activeElement, fid = a && a.id, keep = {};
+      $$('#wmodal input[id], #wmodal textarea[id]').forEach(x => { keep[x.id] = x.type === 'checkbox' ? x.checked : x.value; });
+      const box = $('#wmodal .w-modal-card'), top = box ? box.scrollTop : 0;
+      showModal();
+      Object.entries(keep).forEach(([k, v]) => { const x = $('#' + k); if (x) { if (x.type === 'checkbox') x.checked = v; else x.value = v; } });
+      const nb = $('#wmodal .w-modal-card'); if (nb) nb.scrollTop = top;
+      if (fid && $('#' + fid)) $('#' + fid).focus();
+    } catch (e) { /* not important */ }
+  })();
+}
+// "Looks like…": the reports this one most resembles, each with a one-tap "Duplicate of #…".
+function similarBox(b) {
+  if (b.duplicate_of || !['new', 'investigating', 'passed', 'being_investigated'].includes(b.status)) return '';
+  const L = S.similar;
+  if (!L) return b.dup_suggest ? html`<div class="w-hint" style="margin:6px 0">Checking similar reports…</div>` : '';
+  if (!L.length) return '';
+  return html`<div class="w-similar"><div class="w-sec-head"><b>🔁 ${b.dup_suggest ? 'Looks like a duplicate' : 'Similar reports'}</b>
+      ${b.dup_suggest ? html`<button class="w-btn small" data-act="dupDismiss">Not a duplicate</button>` : ''}</div>
+    ${L.map(x => html`<div class="w-simrow"><div class="w-simscore" style="--p:${x.score}"><b>${x.score}%</b></div>
+      <div class="w-simtext"><div><b>#${x.id}</b> ${x.summary} ${bugBadge(x.status)}</div><div class="w-hint">${x.reporter || 'Unknown'} · ${ago(x.created_at)}${x.area ? ' · ' + x.area : ''}</div>
+        <div class="w-simsnip">${x.snippet}</div></div>
+      <div class="w-simacts"><button class="w-btn small primary" data-act="dupMergeModal" data-orig="${x.id}">Duplicate of #${x.id}</button><button class="w-linkbtn" data-act="bugOpen" data-id="${x.id}">Open</button></div></div>`)}
+    <div class="w-hint">“Duplicate of” closes this report, tells the player it’s already known, and links it to the original – they get a message when the original is fixed.</div></div>`;
 }
 const fileUrls = {};
 async function loadThumbs() {
@@ -1546,6 +1592,7 @@ function showModal() {
   const c = $('#m-close'); if (c) c.focus();
 }
 function closeModal() { S.detail = null; const m = $('#wmodal'); if (m) m.remove(); }
+function refreshOverviewSoon() { setTimeout(() => { if (S.tab !== 'overview') call('GET', '/api/overview').then(o => { S.overview = o; refreshNavCount(); }).catch(() => {}); }, 300); }
 async function changeBug(body, okMsg, btn) {
   busy(btn, true, 'Working…');
   try {
@@ -2857,7 +2904,7 @@ root.addEventListener('click', async e => {
       S.draft.log_channel_kinds = L.join('\n');
       $$('[data-act="logKind"]').forEach(b => b.setAttribute('aria-pressed', String(L.includes(b.dataset.v)))); updateSaveBar();
     }
-    else if (act === 'gotoList') { const t = el.dataset.tab; if (t === 'bugs') S.bugs.status = el.dataset.s; else S.sugs.status = el.dataset.s; S.tab = t; renderTab(); }
+    else if (act === 'gotoList') { const t = el.dataset.tab; if (t === 'bugs') { S.bugs.dups = el.dataset.s === 'dups'; S.bugs.status = S.bugs.dups ? '' : el.dataset.s; } else S.sugs.status = el.dataset.s; S.tab = t; renderTab(); }
     else if (act === 'scrollSetup') { const x = $('#setup'); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     else if (act === 'logout') logout();
     else if (act === 'demo') connect('', '', true);
@@ -3110,6 +3157,15 @@ root.addEventListener('click', async e => {
         $('#m-reason').focus(); setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = t; } }, 4000); return; }
       changeBug(Object.assign({ status: el.dataset.s }, reason ? { reason } : {}), closing && reason ? 'Closed – the reason was sent to the player.' : 'Status changed.', el);
     }
+    else if (act === 'bugDups') { S.bugs.dups = !S.bugs.dups; if (S.bugs.dups) S.bugs.status = ''; loadBugs(true); }
+    else if (act === 'dupMerge') {
+      e.stopPropagation();
+      const id = +el.dataset.id, orig = el.dataset.orig; busy(el, true, 'Merging…');
+      try { await call('PUT', '/api/bugs/' + id, { duplicate_of: orig, reason: REASONS[0][2] }); toast('#' + id + ' closed as a duplicate of #' + orig + '.'); loadBugs(true); refreshOverviewSoon(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'dupMergeModal') changeBug({ duplicate_of: el.dataset.orig, reason: ($('#m-reason') && $('#m-reason').value.trim()) || REASONS[0][2] }, 'Closed as a duplicate of #' + el.dataset.orig + '.', el);
+    else if (act === 'dupDismiss') { S.similar = null; changeBug({ dup_dismiss: true }, 'Marked as not a duplicate – the bot won’t suggest one again.', el); }
     else if (act === 'bugDup') {
       const v = $('#m-dup').value.trim().replace(/^#/, '');
       if (!/^\d+$/.test(v)) return toast('Enter the number of the original bug.', 'err');
@@ -3454,7 +3510,8 @@ function makeMock() {
   const rdm = { settings: { redeem_enabled: false, redeem_url: '', redeem_method: 'POST', redeem_body: '{"uid": "{uid}", "code": "{code}"}', redeem_ok_text: '', redeem_already_text: 'already', redeem_delay: 2, redeem_dm: false },
     header_set: false, linked: 14, codes: [{ code: 'WOSEU1GIFT', ok: 12, already: 1, failed: 1 }, { code: 'FROST500K', ok: 13, already: 0, failed: 0 }],
     failures: [{ code: 'WOSEU1GIFT', uid: '41007919', chief: 'Chief Jonas', message: 'HTTP 404: {"msg": "no such player"}', ts: now - 3600 }] };
-  bugs.forEach(b => { b.reason = ''; b.dup_suggest = null; }); bugs[0].dup_suggest = 60; bugs[0].dup_score = 68;
+  bugs.forEach(b => { b.reason = ''; b.dup_suggest = null; }); bugs[0].dup_suggest = 60; bugs[0].dup_score = 68; bugs[2].dup_suggest = 51; bugs[2].dup_score = 81;
+  bugs.forEach(b => { if (b.dup_suggest) { const o = bugs.find(x => x.id === b.dup_suggest); b.dup_title = o ? o.summary : ''; b.dup_status = o ? o.status : ''; } });
   bugs.forEach((b, i) => { b.votes = b.public && ['passed', 'being_investigated'].includes(b.status) ? (i * 7) % 13 : 0; });
   const briefBug = b => ({ votes: b.votes, id: b.id, summary: b.summary, status: b.status, reporter_id: b.reporter_id, reporter: b.reporter, created_at: b.created_at, duplicate_of: b.duplicate_of, announced: b.announced, area: b.area, version: b.version, severity: b.severity, source: b.source });
   const replies = [{ id: 1, title: 'Duplicate report', text: 'Thanks for your report! This is a duplicate of a bug we already know about ({bug}). We are working on it.' },
@@ -3469,7 +3526,7 @@ function makeMock() {
     const [p, qs] = path.split('?'), q = new URLSearchParams(qs || '');
     if (p === '/api/overview') return { bot: { id: '1', name: profile.username, avatar_url: profile.avatar_url, latency_ms: 38, uptime_s: 86400 },
       guild: { name: 'WOS EU1 Server', members: 412 },
-      stats: { bugs: { total: 64, awaiting: 8, with_admins: 5, investigating: 4, fixed: 31, rejected: 16 },
+      stats: { bugs: { total: 64, awaiting: 8, with_admins: 5, investigating: 4, fixed: 31, rejected: 16, dups: bugs.filter(b => b.dup_suggest && !b.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(b.status)).length },
         suggestions: { total: 23, pending: 6, accepted: 11, rejected: 6 }, open_tickets: 1, last7: 38 }, recent: logs.slice(0, 6) };
     if (p === '/api/channels') return { channels: CH };
     if (p === '/api/health') return health();
@@ -3504,9 +3561,10 @@ function makeMock() {
 
     if (p === '/api/bugs' && method === 'GET') {
       const off = parseInt(q.get('offset') || '0', 10), lim = parseInt(q.get('limit') || '25', 10), s = q.get('status'), t = (q.get('q') || '').toLowerCase().replace(/^#/, '');
-      const f = bugs.filter(b => (!s || b.status === s) && (!q.get('area') || b.area === q.get('area')) && (!q.get('severity') || b.severity === q.get('severity')) && (!q.get('version') || b.version.includes(q.get('version'))) && (!t || String(b.id) === t || (b.summary + ' ' + b.reporter + ' ' + b.text).toLowerCase().includes(t)));
-      const counts = {}; bugs.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
-      return { items: f.slice(off, off + lim).map(briefBug), total: f.length, counts };
+      const isDup = b => b.dup_suggest && !b.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(b.status);
+      const f = bugs.filter(b => (!q.get('dups') || isDup(b)) && (!s || b.status === s) && (!q.get('area') || b.area === q.get('area')) && (!q.get('severity') || b.severity === q.get('severity')) && (!q.get('version') || b.version.includes(q.get('version'))) && (!t || String(b.id) === t || (b.summary + ' ' + b.reporter + ' ' + b.text).toLowerCase().includes(t)));
+      const counts = { _dups: bugs.filter(isDup).length }; bugs.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
+      return { items: f.slice(off, off + lim).map(b => Object.assign(briefBug(b), { dup_suggest: b.dup_suggest, dup_score: b.dup_score, dup_title: b.dup_title, duplicate_of: b.duplicate_of })), total: f.length, counts };
     }
     if (p === '/api/auth/settings' && method === 'GET') return authS;
     if (p === '/api/auth/settings') { if ('secret' in body) authS.secret_set = !!body.secret; if (body.redirect) authS.enabled = authS.secret_set; if (body.role_names) authS.role_names = body.role_names; return authS; }
@@ -3636,6 +3694,10 @@ function makeMock() {
     }
     const tm = p.match(/^\/api\/(bugs|suggestions)\/(\d+)\/translate$/);
     if (tm) return { text: '(Demo) This is where the report appears in ' + ((TR_LANGS.find(l => l[0] === body.target) || ['', body.target])[1]) + '. In the real dashboard Google translates the player\'s own words.', source: 'de', source_name: 'Deutsch', same: body.target === 'de' };
+    const sm = p.match(/^\/api\/bugs\/(\d+)\/similar$/);
+    if (sm) { const b = bugs.find(x => x.id === +sm[1]); const pool = bugs.filter(x => x.id !== b.id && !x.duplicate_of).slice(0, 12);
+      const items = (b.dup_suggest ? [bugs.find(x => x.id === b.dup_suggest)] : []).concat(pool.filter(x => x.id !== b.dup_suggest && x.area === b.area)).filter(Boolean).slice(0, 3);
+      return { items: items.map((x, i) => Object.assign(briefBug(x), { score: i === 0 && b.dup_suggest ? b.dup_score : 52 - i * 7, snippet: (x.text || '').slice(0, 220) })) }; }
     let m = p.match(/^\/api\/bugs\/(\d+)(\/reply)?$/);
     if (m && method === 'DELETE') { const i = bugs.findIndex(x => x.id === +m[1]); if (i < 0) throw new Error('Bug not found.'); bugs.splice(i, 1); addLog('admin', 'Deleted bug #' + m[1]); return { deleted: 1 }; }
     if (m) {
@@ -3645,6 +3707,7 @@ function makeMock() {
         if ('summary' in body) b.summary = body.summary || SUM[0];
         ['area', 'severity', 'fixed_version', 'public'].forEach(k => { if (k in body) b[k] = body[k]; });
         if ('game_version' in body) b.version = body.game_version;
+        if (body.dup_dismiss) b.dup_suggest = null;
         const st = body.duplicate_of ? 'rejected' : body.status;
         if (st) {
           b.status = st; b.duplicate_of = body.duplicate_of ? +body.duplicate_of : null; b.reason = ['rejected', 'admin_rejected'].includes(st) ? (body.reason || '') : ''; b.dup_suggest = null;

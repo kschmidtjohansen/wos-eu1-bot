@@ -1471,7 +1471,7 @@ class WosBot(discord.Client):
                          "set_bug_status": apply_bug_status, "send_reply": send_bug_reply,
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
-                         "set_severity": set_severity, "run_backup": run_backup, "post_digest": post_digest,
+                         "set_severity": set_severity, "dup_dismissed": dup_dismissed, "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
@@ -3404,6 +3404,39 @@ async def reopen_bug(r, who: str, actor_id=None):
     return r
 
 
+async def scan_duplicates() -> int:
+    """Every few minutes: look at open bugs that have no duplicate suggestion yet and compare them with the
+    reports that came before. Likely duplicates get flagged (never closed) – on the staff page and in #mod."""
+    if cfg("dup_mode") == "off":
+        return 0
+    mod, n = chan("mod_channel_id"), 0
+    for r in store.bugs_needing_dup_check():
+        best, pct = store.find_duplicate(r)
+        if best is None or pct < 45:
+            continue
+        set_bug(r["id"], dup_suggest=best["id"], dup_score=pct)
+        n += 1
+        r = get_bug(r["id"])
+        if mod is not None and r["msg_id"] and r["status"] in MOD_OPEN:
+            try:
+                await mod.get_partial_message(r["msg_id"]).edit(embed=bug_embed(r), view=DupView("confirm", best["id"]))
+            except discord.HTTPException:
+                pass
+    if n:
+        log_event("bug", f"Found {n} possible duplicate(s) among the open bugs", None, brand())
+    return n
+
+
+async def dup_dismissed(r):
+    """A moderator said 'not a duplicate' on the staff page: take the suggestion off the Discord post too."""
+    mod = chan("mod_channel_id")
+    if mod is not None and r["msg_id"]:
+        try:
+            await mod.get_partial_message(r["msg_id"]).edit(embed=bug_embed(r), view=DupView())
+        except discord.HTTPException:
+            pass
+
+
 async def check_duplicate(r):
     """Right after a report arrives: close clear duplicates of an open bug (the player is told which one and gets
     a message when it's fixed), or mark likely ones for the moderators. Returns 'auto', 'flag' or None."""
@@ -4823,6 +4856,11 @@ async def run_schedules(now=None):
     from datetime import datetime, timedelta
     now = now or datetime.now(store.tz())
     done = []
+    try:
+        if await scan_duplicates():
+            done.append("duplicates")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[duplicate scan] {exc!r}")
     if cfg("digest_enabled"):
         days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
         monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)

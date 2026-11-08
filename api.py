@@ -123,7 +123,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console"}
     # Moderators get the bug dashboard only: read bugs and stats, handle bugs. Nothing that changes the bot.
     MOD_READ = [r"/api/overview", r"/api/health", r"/api/channels", r"/api/settings", r"/api/bot", r"/api/status", r"/api/insights",
-                r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles"]
+                r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles"]
     MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/translate")]
     SECRET_SETTING = re.compile(r"(header|secret|token|key|webhook|url)", re.I)
     DEFAULT_STAFF_ROLES = {"admin": ["Admin", "Boss", "Developer"], "mod": ["Senior Moderator", "Moderator"]}
@@ -404,6 +404,10 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
              "fixed_version": r["fixed_version"] or "",
              "duplicates": [d["id"] for d in store.duplicates_of(r["id"])], "votes": store.vote_count(r["id"]),
              "reason": r["reject_reason"] or "", "dup_suggest": r["dup_suggest"], "dup_score": r["dup_score"]}
+        if r["dup_suggest"]:
+            o = store.get_bug(r["dup_suggest"])
+            d["dup_title"] = store.bug_summary(o) if o else ""
+            d["dup_status"] = o["status"] if o else ""
         if full:
             linked = [] if not r["player_uid"] else [
                 {"id": str(x["discord_id"]), "name": person(x["discord_id"]) or f"User …{str(x['discord_id'])[-4:]}"}
@@ -447,10 +451,18 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if severity and severity not in store.SEVERITIES:
             raise ApiError(400, "Unknown severity.")
         mine = q.get("mine") == "1" and request.get("actor_id") is not None
+        dups = q.get("dups") == "1"
         rows, total, counts = store.query_bugs(status, (q.get("q") or "").strip()[:100] or None, limit, offset,
                                                (q.get("area") or "")[:40] or None, (q.get("version") or "")[:30] or None,
-                                               severity, request.get("actor_id") if mine else None)
+                                               severity, request.get("actor_id") if mine else None, dups)
         return web.json_response({"items": [bug_dict(r) for r in rows], "total": total, "counts": counts})
+
+    @routes.get("/api/bugs/{id}/similar")
+    async def similar(request):
+        """Reports that look like this one – for one-tap 'Duplicate of #…' on the staff page."""
+        r = bug_or_404(int_param(request, "id"))
+        return web.json_response({"items": [{**bug_dict(c), "score": pct, "snippet": (c["text"] or "")[:220]}
+                                            for c, pct in store.similar_reports(r)]})
 
     @routes.get("/api/mybugs")
     async def my_bugs(request):
@@ -494,6 +506,12 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 r = await hooks["set_severity"](r, sev, who(request), who_id(request))
             except discord.HTTPException as exc:
                 raise ApiError(502, f"Discord refused: {exc.text or exc}")
+        if data.get("dup_dismiss"):          # "Not a duplicate" – the bot stops suggesting one for this bug
+            store.set_bug(r["id"], dup_suggest=None, dup_score=None, dup_dismissed=1)
+            store.log_event("bug", f"Bug #{r['id']}: {who(request)} said it is not a duplicate", who_id(request), who(request))
+            if "dup_dismissed" in hooks:
+                await hooks["dup_dismissed"](store.get_bug(r["id"]))
+            r = store.get_bug(r["id"])
         status, dup = data.get("status"), data.get("duplicate_of")
         if request.get("role") == "mod" and status in ("being_investigated", "fixed", "admin_rejected"):
             raise ApiError(403, "Only admins can mark bugs as investigated, fixed or rejected by admins.")

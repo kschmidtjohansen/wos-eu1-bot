@@ -265,7 +265,7 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "public INTEGER NOT NULL DEFAULT 0"),
                      ("bug_reports", "ip_hash TEXT"),
                      ("bug_reports", "reject_reason TEXT"), ("suggestions", "reject_reason TEXT"),
-                     ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"),
+                     ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"), ("bug_reports", "dup_dismissed INTEGER"),
                      ("bug_reports", "mod_pinged INTEGER"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
@@ -339,6 +339,8 @@ def stats() -> dict:
             "investigating": n(bug, "being_investigated"),
             "fixed": n(bug, "fixed"),
             "rejected": n(bug, "rejected", "admin_rejected"),
+            "dups": one(f"SELECT COUNT(*) FROM bug_reports WHERE dup_suggest IS NOT NULL AND duplicate_of IS NULL AND status IN "
+                        f"({','.join('?' * len(OPEN_STATUSES))})", *OPEN_STATUSES),
         },
         "suggestions": {
             "total": sum(sug.values()),
@@ -660,8 +662,11 @@ def bug_summary(r) -> str:
 BUG_STATUSES = ("new", "investigating", "passed", "rejected", "being_investigated", "fixed", "admin_rejected")
 
 
-def query_bugs(status=None, q=None, limit=50, offset=0, area=None, version=None, severity=None, handled_by=None):
+def query_bugs(status=None, q=None, limit=50, offset=0, area=None, version=None, severity=None, handled_by=None, dups=False):
     where, args = [], []
+    if dups:                                # "Possible duplicates": open bugs the bot thinks were reported before
+        where.append(f"dup_suggest IS NOT NULL AND duplicate_of IS NULL AND status IN ({','.join('?' * len(OPEN_STATUSES))})")
+        args += list(OPEN_STATUSES)
     if handled_by is not None:              # "Handled by me": bugs this staff member did something with
         where.append("id IN (SELECT item_id FROM actions WHERE kind='bug' AND actor_id=?)")
         args.append(handled_by)
@@ -686,6 +691,8 @@ def query_bugs(status=None, q=None, limit=50, offset=0, area=None, version=None,
     rows = db.execute(f"SELECT * FROM bug_reports {clause} ORDER BY id DESC LIMIT ? OFFSET ?",
                       (*args, limit, offset)).fetchall()
     counts = {r["status"]: r["n"] for r in db.execute("SELECT status, COUNT(*) AS n FROM bug_reports GROUP BY status")}
+    counts["_dups"] = db.execute(f"SELECT COUNT(*) FROM bug_reports WHERE dup_suggest IS NOT NULL AND duplicate_of IS NULL AND status IN "
+                                 f"({','.join('?' * len(OPEN_STATUSES))})", OPEN_STATUSES).fetchone()[0]
     return rows, total, counts
 
 
@@ -1550,6 +1557,30 @@ def find_duplicate(r, days: int = 120):
         if s > best_s:
             best, best_s = c, s
     return best, best_s
+
+
+def similar_reports(r, limit: int = 3, days: int = 180, min_score: int = 35) -> list:
+    """Reports that look like this one (any status except closed duplicates), best first: [(row, percent)].
+    Used on the staff page so a moderator can merge with one tap."""
+    since = int(time.time()) - days * 86400
+    rows = db.execute("SELECT * FROM bug_reports WHERE id<>? AND duplicate_of IS NULL AND (created_at>=? OR status IN "
+                      f"({','.join('?' * len(OPEN_STATUSES))})) ORDER BY id DESC LIMIT 600",
+                      (r["id"], since, *OPEN_STATUSES)).fetchall()
+    out = []
+    for c in rows:
+        s = duplicate_score(r, c)
+        if r["reporter_id"] and c["reporter_id"] == r["reporter_id"]:
+            s = min(100, s + 15)
+        if s >= min_score:
+            out.append((c, s))
+    out.sort(key=lambda x: (-x[1], x[0]["id"]))
+    return out[:limit]
+
+
+def bugs_needing_dup_check() -> list:
+    """Open bugs without a duplicate suggestion that nobody has said 'not a duplicate' about."""
+    return db.execute(f"SELECT * FROM bug_reports WHERE status IN ({','.join('?' * len(OPEN_STATUSES))}) AND duplicate_of IS NULL "
+                      "AND dup_suggest IS NULL AND dup_dismissed IS NULL ORDER BY id", OPEN_STATUSES).fetchall()
 
 
 REJECT_PRESETS = {
