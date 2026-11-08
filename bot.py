@@ -1069,6 +1069,7 @@ async def decide_suggestion(r, new: str, actor_id, who: str, reason: Optional[st
     """Accept or reject a suggestion (from a reaction or the dashboard): updates Discord, logs and tells the author."""
     set_suggestion(r["id"], status=new, reject_reason=(reason or None) if new == "rejected" else None)
     record_action("suggestion", r["id"], new, actor_id, who)
+    await drop_prompt("suggestion", r["id"])
     r = get_suggestion(r["id"])
     mod = chan("mod_channel_id")
     if mod is not None and r["msg_id"]:
@@ -1563,10 +1564,13 @@ class WosBot(discord.Client):
     async def on_invite_create(self, invite: discord.Invite):
         if invite.guild and invite.guild.id == GUILD_ID:
             _invite_uses[invite.code] = (invite.uses or 0, invite.inviter.id if invite.inviter else None, invite.max_uses or 0)
+            _snapshot_invites()
 
     async def on_invite_delete(self, invite: discord.Invite):
-        if invite.guild and invite.guild.id == GUILD_ID:
-            await cache_invites()
+        if invite.guild and invite.guild.id == GUILD_ID and invite.code in _invite_uses:
+            v = _invite_uses.pop(invite.code)               # keep it for 2 minutes: a used-up one-time link is deleted before the join arrives
+            _invite_gone[invite.code] = (*v, time.time())
+            _snapshot_invites()
 
     async def on_message(self, message: discord.Message):
         if message.author.bot:
@@ -1576,6 +1580,11 @@ class WosBot(discord.Client):
                 return
         except Exception as exc:  # noqa: BLE001 – the guard must never break normal chat
             print(f"[guard] {exc!r}")
+        try:
+            if await typed_reason(message):
+                return
+        except Exception as exc:  # noqa: BLE001
+            print(f"[reason reply] {exc!r}")
         if message.guild and cfg("translate_feed_on") and message.channel.id in translate.feed()["sources"]:
             try:
                 await feed_translation(message)
@@ -1695,6 +1704,8 @@ async def apply_bug_status(r, new: str, actor_name: str, actor_id: Optional[int]
     if new == "fixed":
         stamp_fixed_version(r["id"])
     record_action("bug", r["id"], new, actor_id, actor_name)
+    if closing or new in ("passed", "fixed"):
+        await drop_prompt("bug", r["id"])
     r = get_bug(r["id"])
     note = {"passed": f"Passed by {actor_name}", "being_investigated": f"Investigating – {actor_name}",
             "fixed": f"Fixed – marked by {actor_name}", "rejected": f"Rejected by {actor_name}",
@@ -3068,6 +3079,15 @@ SUG_REASONS = ("duplicate", "planned", "not_now", "game_side", "other")
 async def close_with_reason(kind: str, item_id: int, new: str, preset: Optional[str], message: str,
                             duplicate_of: Optional[int], actor_id, who: str):
     """Close a bug/suggestion and tell the player why. Returns a short confirmation for the moderator."""
+    try:
+        return await _close_with_reason(kind, item_id, new, preset, message, duplicate_of, actor_id, who)
+    finally:
+        if not item_still_open(kind, item_id, new):
+            await drop_prompt(kind, item_id)
+
+
+async def _close_with_reason(kind: str, item_id: int, new: str, preset: Optional[str], message: str,
+                             duplicate_of: Optional[int], actor_id, who: str):
     text = " ".join(x for x in (store.REJECT_PRESETS.get(preset or "", ""), (message or "").strip()) if x).strip()
     if kind == "suggestion":
         r = get_suggestion(item_id)
@@ -3121,11 +3141,7 @@ class ReasonModal(discord.ui.Modal):
         except ValueError as exc:
             return await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
         await interaction.followup.send(f"✅ {done}", ephemeral=True)
-        if self.prompt_msg is not None:
-            try:
-                await self.prompt_msg.delete()
-            except discord.HTTPException:
-                pass
+        await drop_prompt(self.kind, self.item_id)
 
 
 class ReasonPromptView(discord.ui.View):
@@ -3160,20 +3176,89 @@ class ReasonPromptView(discord.ui.View):
         except ValueError as exc:
             return await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
         await interaction.followup.send(f"✅ {done}", ephemeral=True)
+        await drop_prompt(self.kind, self.item_id)
+
+
+_prompts: dict = {}   # (kind, id) -> {"msg", "member_id", "channel_id", "new", "ts"} – one open question per report
+
+
+def item_still_open(kind: str, item_id: int, new: str) -> bool:
+    if kind == "suggestion":
+        r = get_suggestion(item_id)
+        return r is not None and r["status"] == "new"
+    r = get_bug(item_id)
+    return r is not None and r["status"] in (ADMIN_OPEN if new == "admin_rejected" else MOD_OPEN)
+
+
+async def drop_prompt(kind: str, item_id: int):
+    """The report was closed (with or without a reason, from Discord or the staff page): remove the question."""
+    p = _prompts.pop((kind, item_id), None)
+    if p is not None:
         try:
-            await interaction.message.delete()
-        except discord.HTTPException:
+            await p["msg"].delete()
+        except Exception:  # noqa: BLE001 – already gone; closing must never fail over this
             pass
 
 
+async def sweep_prompts():
+    """Every minute: questions about reports that were closed some other way, or that expired, disappear."""
+    for (kind, item_id), p in list(_prompts.items()):
+        if time.time() - p["ts"] > 900 or not item_still_open(kind, item_id, p["new"]):
+            await drop_prompt(kind, item_id)
+
+
 async def prompt_reason(channel, kind: str, item_id: int, member, new: str):
+    """Ask once why a report is being rejected. Never asks twice for the same report."""
     label = f"bug #{item_id}" if kind == "bug" else f"suggestion #{item_id}"
+    if not item_still_open(kind, item_id, new):
+        return
+    if (kind, item_id) in _prompts:
+        if time.time() - _prompts[(kind, item_id)]["ts"] < 900:
+            return                                        # already asked – don't ask again
+        await drop_prompt(kind, item_id)
     try:
-        await channel.send(f"{member.mention} why are you closing **{label}**? The player sees your reason in their DM.",
-                           view=ReasonPromptView(kind, item_id, new), delete_after=900,
-                           allowed_mentions=discord.AllowedMentions(users=[member]))
+        msg = await channel.send(f"{member.mention} why are you rejecting **{label}**? Pick a reason below – or just reply to this "
+                                 "message with your reason. The player gets it in their DM.",
+                                 view=ReasonPromptView(kind, item_id, new), delete_after=900,
+                                 allowed_mentions=discord.AllowedMentions(users=[member]))
+        _prompts[(kind, item_id)] = {"msg": msg, "member_id": member.id, "channel_id": channel.id, "new": new, "ts": time.time()}
     except discord.HTTPException as exc:
         log_event("system", f"Could not ask for a reason for {label}: {exc}", None, brand())
+
+
+async def typed_reason(message: discord.Message) -> bool:
+    """A moderator answers the question by writing the reason in chat: a reply to the question,
+    or their next message in that channel within 5 minutes. Closes the report with that text."""
+    if not _prompts or not message.guild or not is_mod(message.author):
+        return False
+    text = (message.content or "").strip()
+    if len(text) < 3 or text.startswith(("/", "!")):
+        return False
+    ref = message.reference.message_id if message.reference else None
+    hit = None
+    for key, p in _prompts.items():
+        if p["channel_id"] != message.channel.id:
+            continue
+        if ref and ref == p["msg"].id:
+            hit = key; break
+        if not ref and p["member_id"] == message.author.id and time.time() - p["ts"] < 300:
+            hit = key
+    if hit is None:
+        return False
+    p = _prompts[hit]
+    try:
+        done = await close_with_reason(hit[0], hit[1], p["new"], None, text[:600], None, message.author.id, message.author.display_name)
+    except ValueError as exc:
+        await drop_prompt(*hit)
+        await message.channel.send(f"⚠️ {exc}", delete_after=20)
+        return True
+    await drop_prompt(*hit)
+    try:
+        await message.add_reaction("✅")
+    except discord.HTTPException:
+        pass
+    await message.channel.send(f"✅ {done}", delete_after=20)
+    return True
 
 
 # ------------------------------------------------------------ automatic duplicate detection
@@ -3496,51 +3581,123 @@ _invite_uses: dict = {}            # code -> (uses, inviter_id, max_uses)
 _vanity_uses = [None]
 
 
+_invite_gone: dict = {}            # code -> (uses, inviter_id, max_uses, deleted_at) – a one-time link is deleted the moment it's used
+_invite_pool: list = []            # [(code, inviter_id)] uses we have seen but not yet matched to a join
+_invite_lock = asyncio.Lock()
+
+
+def _snapshot_invites():
+    """Kept in the database, so joins while the bot was restarting can still be counted afterwards."""
+    put_raw("invite_snapshot", json.dumps({"ts": int(time.time()), "codes": {c: list(v) for c, v in _invite_uses.items()},
+                                          "vanity": _vanity_uses[0]}))
+
+
+async def _fetch_invites(g) -> Optional[dict]:
+    try:
+        return {i.code: (i.uses or 0, i.inviter.id if i.inviter else None, i.max_uses or 0) for i in await g.invites()}
+    except discord.HTTPException:
+        return None
+
+
 async def cache_invites(guild=None) -> bool:
+    """On start: read every invite link. Joins that happened while the bot was offline are counted from the saved snapshot."""
     g = guild or bot.get_guild(GUILD_ID)
     if g is None:
         return False
-    try:
-        invs = await g.invites()
-    except discord.HTTPException:
+    now = await _fetch_invites(g)
+    if now is None:
         return False
-    _invite_uses.clear()
-    for i in invs:
-        _invite_uses[i.code] = (i.uses or 0, i.inviter.id if i.inviter else None, i.max_uses or 0)
+    try:
+        snap = json.loads(get_raw("invite_snapshot") or "{}")
+    except ValueError:
+        snap = {}
+    _invite_uses.clear(); _invite_uses.update(now)
     if "VANITY_URL" in g.features:
         try:
             _vanity_uses[0] = (await g.vanity_invite()).uses
         except discord.HTTPException:
             pass
+    if snap.get("codes") and cfg("invites_enabled"):
+        try:
+            await catch_up_joins(g, snap, now)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[invites catch-up] {exc!r}")
+    _snapshot_invites()
     return True
+
+
+async def catch_up_joins(g, snap: dict, now: dict):
+    """Members who joined while the bot was offline: give each one to an invite link that was used in that time."""
+    before = {c: tuple(v) for c, v in snap["codes"].items()}
+    credits = []
+    for c, v in now.items():
+        credits += [(c, v[1])] * max(0, v[0] - before.get(c, (0,))[0])
+    for c, v in before.items():                          # one-time links used up while offline
+        if c not in now and v[2] and v[0] + 1 >= v[2]:
+            credits.append((c, v[1]))
+    since = snap.get("ts") or 0
+    known = {r["member_id"] for r in store.db.execute("SELECT member_id FROM invite_joins WHERE ts>=?", (since - 60,)).fetchall()}
+    missed = sorted((m for m in g.members if not m.bot and m.joined_at and m.joined_at.timestamp() > since and m.id not in known),
+                    key=lambda m: m.joined_at)
+    days = cfg("invites_fake_days")
+    n = 0
+    for m in missed:
+        code, inviter = credits.pop(0) if credits else (None, None)
+        fake = bool(days) and (m.joined_at - m.created_at).days < days or (inviter == m.id)
+        store.record_join(m.id, m.display_name, inviter, code, fake)
+        n += 1
+    if n:
+        log_event("invite", f"Counted {n} member(s) who joined while the bot was restarting", None, brand())
+
+
+def _take_credit(member_id: int):
+    """Match the oldest unclaimed invite use to this join. When several people joined at the same moment the
+    totals per inviter stay right even if the exact pairing can't be known."""
+    if not _invite_pool:
+        return None, None
+    return _invite_pool.pop(0)
 
 
 async def find_inviter(member):
     """(inviter_id, code) for a member who just joined, or (None, None) / (None, 'vanity')."""
     g = member.guild
-    before = dict(_invite_uses)
-    try:
-        invs = await g.invites()
-    except discord.HTTPException:
-        return None, None
-    now = {i.code: (i.uses or 0, i.inviter.id if i.inviter else None, i.max_uses or 0) for i in invs}
-    _invite_uses.clear(); _invite_uses.update(now)
-    used = [c for c, v in now.items() if v[0] > before.get(c, (0,))[0]]
-    if len(used) == 1:
-        return now[used[0]][1], used[0]
-    gone = [c for c, v in before.items() if c not in now and v[2] and v[0] + 1 >= v[2]]   # a one-time link that ran out
-    if len(gone) == 1 and not used:
-        return before[gone[0]][1], gone[0]
-    if "VANITY_URL" in g.features:
-        try:
-            v = (await g.vanity_invite()).uses
-            if _vanity_uses[0] is not None and v > _vanity_uses[0]:
+    async with _invite_lock:                             # joins at the same moment are handled one by one
+        before = dict(_invite_uses)
+        now = await _fetch_invites(g)
+        if now is None:
+            return None, None
+        _invite_uses.clear(); _invite_uses.update(now)
+        for c, v in now.items():
+            _invite_pool.extend([(c, v[1])] * max(0, v[0] - before.get(c, (0,))[0]))
+        cutoff = time.time() - 120
+        for c, v in list(_invite_gone.items()):          # a one-time link that ran out (Discord deletes it on use)
+            if v[3] < cutoff:
+                _invite_gone.pop(c, None)
+        if not _invite_pool:
+            gone = [c for c, v in before.items() if c not in now and v[2] and v[0] + 1 >= v[2]]
+            gone += [c for c, v in _invite_gone.items() if c not in gone and v[2] and v[0] + 1 >= v[2]]
+            if gone:
+                c = gone[0]
+                v = before.get(c) or _invite_gone.get(c)
+                _invite_gone.pop(c, None)
+                _snapshot_invites()
+                return v[1], c
+        if _invite_pool:
+            res = _take_credit(member.id)
+            _snapshot_invites()
+            return res[1], res[0]
+        if "VANITY_URL" in g.features:
+            try:
+                v = (await g.vanity_invite()).uses
+                old = _vanity_uses[0]
                 _vanity_uses[0] = v
-                return None, "vanity"
-            _vanity_uses[0] = v
-        except discord.HTTPException:
-            pass
-    return None, None
+                if old is not None and v > old:
+                    _snapshot_invites()
+                    return None, "vanity"
+            except discord.HTTPException:
+                pass
+        _snapshot_invites()
+        return None, None
 
 
 async def track_join(member):
@@ -3548,7 +3705,7 @@ async def track_join(member):
         return
     inviter_id, code = await find_inviter(member)
     days = cfg("invites_fake_days")
-    fake = bool(days) and (discord.utils.utcnow() - member.created_at).days < days
+    fake = bool(days) and (discord.utils.utcnow() - member.created_at).days < days or inviter_id == member.id   # new account or self-invite
     store.record_join(member.id, member.display_name, inviter_id, code, fake)
     if inviter_id:
         c = store.invite_counts(inviter_id)
@@ -3603,6 +3760,19 @@ async def invites_show(interaction: discord.Interaction, user: Optional[discord.
         f" ({c['total']} joined · {c['left']} left" + (f" · {c['fake']} new accounts" if c["fake"] else "")
         + (f" · {c['bonus']} bonus" if c.get("bonus") else "") + ")",
         ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+
+@invites_group.command(name="bonus", description="Admins: give or take bonus invites")
+@app_commands.describe(user="Who gets the bonus", amount="How many – use a minus to take away, e.g. -2")
+async def invites_bonus(interaction: discord.Interaction, user: discord.Member, amount: app_commands.Range[int, -1000, 1000]):
+    if not is_admin(interaction.user):
+        return await interaction.response.send_message("Only admins can give bonus invites.", ephemeral=True)
+    c = store.add_invite_bonus(user.id, amount, user.display_name)
+    who = interaction.user.display_name
+    log_event("invite", f"{who} gave {user.display_name} {amount:+d} bonus invite(s) – now {c['regular']} invites", interaction.user.id, who)
+    await interaction.response.send_message(f"✅ {user.mention} {'got' if amount >= 0 else 'lost'} **{abs(amount)}** bonus invite"
+                                            f"{'s' if abs(amount) != 1 else ''} – now **{c['regular']}** invites ({c['bonus']} bonus).",
+                                            ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
 
 @invites_group.command(name="top", description="Who has invited the most people")
@@ -4339,6 +4509,10 @@ def snapshot_members():
 @tasks.loop(minutes=1)
 async def gift_loop():
     """Keeps the gift-code announcements and list exact to the minute; giveaways and timed messages too."""
+    try:
+        await sweep_prompts()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[reason prompts] {exc!r}")
     try:
         if cfg("giftcodes_enabled"):
             await sync_gift_messages()

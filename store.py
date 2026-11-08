@@ -249,6 +249,7 @@ db.executescript(
 )
 for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "created_at INTEGER"),
                      ("bug_reports", "admin_msg_id INTEGER"),
+                     ("invite_base", "extra_bonus INTEGER NOT NULL DEFAULT 0"),
                      ("suggestions", "status TEXT NOT NULL DEFAULT 'new'"),
                      ("tickets", "kind TEXT NOT NULL DEFAULT 'bug'"),
                      ("suggestions", "public_msg_id INTEGER"),
@@ -1193,7 +1194,7 @@ def invite_counts(inviter_id: int) -> dict:
     b = db.execute("SELECT * FROM invite_base WHERE user_id=?", (inviter_id,)).fetchone()
     c["bonus"] = 0
     if b is not None:
-        c["total"] += b["joins"]; c["left"] += b["left_n"]; c["fake"] += b["fake"]; c["bonus"] = b["bonus"]
+        c["total"] += b["joins"]; c["left"] += b["left_n"]; c["fake"] += b["fake"]; c["bonus"] = b["bonus"] + b["extra_bonus"]
     return _finish(c)
 
 
@@ -1201,20 +1202,32 @@ def set_invite_base(user_id: int, joins: int, left: int, fake: int, bonus: int, 
     """Carry over someone's numbers from Invite Tracker. Whatever this bot already counted itself is taken off,
     so the totals match Invite Tracker right after the import and keep growing from there (importing twice is safe)."""
     t = _tracked_counts(user_id)
-    db.execute("INSERT OR REPLACE INTO invite_base (user_id, joins, left_n, fake, bonus, ts, name) VALUES (?,?,?,?,?,?,?)",
+    db.execute("INSERT INTO invite_base (user_id, joins, left_n, fake, bonus, ts, name) VALUES (?,?,?,?,?,?,?) "
+               "ON CONFLICT(user_id) DO UPDATE SET joins=excluded.joins, left_n=excluded.left_n, fake=excluded.fake, "
+               "bonus=excluded.bonus, ts=excluded.ts, name=excluded.name",   # keeps the bonus given with /invites bonus
                (user_id, joins - t["total"], left - t["left"], fake - t["fake"], bonus, int(time.time()), (name or "")[:60]))
     db.commit()
     return invite_counts(user_id)
 
 
+def add_invite_bonus(user_id: int, amount: int, name: str = "") -> dict:
+    db.execute("INSERT INTO invite_base (user_id, extra_bonus, name) VALUES (?,?,?) "
+               "ON CONFLICT(user_id) DO UPDATE SET extra_bonus=extra_bonus+excluded.extra_bonus", (user_id, amount, (name or "")[:60]))
+    db.commit()
+    return invite_counts(user_id)
+
+
 def clear_invite_base() -> int:
-    n = db.execute("DELETE FROM invite_base").rowcount
+    """Removes what was carried over from Invite Tracker (bonus given here with /invites bonus stays)."""
+    n = db.execute("SELECT COUNT(*) FROM invite_base WHERE ts IS NOT NULL").fetchone()[0]
+    db.execute("DELETE FROM invite_base WHERE extra_bonus=0")
+    db.execute("UPDATE invite_base SET joins=0, left_n=0, fake=0, bonus=0, ts=NULL")
     db.commit()
     return n
 
 
 def invite_base_info() -> dict:
-    r = db.execute("SELECT COUNT(*) AS n, MAX(ts) AS ts FROM invite_base").fetchone()
+    r = db.execute("SELECT COUNT(*) AS n, MAX(ts) AS ts FROM invite_base WHERE ts IS NOT NULL").fetchone()
     return {"players": r["n"] or 0, "ts": r["ts"]}
 
 
@@ -1228,7 +1241,7 @@ def invite_top(limit: int = 10, since: Optional[int] = None) -> list:
     if not since:                                      # all-time lists include the counts carried over from Invite Tracker
         for b in db.execute("SELECT * FROM invite_base").fetchall():
             c = out.setdefault(b["user_id"], {"inviter_id": b["user_id"], "total": 0, "left": 0, "fake": 0, "bonus": 0})
-            c["total"] += b["joins"]; c["left"] += b["left_n"]; c["fake"] += b["fake"]; c["bonus"] = b["bonus"]
+            c["total"] += b["joins"]; c["left"] += b["left_n"]; c["fake"] += b["fake"]; c["bonus"] = b["bonus"] + b["extra_bonus"]
     res = [_finish(c) for c in out.values()]
     res.sort(key=lambda x: (-x["regular"], -x["total"]))
     return res[:limit]
