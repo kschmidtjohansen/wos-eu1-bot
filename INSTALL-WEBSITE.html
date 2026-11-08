@@ -166,8 +166,8 @@ website to add it to the site:
 <ol>
 <li><code>http://167.233.219.217/public/config</code> → text starting with <code>{"enabled"</code> means the website reaches the bot.</li>
 <li><code>http://167.233.219.217/bugs/</code> → the new public pages.</li>
-<li><code>http://167.233.219.217/staff/</code> → the staff password (if you chose one), then the dashboard login.
-   Paste your <strong>dashboard key</strong> and click <strong>Connect</strong>.</li>
+<li><code>http://167.233.219.217/staff/</code> → the dashboard login. The first time, run <code>sudo wosbot-login</code> on the bot server and open the
+   link it prints; then turn on Discord login under <strong>Settings → Bot profile → Staff login</strong>. After that everyone uses <strong>Log in with Discord</strong>.</li>
 </ol>
 <blockquote class="ok">
 <p>✅ The dashboard opens and shows <strong>Overview</strong> with your bot's name and server.</p>
@@ -208,7 +208,7 @@ website to add it to the site:
 </ul>
 <p>All ticked? You're live. 🎉</p>
 <div class="next"><button type="button">Done – next step ↓</button></div></div></section><h2>HTTPS (the padlock)</h2>
-<p>If your site opens with <code>http://</code> (no padlock), the dashboard key and staff password travel unencrypted. Fix it once you have a
+<p>If your site opens with <code>http://</code> (no padlock), the login cookie travels unencrypted. Fix it once you have a
 domain name pointing to the server (e.g. <code>wos-europa.com</code>; certificates can't be issued for a bare IP address):</p>
 <pre><code class="language-bash">sudo apt install -y certbot python3-certbot-nginx      # Apache: python3-certbot-apache
 sudo certbot --nginx -d yourdomain.com                  # Apache: --apache
@@ -225,7 +225,7 @@ sudo certbot --nginx -d yourdomain.com                  # Apache: --apache
 <tbody>
 <tr>
 <td>Update the pages/dashboard to a new version</td>
-<td>If the website is on the bot server, it's updated together with the bot (<strong>Update bugbot</strong> – see the bot guide). Otherwise upload and unpack the new zip (step 2) and run <code>sudo bash bugbot/deploy/connect-website.sh</code> again. Your <code>config.js</code> and staff password are kept.</td>
+<td>If the website is on the bot server, it's updated together with the bot (<strong>Update bugbot</strong> – see the bot guide). Otherwise upload and unpack the new zip (step 2) and run <code>sudo bash bugbot/deploy/connect-website.sh</code> again. Your <code>config.js</code> is kept.</td>
 </tr>
 <tr>
 <td>Bot server got a new IP</td>

@@ -114,8 +114,8 @@ Open these (use your own address):
 
 1. `http://167.233.219.217/public/config` → text starting with `{"enabled"` means the website reaches the bot.
 2. `http://167.233.219.217/bugs/` → the new public pages.
-3. `http://167.233.219.217/staff/` → the staff password (if you chose one), then the dashboard login.
-   Paste your **dashboard key** and click **Connect**.
+3. `http://167.233.219.217/staff/` → the dashboard login. The first time, run `sudo wosbot-login` on the bot server and open the
+   link it prints; then turn on Discord login under **Settings → Bot profile → Staff login**. After that everyone uses **Log in with Discord**.
 
 > ✅ The dashboard opens and shows **Overview** with your bot's name and server.
 
@@ -159,7 +159,7 @@ All ticked? You're live. 🎉
 
 ## HTTPS (the padlock)
 
-If your site opens with `http://` (no padlock), the dashboard key and staff password travel unencrypted. Fix it once you have a
+If your site opens with `http://` (no padlock), the login cookie travels unencrypted. Fix it once you have a
 domain name pointing to the server (e.g. `wos-europa.com`; certificates can't be issued for a bare IP address):
 
 ```bash
@@ -173,7 +173,7 @@ Then run the website script again (step 3) – it notices the padlock and uses `
 
 | Task | How |
 |---|---|
-| Update the pages/dashboard to a new version | If the website is on the bot server, it's updated together with the bot (**Update bugbot** – see the bot guide). Otherwise upload and unpack the new zip (step 2) and run `sudo bash bugbot/deploy/connect-website.sh` again. Your `config.js` and staff password are kept. |
+| Update the pages/dashboard to a new version | If the website is on the bot server, it's updated together with the bot (**Update bugbot** – see the bot guide). Otherwise upload and unpack the new zip (step 2) and run `sudo bash bugbot/deploy/connect-website.sh` again. Your `config.js` is kept. |
 | Bot server got a new IP | Run the script again and type the new address. |
 | Is the link up? | `systemctl status wos-tunnel` (should say *active (running)*) |
 | Can't log in to the staff page | `sudo wosbot-login` – prints a one-time admin link (works once, for 15 minutes). |
