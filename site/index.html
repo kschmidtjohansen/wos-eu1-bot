@@ -1,66 +1,89 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WOS EU1 – Help us fix it</title><link rel="stylesheet" href="style.css"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>WOS EU1 – codes, known issues and bug reports</title><meta name="theme-color" content="#060c17"><meta name="description" content="Gift codes, known issues and bug reports for the WOS EU1 server.">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="WOS EU1">
+<link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css"></head><body>
 <main>
   <section class="hero">
-    <span class="badge" id="ver"></span>
-    <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
-    <div class="btns"><a class="btn pri" href="report.html" data-i="cta1"></a><a class="btn" href="known-issues.html" id="cta2" data-i="cta2"></a></div>
+    <div>
+      <span class="ver" id="ver" hidden><i></i><span id="ver-t"></span></span>
+      <h1><span class="srv" id="srv"></span><span data-i="h1"></span></h1>
+      <p class="lead" data-i="lead"></p>
+      <div class="btns"><a class="btn pri" href="report.html" data-i="cta1"></a><a class="btn" href="known-issues.html" data-k="known" data-i="cta2"></a></div>
+    </div>
+    <div class="hero-codes" id="hc" hidden>
+      <h2><span data-i="todayH"></span><a href="codes.html" data-i="allCodes"></a></h2>
+      <div class="tickets" id="hc-l"></div>
+    </div>
   </section>
-  <section class="grid g3 stats" id="stats" hidden>
-    <div class="card stat"><b id="s-open">–</b><span data-i="sOpen"></span></div>
-    <div class="card stat"><b id="s-fixed">–</b><span data-i="sFixed"></span></div>
-    <div class="card stat"><b id="s-last">–</b><span data-i="sLast"></span></div>
+
+  <section class="sec acts" aria-label="Shortcuts">
+    <a class="card act hot" href="report.html"><span class="ic"></span><h3 data-i="aRepH"></h3><p data-i="aRep"></p></a>
+    <a class="card act" href="known-issues.html" data-k="known"><span class="ic"></span><h3 data-i="aKnownH"></h3><p data-i="aKnown"></p><span class="num"><b id="n-open">–</b><small data-i="nOpen"></small></span></a>
+    <a class="card act" href="changelog.html" data-k="fixed"><span class="ic"></span><h3 data-i="aFixH"></h3><p data-i="aFix"></p><span class="num"><b id="n-fixed">–</b><small data-i="nFixed"></small></span></a>
   </section>
-  <section class="sec"><h2 data-i="how"></h2>
-    <div class="grid g3" style="margin-top:14px">
-      <div class="card step"><div class="n">1</div><h3 data-i="st1h"></h3><p data-i="st1"></p></div>
-      <div class="card step"><div class="n">2</div><h3 data-i="st2h"></h3><p data-i="st2"></p></div>
-      <div class="card step"><div class="n">3</div><h3 data-i="st3h"></h3><p data-i="st3"></p></div>
-    </div></section>
+
   <section class="sec grid g2">
-    <div class="card"><h3 data-i="tipsH"></h3><ul class="tips"><li data-i="tip1"></li><li data-i="tip2"></li><li data-i="tip3"></li><li data-i="tip4"></li></ul></div>
-    <div class="card" id="latest"><div class="sec-h" style="margin-bottom:6px"><h3 data-i="latestH"></h3><a href="changelog.html" data-i="all"></a></div><div id="latest-l"></div></div>
+    <div id="latest"><div class="sec-h"><h2 data-i="latestH"></h2><a href="changelog.html" data-i="all"></a></div><div class="list" id="latest-l"><div class="skel"></div><div class="skel"></div></div></div>
+    <div id="ideas" hidden><div class="sec-h"><h2 data-i="ideasH"></h2></div><div class="list" id="ideas-l"></div></div>
   </section>
-  <section class="sec card" id="dc" hidden style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap">
-    <div><h3 data-i="dcH"></h3><span class="muted" data-i="dcT"></span></div><a class="btn" id="dc-a" data-i="dcB"></a></section>
+
+  <section class="sec card banner" id="app" data-install hidden>
+    <div><span class="ic" id="app-ic"></span><div><h3 data-i="appH"></h3><span class="muted" data-i="appT"></span></div></div>
+    <button class="btn pri" type="button" id="app-b" data-i="install"></button></section>
+  <section class="sec card banner" id="dc" hidden>
+    <div><span class="ic" id="dc-ic"></span><div><h3 data-i="dcH"></h3><span class="muted" data-i="dcT"></span></div></div>
+    <a class="btn" id="dc-a" rel="noopener" data-i="dcB"></a></section>
 </main>
 <script src="config.js"></script><script src="app.js"></script>
 <script>
 const S = {
- en: { h1: 'Help us fix it.', lead: 'Found something that is not working in the game? Tell us – every report is read by our moderators and passed on to the team.', cta1: 'Report a bug', cta2: 'See known issues',
-  sOpen: 'Known issues being worked on', sFixed: 'Fixed recently', sLast: 'Last update', how: 'How it works',
-  st1h: 'You report', st1: 'Fill in a short form here or open a ticket on Discord. Screenshots and videos help a lot.', st2h: 'We check', st2: 'Moderators read every report, merge duplicates and pass real bugs on to the admins.',
-  st3h: 'We fix and tell you', st3: 'Fixed bugs are announced in the changelog, with the game version they were fixed in.',
-  tipsH: 'Before you report', tip1: 'Look at the known issues list first – it may already be reported.', tip2: 'Say what you did, what you expected and what happened instead.', tip3: 'Add your chief name and player UID so we can find your account.', tip4: 'One problem per report, please.',
-  latestH: 'Latest fixes', all: 'See all', none: 'Nothing published yet.', dcH: 'Chat with the community', dcT: 'Questions, suggestions and updates live on our Discord.', dcB: 'Join our Discord', in: 'Fixed in' },
- pl: { h1: 'Pomóż nam to naprawić.', lead: 'Coś w grze nie działa? Daj nam znać – każde zgłoszenie czytają moderatorzy i przekazują zespołowi.', cta1: 'Zgłoś błąd', cta2: 'Znane problemy',
-  sOpen: 'Znane problemy w trakcie prac', sFixed: 'Ostatnio naprawione', sLast: 'Ostatnia aktualizacja', how: 'Jak to działa',
-  st1h: 'Ty zgłaszasz', st1: 'Wypełnij krótki formularz tutaj lub otwórz ticket na Discordzie. Zrzuty ekranu i wideo bardzo pomagają.', st2h: 'My sprawdzamy', st2: 'Moderatorzy czytają każde zgłoszenie, łączą duplikaty i przekazują prawdziwe błędy adminom.',
-  st3h: 'Naprawiamy i informujemy', st3: 'Naprawione błędy ogłaszamy w dzienniku zmian, razem z wersją gry, w której je naprawiono.',
-  tipsH: 'Zanim zgłosisz', tip1: 'Zajrzyj najpierw do znanych problemów – ktoś mógł już to zgłosić.', tip2: 'Napisz, co zrobiłeś, czego się spodziewałeś i co się stało.', tip3: 'Podaj imię wodza i UID gracza, abyśmy mogli znaleźć Twoje konto.', tip4: 'Jeden problem na zgłoszenie, proszę.',
-  latestH: 'Ostatnie poprawki', all: 'Zobacz wszystkie', none: 'Nic jeszcze nie opublikowano.', dcH: 'Rozmawiaj ze społecznością', dcT: 'Pytania, pomysły i nowości znajdziesz na naszym Discordzie.', dcB: 'Dołącz do Discorda', in: 'Naprawiono w' } };
+ en: { h1: 'Stay warm out there.', lead: "Today's gift codes, the bugs we already know about, and a quick way to tell us when something in the game isn't working.",
+  cta1: 'Report a bug', cta2: 'Known issues', todayH: "Today's codes", allCodes: 'All codes',
+  aRepH: 'Report a bug', aRep: 'Something broken? A short form, a screenshot, done. Moderators read every report.',
+  aKnownH: 'Known issues', aKnown: "Bugs we already know about. Check here first – you can skip reporting these.", nOpen: 'being worked on',
+  aFixH: "What's fixed", aFix: 'Every update and the bugs it fixed, with the game version.', nFixed: 'fixed so far',
+  latestH: 'Fixed lately', all: 'See all', none: 'Nothing published yet.', ideasH: 'Ideas from players we added',
+  appH: 'Get the app', appT: 'Add WOS EU1 to your home screen – codes and known issues one tap away.',
+  dcH: 'Never miss a code', dcT: 'New codes are posted on our Discord the moment they go live.', dcB: 'Join our Discord' },
+ pl: { h1: 'Trzymaj się ciepło.', lead: 'Dzisiejsze kody prezentowe, błędy, o których już wiemy, i szybki sposób, by zgłosić, że coś w grze nie działa.',
+  cta1: 'Zgłoś błąd', cta2: 'Znane problemy', todayH: 'Dzisiejsze kody', allCodes: 'Wszystkie kody',
+  aRepH: 'Zgłoś błąd', aRep: 'Coś nie działa? Krótki formularz, zrzut ekranu i gotowe. Moderatorzy czytają każde zgłoszenie.',
+  aKnownH: 'Znane problemy', aKnown: 'Błędy, o których już wiemy. Sprawdź najpierw tutaj – tych nie musisz zgłaszać.', nOpen: 'w trakcie prac',
+  aFixH: 'Co naprawiono', aFix: 'Każda aktualizacja i naprawione w niej błędy, z wersją gry.', nFixed: 'naprawionych',
+  latestH: 'Ostatnio naprawione', all: 'Zobacz wszystkie', none: 'Nic jeszcze nie opublikowano.', ideasH: 'Pomysły graczy, które dodaliśmy',
+  appH: 'Pobierz aplikację', appT: 'Dodaj WOS EU1 do ekranu głównego – kody i znane problemy na wyciągnięcie ręki.',
+  dcH: 'Nie przegap żadnego kodu', dcT: 'Nowe kody publikujemy na Discordzie, gdy tylko się pojawią.', dcB: 'Dołącz do Discorda' } };
+const $ = id => document.getElementById(id);
+const C = window.WOS_CONFIG || {};
+$('srv').textContent = C.SERVER_NAME || 'WOS EU1';
+document.querySelectorAll('.act .ic').forEach((s, i) => s.append(WOS.icon(['report', 'known', 'fixed'][i])));
+$('app-ic').append(WOS.icon('download')); $('dc-ic').append(WOS.icon('chat'));
+$('app-b').onclick = () => WOS.install();
+let codes = [], changes = [], known = [], ideas = [];
+function draw() {
+  const hl = $('hc-l'); hl.replaceChildren();
+  const pick = codes.filter(c => c.new).concat(codes.filter(c => !c.new)).slice(0, 3);
+  $('hc').hidden = !pick.length; pick.forEach(c => hl.append(WOS.ticket(c)));
+  const box = $('latest-l'); box.replaceChildren();
+  const items = changes.flatMap(c => c.items.map(i => ({ ...i, v: c.title }))).slice(0, 5);
+  if (!items.length) box.append(WOS.el('div', { class: 'card empty' }, WOS.t('none')));
+  items.forEach(i => box.append(WOS.el('div', { class: 'item' }, WOS.el('div', {}, WOS.el('b', {}, i.title), WOS.el('span', { class: 'm' }, [i.area, i.v].filter(Boolean).join(' · '))), WOS.el('span', { class: 'st fixed' }, '✓'))));
+  const il = $('ideas-l'); il.replaceChildren(); $('ideas').hidden = !ideas.length;
+  ideas.slice(0, 3).forEach(x => { const chg = WOS.el('div', { class: 'chg' }, WOS.icon('spark'), WOS.el('span', {}, x.changes));
+    il.append(WOS.el('div', { class: 'card idea' }, WOS.el('q', {}, x.idea), chg, WOS.el('time', {}, WOS.date(x.ts)))); });
+}
 WOS.init(S).then(async cfg => {
-  const C = window.WOS_CONFIG;
-  if (cfg.version) { const v = document.getElementById('ver'); v.textContent = cfg.version; }
-  else document.getElementById('ver').hidden = true;
-  if (C.DISCORD_URL) { const a = document.getElementById('dc-a'); a.href = C.DISCORD_URL; document.getElementById('dc').hidden = false; }
-  let changes = [], known = [];
-  if (cfg.known_issues) { try { known = (await WOS.api('/public/known-issues')).items; } catch (e) {} }
-  if (cfg.changelog) { try { changes = (await WOS.api('/public/changelog')).items; } catch (e) {} }
-  else document.getElementById('latest').hidden = true;
-  if (!cfg.known_issues) document.getElementById('cta2').hidden = true;
-  if (cfg.known_issues || cfg.changelog) {
-    document.getElementById('stats').hidden = false;
-    document.getElementById('s-open').textContent = known.filter(i => i.status !== 'fixed').length;
-    document.getElementById('s-fixed').textContent = known.filter(i => i.status === 'fixed').length || changes.reduce((n, c) => n + c.items.length, 0);
-    document.getElementById('s-last').textContent = changes.length ? WOS.date(changes[0].ts) : '–';
-  }
-  const draw = () => {
-    const box = document.getElementById('latest-l'); box.replaceChildren();
-    const items = changes.flatMap(c => c.items.map(i => ({ ...i, v: c.title }))).slice(0, 5);
-    if (!items.length) return box.append(WOS.el('div', { class: 'muted' }, WOS.t('none')));
-    items.forEach(i => box.append(WOS.el('div', { class: 'item', style: 'margin:8px 0 0;padding:10px 14px' }, WOS.el('div', {}, WOS.el('b', {}, i.title), WOS.el('span', { class: 'm' }, [i.area, i.v].filter(Boolean).join(' · '))), WOS.el('span', { class: 'st fixed' }, '✓'))));
-  };
-  WOS.onLang.push(draw); draw();
+  if (cfg.version) { $('ver-t').textContent = cfg.version; $('ver').hidden = false; }
+  if (C.DISCORD_URL) { $('dc-a').href = C.DISCORD_URL; $('dc').hidden = false; }
+  const get = async (on, path) => { if (!on) return []; try { return (await WOS.api(path)).items; } catch (e) { return []; } };
+  [codes, known, changes, ideas] = await Promise.all([get(cfg.giftcodes, '/public/giftcodes'), get(cfg.known_issues, '/public/known-issues'),
+    get(cfg.changelog, '/public/changelog'), get(cfg.ideas, '/public/ideas')]);
+  if (!cfg.changelog) $('latest').hidden = true;
+  $('n-open').textContent = known.filter(i => i.status !== 'fixed').length;
+  $('n-fixed').textContent = changes.reduce((n, c) => n + c.items.length, 0) || known.filter(i => i.status === 'fixed').length;
+  WOS.tick($('n-open')); WOS.tick($('n-fixed'));
+  WOS.onLang.push(draw); draw(); setInterval(draw, 60000);
 });
 </script></body></html>

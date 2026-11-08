@@ -1033,9 +1033,18 @@ def known_issues(limit_fixed: int = 30):
                       "ORDER BY id DESC LIMIT 100").fetchall()
     rows += db.execute("SELECT * FROM bug_reports WHERE public=1 AND status='fixed' ORDER BY id DESC LIMIT ?",
                        (limit_fixed,)).fetchall()
+    votes = vote_counts()
     return [{"id": r["id"], "title": bug_summary(r), "area": r["area"], "status": r["status"],
              "status_label": PUBLIC_STATUS[r["status"]], "reported_in": r["game_version"] or None,
-             "fixed_in": r["fixed_version"] or None, "updated": last_change_ts(r)} for r in rows]
+             "fixed_in": r["fixed_version"] or None, "updated": last_change_ts(r),
+             "affected": votes.get(r["id"], 0) + len(duplicates_of(r["id"]))} for r in rows]
+
+
+def ideas_added(limit: int = 30):
+    """Accepted player suggestions that staff have marked as added, with what was changed (newest first)."""
+    rows = db.execute("SELECT * FROM suggestions WHERE status='accepted' AND changes IS NOT NULL AND changes<>'' "
+                      "ORDER BY changed_at DESC LIMIT ?", (limit,)).fetchall()
+    return [{"id": r["id"], "idea": (r["text"] or "")[:400], "changes": r["changes"], "ts": r["changed_at"]} for r in rows]
 
 
 # ------------------------------------------------ website spam: automatic pauses

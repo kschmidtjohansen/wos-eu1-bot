@@ -1,15 +1,14 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Report a bug – WOS EU1</title><link rel="stylesheet" href="style.css"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Report a bug – WOS EU1</title><meta name="theme-color" content="#060c17"><meta name="description" content="Tell the WOS EU1 team about a bug.">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="WOS EU1">
+<link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css"></head><body>
 <main>
-  <div class="crumb"><a href="index.html" data-i="nav_home"></a> › <span data-i="nav_report"></span></div>
   <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
   <div class="layout">
     <div>
       <form class="card" id="form" novalidate>
-        <div class="row">
-          <div><label for="chief"><span data-i="chief"></span> <small data-i="opt"></small></label><input id="chief" name="chief_name" maxlength="50" autocomplete="off"></div>
-          <div><label for="uid"><span data-i="uid"></span> <small data-i="opt"></small></label><input id="uid" name="uid" inputmode="numeric" maxlength="20" autocomplete="off"></div>
-        </div>
         <div class="row">
           <div><label for="area" data-i="area"></label><select id="area" name="area"></select></div>
           <div><label for="ver" data-i="ver"></label><input id="ver" name="version" maxlength="30"></div>
@@ -19,7 +18,12 @@
         <label for="desc" data-i="desc"></label><textarea id="desc" name="description" maxlength="1800" data-ph="descPh"></textarea>
         <div class="hint"><span data-i="descHint"></span><span id="cnt">0 / 1800</span></div>
         <label for="files"><span data-i="files"></span> <small data-i="filesHint"></small></label>
-        <input id="files" type="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime"><div class="files" id="flist"></div>
+        <div class="drop" id="drop" role="button" tabindex="0"><span data-i="dropT"></span></div>
+        <input id="files" type="file" multiple hidden accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime"><div class="files" id="flist"></div>
+        <div class="row">
+          <div><label for="chief"><span data-i="chief"></span> <small data-i="opt"></small></label><input id="chief" name="chief_name" maxlength="50" autocomplete="off"></div>
+          <div><label for="uid"><span data-i="uid"></span> <small data-i="opt"></small></label><input id="uid" name="uid" inputmode="numeric" maxlength="20" autocomplete="off"></div>
+        </div>
         <label for="contact"><span data-i="contact"></span> <small data-i="opt"></small></label><input id="contact" name="contact" maxlength="100" autocomplete="email">
         <div class="hint"><span data-i="contactHint"></span></div>
         <div class="hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
@@ -30,7 +34,7 @@
         <div class="btns" style="justify-content:center"><button class="btn pri" id="again" type="button" data-i="again"></button><a class="btn" href="index.html" data-i="nav_home"></a></div></div>
     </div>
     <aside class="card"><h3 data-i="tipsH"></h3><ul class="tips"><li data-i="tip1"></li><li data-i="tip2"></li><li data-i="tip3"></li><li data-i="tip4"></li></ul>
-      <p class="muted" style="font-size:14px;margin-bottom:0" id="ki"><a href="known-issues.html" data-i="kiLink"></a></p></aside>
+      <p class="muted" style="font-size:14px;margin:14px 0 0" id="ki"><a href="known-issues.html" data-i="kiLink"></a></p></aside>
   </div>
 </main>
 <script src="config.js"></script><script src="app.js"></script>
@@ -38,23 +42,28 @@
 const S = {
  en: { h1: 'Report a bug', lead: 'Tell us what went wrong. The more detail you give, the faster we can fix it.', chief: 'Chief name', uid: 'Player UID', opt: '(optional)', area: 'Area', ver: 'Game version',
   ttl: 'Short title', ttlPh: 'e.g. Horse sinks when mounted near water', desc: 'What happened?', descPh: 'What did you do, what did you expect, and what happened instead?', descHint: 'At least 20 characters.',
-  files: 'Screenshots or video', filesHint: '(up to 4 files, 8 MB each)', contact: 'Contact', contactHint: 'Only moderators see this. Leave it empty if you do not need a reply.',
+  files: 'Screenshots or video', filesHint: '(up to 4 files, 8 MB each)', dropT: 'Tap to add files, or drop them here', contact: 'Contact', contactHint: 'Only moderators see this. Leave it empty if you do not need a reply.',
   send: 'Send report', sending: 'Sending…', pick: 'Choose an area…', okH: 'Thank you!', ok: 'Your report was sent to our team.', again: 'Report another bug', off: 'Bug reports from the website are closed right now. Please use our Discord.',
   eTitle: 'Please write a short title (at least 5 characters).', eDesc: 'Please describe what happened (at least 20 characters).', eArea: 'Please choose an area.', eUid: 'The player UID should only contain numbers.',
   eFile: 'You can attach at most 4 files of 8 MB each.', tipsH: 'Tips for a good report', tip1: 'Check the known issues first.', tip2: 'Describe the steps so we can repeat the bug.', tip3: 'Screenshots and short videos help a lot.', tip4: 'One problem per report.',
-  similar: 'This may already be reported:', similarNote: 'If it is the same problem, you do not need to send it again.', kiLink: 'Known issues list →', in: 'fixed in', passed: 'Confirmed', being_investigated: 'Investigating', fixed: 'Fixed' },
+  similar: 'This may already be reported:', similarNote: 'If it is the same problem, you do not need to send it again.', kiLink: 'Open the known issues list', in: 'fixed in', passed: 'Confirmed', being_investigated: 'Investigating', fixed: 'Fixed' },
  pl: { h1: 'Zgłoś błąd', lead: 'Napisz, co poszło nie tak. Im więcej szczegółów, tym szybciej to naprawimy.', chief: 'Imię wodza', uid: 'UID gracza', opt: '(opcjonalnie)', area: 'Obszar', ver: 'Wersja gry',
   ttl: 'Krótki tytuł', ttlPh: 'np. Koń tonie przy wsiadaniu przy wodzie', desc: 'Co się stało?', descPh: 'Co zrobiłeś, czego się spodziewałeś i co się stało zamiast tego?', descHint: 'Co najmniej 20 znaków.',
-  files: 'Zrzuty ekranu lub wideo', filesHint: '(do 4 plików, po 8 MB)', contact: 'Kontakt', contactHint: 'Widzą to tylko moderatorzy. Zostaw puste, jeśli nie potrzebujesz odpowiedzi.',
+  files: 'Zrzuty ekranu lub wideo', filesHint: '(do 4 plików, po 8 MB)', dropT: 'Stuknij, aby dodać pliki, lub upuść je tutaj', contact: 'Kontakt', contactHint: 'Widzą to tylko moderatorzy. Zostaw puste, jeśli nie potrzebujesz odpowiedzi.',
   send: 'Wyślij zgłoszenie', sending: 'Wysyłanie…', pick: 'Wybierz obszar…', okH: 'Dziękujemy!', ok: 'Twoje zgłoszenie trafiło do zespołu.', again: 'Zgłoś kolejny błąd', off: 'Zgłoszenia ze strony są teraz zamknięte. Użyj naszego Discorda.',
   eTitle: 'Wpisz krótki tytuł (min. 5 znaków).', eDesc: 'Opisz, co się stało (min. 20 znaków).', eArea: 'Wybierz obszar.', eUid: 'UID powinien zawierać tylko cyfry.',
   eFile: 'Możesz dodać maksymalnie 4 pliki po 8 MB.', tipsH: 'Wskazówki do dobrego zgłoszenia', tip1: 'Najpierw sprawdź znane problemy.', tip2: 'Opisz kroki, abyśmy mogli powtórzyć błąd.', tip3: 'Zrzuty ekranu i krótkie wideo bardzo pomagają.', tip4: 'Jeden problem na zgłoszenie.',
-  similar: 'To może być już zgłoszone:', similarNote: 'Jeśli to ten sam problem, nie musisz wysyłać go ponownie.', kiLink: 'Lista znanych problemów →', in: 'naprawiono w', passed: 'Potwierdzony', being_investigated: 'W trakcie badania', fixed: 'Naprawiony' } };
+  similar: 'To może być już zgłoszone:', similarNote: 'Jeśli to ten sam problem, nie musisz wysyłać go ponownie.', kiLink: 'Otwórz listę znanych problemów', in: 'naprawiono w', passed: 'Potwierdzony', being_investigated: 'W trakcie badania', fixed: 'Naprawiony' } };
 const $ = id => document.getElementById(id), f = $('form'), opened = Date.now(); let cfg = {}, chosen = [], simTimer = null, lastSim = '';
 const say = (t, k) => { const m = $('msg'); m.replaceChildren(); if (t) m.append(WOS.el('div', { class: 'msg ' + k }, t)); };
 function fillAreas() { const s = $('area'), cur = s.value; s.replaceChildren(new Option(WOS.t('pick'), '')); (cfg.areas || []).forEach(a => s.add(new Option(a, a))); s.value = cur; $('go').textContent = WOS.t('send'); }
 function drawFiles() { const b = $('flist'); b.replaceChildren(); chosen.forEach((x, i) => b.append(WOS.el('span', {}, x.name, WOS.el('button', { type: 'button', 'aria-label': 'Remove', onclick: () => { chosen.splice(i, 1); drawFiles(); } }, '×')))); }
 $('files').onchange = e => { chosen = chosen.concat(Array.from(e.target.files)); e.target.value = ''; drawFiles(); };
+const dz = $('drop'); dz.prepend(WOS.icon('download'));
+dz.onclick = () => $('files').click(); dz.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('files').click(); } };
+['dragenter', 'dragover'].forEach(n => dz.addEventListener(n, e => { e.preventDefault(); dz.classList.add('over'); }));
+['dragleave', 'drop'].forEach(n => dz.addEventListener(n, e => { e.preventDefault(); dz.classList.remove('over'); }));
+dz.addEventListener('drop', e => { chosen = chosen.concat(Array.from(e.dataTransfer.files || [])); drawFiles(); });
 $('desc').oninput = e => { $('cnt').textContent = e.target.value.length + ' / 1800'; };
 async function similar() {
   const q = $('title').value.trim() + ' ' + $('desc').value.trim().slice(0, 100);

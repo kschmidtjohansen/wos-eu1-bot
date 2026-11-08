@@ -1,42 +1,54 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Known issues – WOS EU1</title><link rel="stylesheet" href="style.css"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Known issues – WOS EU1</title><meta name="theme-color" content="#060c17"><meta name="description" content="Bugs the WOS EU1 team already knows about and is working on.">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="WOS EU1">
+<link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css"></head><body>
 <main>
-  <div class="crumb"><a href="index.html" data-i="nav_home"></a> › <span data-i="nav_known"></span></div>
   <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
-  <div class="tools"><input type="search" id="q" data-ph="search" aria-label="Search"><select id="area" aria-label="Area"></select></div>
+  <div class="tools"><input type="search" id="q" data-ph="search" aria-label="Search"><select id="area" aria-label="Area" style="max-width:220px"></select></div>
   <div class="chips" id="chips"></div>
-  <div id="list" aria-live="polite"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
-  <div class="card sec" style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap"><div><h3 data-i="nfH"></h3><span class="muted" data-i="nfT"></span></div><a class="btn pri" href="report.html" data-i="nav_report"></a></div>
+  <div class="list" id="list" aria-live="polite"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+  <section class="sec card banner"><div><span class="ic" id="nf-ic"></span><div><h3 data-i="nfH"></h3><span class="muted" data-i="nfT"></span></div></div><a class="btn pri" href="report.html" data-i="nav_report"></a></section>
 </main>
 <script src="config.js"></script><script src="app.js"></script>
 <script>
 const S = {
- en: { h1: 'Known issues', lead: 'We know about these bugs and are working on them. No need to report them again.', search: 'Search known issues…', all: 'All', open: 'Open', fixedF: 'Fixed', allAreas: 'All areas',
-  passed: 'Confirmed', being_investigated: 'Investigating', fixed: 'Fixed', in: 'fixed in', since: 'seen in', none: 'No known issues match.', off: 'The known-issues list is not public right now.', err: 'Could not load the list.',
+ en: { h1: 'Known issues', lead: 'We know about these and are working on them – no need to report them again. Have the same problem? Say so on Discord with the “I have this too” menu.',
+  search: 'Search known issues…', all: 'All', open: 'Open', fixedF: 'Fixed', allAreas: 'All areas',
+  passed: 'Confirmed', being_investigated: 'Investigating', fixed: 'Fixed', in: 'fixed in', since: 'seen in', aff: 'affected',
+  none: 'No known issues match.', off: 'The known-issues list is not public right now.', err: 'Could not load the list.',
   nfH: "Don't see your problem?", nfT: 'Send us a report and we will look into it.' },
- pl: { h1: 'Znane problemy', lead: 'Wiemy o tych błędach i pracujemy nad nimi. Nie trzeba ich zgłaszać ponownie.', search: 'Szukaj znanych problemów…', all: 'Wszystkie', open: 'Otwarte', fixedF: 'Naprawione', allAreas: 'Wszystkie obszary',
-  passed: 'Potwierdzony', being_investigated: 'W trakcie badania', fixed: 'Naprawiony', in: 'naprawiono w', since: 'widziano w', none: 'Brak pasujących problemów.', off: 'Lista znanych problemów jest teraz niepubliczna.', err: 'Nie udało się wczytać listy.',
+ pl: { h1: 'Znane problemy', lead: 'Wiemy o nich i nad nimi pracujemy – nie trzeba ich zgłaszać ponownie. Masz ten sam problem? Daj znać na Discordzie w menu „Też mam ten problem”.',
+  search: 'Szukaj znanych problemów…', all: 'Wszystkie', open: 'Otwarte', fixedF: 'Naprawione', allAreas: 'Wszystkie obszary',
+  passed: 'Potwierdzony', being_investigated: 'W trakcie badania', fixed: 'Naprawiony', in: 'naprawiono w', since: 'widziano w', aff: 'dotkniętych',
+  none: 'Brak pasujących problemów.', off: 'Lista znanych problemów jest teraz niepubliczna.', err: 'Nie udało się wczytać listy.',
   nfH: 'Nie widzisz swojego problemu?', nfT: 'Wyślij zgłoszenie, a my to sprawdzimy.' } };
-let items = null, filter = 'all', error = null;
+let items = null, filter = 'open', error = null;
 const $ = id => document.getElementById(id);
+$('nf-ic').append(WOS.icon('report'));
 function draw() {
   const box = $('list'); box.replaceChildren();
-  if (error) return box.append(WOS.el('div', { class: 'empty' }, error === 'off' ? WOS.t('off') : WOS.t('err')));
+  if (error) return box.append(WOS.el('div', { class: 'card empty' }, error === 'off' ? WOS.t('off') : WOS.t('err')));
   if (!items) return;
   const a = $('area'), cur = a.value; a.replaceChildren(new Option(WOS.t('allAreas'), ''));
   [...new Set(items.map(i => i.area).filter(Boolean))].sort().forEach(x => a.add(new Option(x, x))); a.value = cur;
   const ch = $('chips'); ch.replaceChildren();
-  const cnt = k => items.filter(i => k === 'all' || (k === 'fixed') === (i.status === 'fixed')).length;
-  [['all', 'all'], ['open', 'open'], ['fixed', 'fixedF']].forEach(([k, l]) => ch.append(WOS.el('button', { type: 'button', 'aria-pressed': String(filter === k), onclick: () => { filter = k === 'open' ? 'open' : k; draw(); } }, WOS.t(l) + ' (' + (k === 'open' ? items.filter(i => i.status !== 'fixed').length : cnt(k)) + ')')));
+  const n = { all: items.length, open: items.filter(i => i.status !== 'fixed').length, fixed: items.filter(i => i.status === 'fixed').length };
+  [['open', 'open'], ['fixed', 'fixedF'], ['all', 'all']].forEach(([k, l]) => ch.append(WOS.el('button', { type: 'button', 'aria-pressed': String(filter === k), onclick: () => { filter = k; draw(); } }, WOS.t(l) + ' ' + n[k])));
   const q = $('q').value.trim().toLowerCase();
-  const list = items.filter(i => (filter === 'all' || (filter === 'fixed') === (i.status === 'fixed')) && (!a.value || i.area === a.value) && (!q || (i.title + ' ' + (i.area || '')).toLowerCase().includes(q)));
-  if (!list.length) return box.append(WOS.el('div', { class: 'empty' }, WOS.t('none')));
+  const list = items.filter(i => (filter === 'all' || (filter === 'fixed') === (i.status === 'fixed')) && (!a.value || i.area === a.value) && (!q || (i.title + ' ' + (i.area || '')).toLowerCase().includes(q)))
+    .sort((x, y) => (y.status !== 'fixed') - (x.status !== 'fixed') || (y.affected || 0) - (x.affected || 0));
+  if (!list.length) return box.append(WOS.el('div', { class: 'card empty' }, WOS.t('none')));
   list.forEach(i => box.append(WOS.el('div', { class: 'item' },
-    WOS.el('div', {}, WOS.el('b', {}, i.title), WOS.el('span', { class: 'm' }, [i.area, i.reported_in ? WOS.t('since') + ' ' + i.reported_in : '', i.fixed_in ? WOS.t('in') + ' ' + i.fixed_in : ''].filter(Boolean).join(' · '))),
+    WOS.el('div', {}, WOS.el('b', {}, i.title), WOS.el('span', { class: 'm' },
+      ...(i.affected && i.status !== 'fixed' ? [WOS.el('span', { class: 'aff' }, '👥 ' + (i.affected + 1) + ' ' + WOS.t('aff')), ' · '] : []),
+      [i.area, i.reported_in ? WOS.t('since') + ' ' + i.reported_in : '', i.fixed_in ? WOS.t('in') + ' ' + i.fixed_in : ''].filter(Boolean).join(' · '))),
     WOS.el('span', { class: 'st ' + i.status }, WOS.t(i.status)))));
 }
-WOS.init(S).then(async cfg => {
+WOS.init(S).then(async () => {
   try { items = (await WOS.api('/public/known-issues')).items; } catch (e) { error = e.status === 404 ? 'off' : 'err'; }
+  if (items && !items.some(i => i.status !== 'fixed')) filter = 'all';
   WOS.onLang.push(draw); draw();
   $('q').oninput = draw; $('area').onchange = draw;
 });

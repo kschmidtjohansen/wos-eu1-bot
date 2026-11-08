@@ -1296,6 +1296,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                                   "known_issues": bool(store.cfg("known_issues_enabled")),
                                   "changelog": bool(store.cfg("changelog_enabled")),
                                   "giftcodes": bool(store.cfg("giftcodes_enabled")),
+                                  "ideas": bool(store.cfg("changelog_enabled")),
                                   "areas": store.area_list(), "version": store.cfg("game_version") or "",
                                   "limits": {"files": MAX_FILES, "file_mb": MAX_FILE // 2**20,
                                              "title": [5, 100], "description": [20, 1800]}},
@@ -1404,6 +1405,12 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if not store.cfg("changelog_enabled"):
             raise ApiError(404, "The changelog is switched off.")
         return web.json_response({"items": store.changelog(20)}, headers={"Cache-Control": "max-age=60"})
+
+    @routes.get("/public/ideas")
+    async def public_ideas(request):
+        if not store.cfg("changelog_enabled"):
+            raise ApiError(404, "The changelog is switched off.")
+        return web.json_response({"items": store.ideas_added()}, headers={"Cache-Control": "max-age=60"})
 
     @routes.get("/public/known-issues")
     async def public_known(request):

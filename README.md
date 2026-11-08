@@ -169,6 +169,16 @@ title, description, contact`, files as `file`).
   top reporters. `/digest` (admins) or the dashboard button posts it right now. If the bot was offline at the scheduled
   time it catches up within 36 hours, otherwise it skips that week.
 
+## The website as a phone app
+The player website (`site/`) can be installed like an app: an icon on the home screen, full screen, a bottom tab bar,
+and it still opens offline with the gift codes and known issues it loaded last time.
+- **Android (Chrome):** an *Install app* button appears in the header and on the home page.
+- **iPhone (Safari):** tap Share → *Add to Home Screen* (the button shows these steps).
+- **Needs HTTPS.** Browsers only allow installing and offline mode on `https://` addresses. With a plain IP address
+  (`http://1.2.3.4/bugs/`) the site still works, but it can't be installed. Point a domain at the server and add a free
+  certificate (for example `sudo certbot --nginx -d bugs.example.com`).
+- After changing the list of files in `site/`, bump `VERSION` in `site/sw.js` so phones pick up the new files.
+
 ## What the dashboard does
 - **Bugs:** all reports with search, status filter, a detail window (read, rename, change status, close as
   duplicate, message the reporter with a ready-made reply, history) and CSV export of bugs/suggestions.

@@ -1,46 +1,36 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gift codes – WOS EU1</title><link rel="stylesheet" href="style.css"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gift codes – WOS EU1</title><meta name="theme-color" content="#060c17"><meta name="description" content="Active gift codes for the WOS EU1 server – tap to copy.">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="WOS EU1">
+<link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css"></head><body>
 <main>
-  <div class="crumb"><a href="index.html" data-i="nav_home"></a> › <span data-i="nav_codes"></span></div>
   <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
-  <div id="box" aria-live="polite"><div class="skel"></div><div class="skel"></div></div>
-  <div class="card sec notify" id="notify"><div><h3 data-i="nH"></h3><span class="muted" data-i="nT"></span></div><a class="btn pri" id="dc" rel="noopener" data-i="nB"></a></div>
+  <div id="box" aria-live="polite"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+  <section class="sec card banner" id="notify">
+    <div><span class="ic" id="n-ic"></span><div><h3 data-i="nH"></h3><span class="muted" data-i="nT"></span></div></div>
+    <a class="btn pri" id="dc" rel="noopener" data-i="nB"></a></section>
 </main>
 <script src="config.js"></script><script src="app.js"></script>
 <script>
 const S = {
- en: { h1: 'Gift codes', lead: 'Redeem these codes in the game for free rewards. Press Copy, then paste the code in the game.', newH: 'New', allH: 'Active codes', copy: 'Copy', copied: 'Copied ✓',
-  left: 'Expires in', never: 'Never expires', d: 'd', h: 'h', m: 'min', none: 'There are no active gift codes right now – check back soon!',
-  off: 'Gift codes are not shown here right now.', err: 'Could not load the gift codes.', nH: 'Never miss a code', nT: 'New codes are announced on our Discord the moment they go live.', nB: 'Join our Discord' },
- pl: { h1: 'Kody prezentowe', lead: 'Wpisz te kody w grze, aby odebrać darmowe nagrody. Naciśnij Kopiuj i wklej kod w grze.', newH: 'Nowe', allH: 'Aktywne kody', copy: 'Kopiuj', copied: 'Skopiowano ✓',
-  left: 'Wygasa za', never: 'Nie wygasa', d: 'd', h: 'godz.', m: 'min', none: 'Obecnie nie ma aktywnych kodów – zajrzyj wkrótce!',
-  off: 'Kody prezentowe nie są teraz tutaj pokazywane.', err: 'Nie udało się wczytać kodów.', nH: 'Nie przegap żadnego kodu', nT: 'Nowe kody ogłaszamy na naszym Discordzie, gdy tylko się pojawią.', nB: 'Dołącz do Discorda' } };
+ en: { h1: 'Gift codes', lead: 'Free rewards for everyone. Tap Copy, then paste the code in the game under Settings › Gift code.', newH: 'New', newT: 'Added in the last day',
+  allH: 'Still working', none: 'No active codes right now. New ones are posted on Discord first.',
+  off: 'Gift codes are not shown here right now.', err: 'Could not load the gift codes.', nH: 'Never miss a code', nT: 'New codes are posted on our Discord the moment they go live.', nB: 'Join our Discord' },
+ pl: { h1: 'Kody prezentowe', lead: 'Darmowe nagrody dla wszystkich. Stuknij Kopiuj i wklej kod w grze w Ustawienia › Kod prezentowy.', newH: 'Nowe', newT: 'Dodane w ciągu ostatniego dnia',
+  allH: 'Nadal działają', none: 'Obecnie nie ma aktywnych kodów. Nowe publikujemy najpierw na Discordzie.',
+  off: 'Kody prezentowe nie są teraz tutaj pokazywane.', err: 'Nie udało się wczytać kodów.', nH: 'Nie przegap żadnego kodu', nT: 'Nowe kody publikujemy na Discordzie, gdy tylko się pojawią.', nB: 'Dołącz do Discorda' } };
 let data = null, error = null;
 const $ = id => document.getElementById(id);
-function left(ts) {
-  if (!ts) return WOS.t('never');
-  const s = Math.max(0, ts - Date.now() / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
-  return WOS.t('left') + ' ' + (d ? d + ' ' + WOS.t('d') + ' ' + h + ' ' + WOS.t('h') : h ? h + ' ' + WOS.t('h') + ' ' + m + ' ' + WOS.t('m') : m + ' ' + WOS.t('m'));
-}
-async function copy(text, btn) {
-  try { await navigator.clipboard.writeText(text); }
-  catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.append(t); t.select(); try { document.execCommand('copy'); } catch (x) { /* ignore */ } t.remove(); }
-  btn.textContent = WOS.t('copied'); btn.classList.add('ok'); setTimeout(() => { btn.textContent = WOS.t('copy'); btn.classList.remove('ok'); }, 1600);
-}
-function card(c) {
-  const b = WOS.el('button', { class: 'btn copy', type: 'button' }, WOS.t('copy')); b.onclick = () => copy(c.code, b);
-  const cv = WOS.el('div', { class: 'cv' }, c.code); if (c.new) cv.append(WOS.el('span', { class: 'tag' }, WOS.t('newBadge')));
-  return WOS.el('div', { class: 'code' + (c.new ? ' new' : '') }, WOS.el('div', {}, cv,
-    ...(c.reward ? [WOS.el('div', { class: 'rw' }, c.reward)] : []), WOS.el('div', { class: 'ex' }, left(c.expires))), b);
-}
+$('n-ic').append(WOS.icon('chat'));
 function draw() {
   const box = $('box'); box.replaceChildren();
-  if (error) return box.append(WOS.el('div', { class: 'empty' }, WOS.t(error)));
+  if (error) return box.append(WOS.el('div', { class: 'card empty' }, WOS.t(error)));
   if (!data) return;
   const fresh = data.items.filter(c => c.new), rest = data.items.filter(c => !c.new);
   if (!data.items.length) return box.append(WOS.el('div', { class: 'card empty' }, WOS.t('none')));
-  if (fresh.length) box.append(WOS.el('h2', {}, '🆕 ' + WOS.t('newH')), WOS.el('div', { class: 'codes' }, fresh.map(card)));
-  if (rest.length) box.append(WOS.el('h2', { style: 'margin-top:' + (fresh.length ? '30px' : '0') }, WOS.t('allH')), WOS.el('div', { class: 'codes' }, rest.map(card)));
+  if (fresh.length) box.append(WOS.el('div', { class: 'sec-h' }, WOS.el('h2', {}, WOS.t('newH')), WOS.el('p', { class: 'muted' }, WOS.t('newT'))), WOS.el('div', { class: 'tickets' }, fresh.map(c => WOS.ticket(c))));
+  if (rest.length) box.append(WOS.el('div', { class: 'sec-h', style: fresh.length ? 'margin-top:36px' : '' }, WOS.el('h2', {}, WOS.t('allH')), WOS.el('p', { class: 'muted' }, String(rest.length))), WOS.el('div', { class: 'codes' }, rest.map(c => WOS.ticket(c, true))));
 }
 WOS.init(S).then(async () => {
   const C = window.WOS_CONFIG || {};
@@ -48,6 +38,6 @@ WOS.init(S).then(async () => {
   try { data = await WOS.api('/public/giftcodes'); WOS.markCodesSeen(Math.max(0, ...data.items.map(c => c.added))); }
   catch (e) { error = e.status === 404 ? 'off' : 'err'; }
   WOS.onLang.push(draw); draw();
-  setInterval(draw, 60000);   // keep "expires in" fresh
+  setInterval(draw, 60000);
 });
 </script></body></html>
