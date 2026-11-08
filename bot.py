@@ -789,7 +789,7 @@ async def submit_bug(member: discord.Member, text: str, atts, details=None):
 
     try:
         files = [await a.to_file() for a in small]
-        msg = await channel.send(embed=bug_embed(r), files=files)
+        msg = await channel.send(embed=bug_embed(r), files=files, view=DupView())
     except discord.Forbidden:
         drop()
         raise
@@ -800,7 +800,7 @@ async def submit_bug(member: discord.Member, text: str, atts, details=None):
         set_bug(bug_id, extra=links)
         r = get_bug(bug_id)
         try:
-            msg = await channel.send(embed=bug_embed(r))
+            msg = await channel.send(embed=bug_embed(r), view=DupView())
         except discord.HTTPException:
             drop()
             raise
@@ -824,7 +824,7 @@ async def submit_suggestion(member: discord.Member, text: str):
     db.commit()
     sid = cur.lastrowid
     try:
-        msg = await channel.send(embed=suggestion_embed(store.get_suggestion(sid)))
+        msg = await channel.send(embed=suggestion_embed(store.get_suggestion(sid)), view=TranslateView())
     except discord.HTTPException:
         db.execute("DELETE FROM suggestions WHERE id=?", (sid,))
         db.commit()
@@ -884,9 +884,9 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
         note = f"Passed by {who}"
         try:
             files = [await a.to_file() for a in msg.attachments]
-            admin_msg = await admin.send(embed=bug_embed(r, note), files=files)
+            admin_msg = await admin.send(embed=bug_embed(r, note), files=files, view=DupView())
         except discord.HTTPException:
-            admin_msg = await admin.send(embed=bug_embed(r, note))
+            admin_msg = await admin.send(embed=bug_embed(r, note), view=DupView())
         set_bug(r["id"], admin_msg_id=admin_msg.id)
         for e in (ADMIN_INVESTIGATING_EMOJI, ADMIN_FIXED_EMOJI, ADMIN_REJECT_EMOJI):
             await admin_msg.add_reaction(e)
@@ -1445,7 +1445,7 @@ class WosBot(discord.Client):
         self.add_view(GiftCopyView())  # ...and the Copy button under gift codes
         self.add_view(GiftListView())  # ...and the Link button under the gift-codes list
         self.add_view(BoardView())     # ...and the Known issues menu
-        self.add_view(DupView())       # ...and the duplicate buttons on bug posts
+        self.add_view(DupView("all"))  # ...and the duplicate + Translate buttons on bug posts
         await self.tree.sync(guild=discord.Object(id=GUILD_ID))
         if not reminder_loop.is_running():
             reminder_loop.start()
@@ -1499,6 +1499,7 @@ class WosBot(discord.Client):
             await safe_refresh_gift_list()
             await safe_refresh_board()
             start_redeem()
+            asyncio.create_task(safe_task(add_translate_buttons(), "translate buttons"))
             if not await cache_invites():
                 log_event("system", "Invite tracker: give the bot the “Manage Server” permission so it can see who invited whom.", None, brand())
             try:
@@ -1512,6 +1513,11 @@ class WosBot(discord.Client):
 
     async def on_interaction(self, interaction: discord.Interaction):
         cid = (interaction.data or {}).get("custom_id", "") if interaction.type == discord.InteractionType.component else ""
+        if cid == "tr:item":
+            try:
+                await handle_translate_button(interaction)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[translate button] {exc!r}")
         if cid.startswith("rm:"):
             try:
                 await handle_role_menu(interaction)
@@ -1696,9 +1702,9 @@ async def apply_bug_status(r, new: str, actor_name: str, actor_id: Optional[int]
             except discord.HTTPException:
                 files = []
         try:
-            admin_msg = await admin.send(embed=bug_embed(r, note), files=files)
+            admin_msg = await admin.send(embed=bug_embed(r, note), files=files, view=DupView())
         except discord.HTTPException:
-            admin_msg = await admin.send(embed=bug_embed(r, note))
+            admin_msg = await admin.send(embed=bug_embed(r, note), view=DupView())
         set_bug(r["id"], admin_msg_id=admin_msg.id)
         r = get_bug(r["id"])
     await sync_bug_messages(r, note)
@@ -1879,9 +1885,9 @@ async def submit_web_report(f: dict, files: list) -> int:
     r = get_bug(bug_id)
     try:
         try:
-            msg = await channel.send(embed=bug_embed(r), files=[discord.File(io.BytesIO(d), filename=n) for n, d in files])
+            msg = await channel.send(embed=bug_embed(r), files=[discord.File(io.BytesIO(d), filename=n) for n, d in files], view=DupView())
         except discord.HTTPException:
-            msg = await channel.send(embed=bug_embed(r))      # file upload refused: still deliver the report
+            msg = await channel.send(embed=bug_embed(r), view=DupView())      # file upload refused: still deliver the report
         set_bug(bug_id, msg_id=msg.id)
         for emoji in [PASS_EMOJI] + ([INVESTIGATE_EMOJI] if cfg("investigate_enabled") else []) + [REJECT_EMOJI]:
             await msg.add_reaction(emoji)
@@ -3164,17 +3170,104 @@ async def prompt_reason(channel, kind: str, item_id: int, member, new: str):
 
 
 # ------------------------------------------------------------ automatic duplicate detection
+def translate_button() -> discord.ui.Button:
+    """🌐 Translate under bug and suggestion posts – handled in on_interaction (custom_id tr:item)."""
+    return discord.ui.Button(label="Translate", emoji="🌐", style=discord.ButtonStyle.secondary, custom_id="tr:item", row=1)
+
+
+class TranslateView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(translate_button())
+
+
+def item_for_message(msg_id: int):
+    """('bug' | 'suggestion', row) for a bot post in the mod/admin channel, or (None, None)."""
+    r = get_bug_by_msg(msg_id) or store.get_bug_by_admin_msg(msg_id)
+    if r is not None:
+        return "bug", r
+    r = store.get_suggestion_by_msg(msg_id)
+    return ("suggestion", r) if r is not None else (None, None)
+
+
+async def translate_item(kind: str, r, target: str):
+    """Translate a report's own text (not the embed around it). Only runs when someone presses Translate."""
+    text = r["text"] or ""
+    if not worth_translating(text):
+        return None, ""
+    return await translate.text(text, target)
+
+
+async def handle_translate_button(interaction: discord.Interaction):
+    lg = ilang(interaction)
+    kind, r = item_for_message(interaction.message.id) if interaction.message else (None, None)
+    if r is None:
+        return await interaction.response.send_message("I can't find this report any more.", ephemeral=True)
+    if not translate.key():
+        return await interaction.response.send_message(
+            "Translation isn't set up yet – an admin adds the Google key on the dashboard's Translations page.", ephemeral=True)
+    target = str(interaction.locale or "en").lower()
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        out, src = await translate_item(kind, r, target)
+    except translate.TranslateError as exc:
+        return await interaction.followup.send(T("tr.limit", lg) if "limit" in str(exc) else f"⚠️ {exc}", ephemeral=True)
+    if out is None:
+        return await interaction.followup.send(T("tr.empty", lg), ephemeral=True)
+    if translate.same_language(src, target):
+        return await interaction.followup.send(T("tr.same", lg, language=lang_label(src)), ephemeral=True)
+    name = f"Bug #{r['id']}" if kind == "bug" else f"Suggestion #{r['id']}"
+    e = discord.Embed(title=f"🌐 {name}", description=out[:4000], color=0x5865F2, url=interaction.message.jump_url)
+    e.set_footer(text=f"{lang_label(src)} → {lang_label(target)} · only you can see this")
+    await interaction.followup.send(embed=e, ephemeral=True)
+
+
+async def safe_task(coro, label: str):
+    try:
+        await coro
+    except Exception as exc:  # noqa: BLE001
+        print(f"[{label}] {exc!r}")
+
+
+async def add_translate_buttons():
+    """Once after the update: put 🌐 Translate under the open bugs and suggestions that were posted before it."""
+    if get_raw("translate_buttons_v1"):
+        return
+    put_raw("translate_buttons_v1", "1")
+    mod, admin = chan("mod_channel_id"), chan("admin_channel_id")
+    marks = ",".join("?" * len(store.OPEN_STATUSES))
+    for r in store.db.execute(f"SELECT * FROM bug_reports WHERE status IN ({marks}) ORDER BY id DESC LIMIT 150",
+                              store.OPEN_STATUSES).fetchall():
+        for ch, mid, view in ((mod, r["msg_id"], DupView("confirm", r["dup_suggest"])
+                               if r["dup_suggest"] and not r["duplicate_of"] and r["status"] in MOD_OPEN else DupView()),
+                              (admin, r["admin_msg_id"], DupView())):
+            if ch is not None and mid:
+                try:
+                    await ch.get_partial_message(mid).edit(view=view)
+                except discord.HTTPException:
+                    pass
+    for r in store.db.execute("SELECT * FROM suggestions WHERE status='new' ORDER BY id DESC LIMIT 100").fetchall():
+        if mod is not None and r["msg_id"]:
+            try:
+                await mod.get_partial_message(r["msg_id"]).edit(view=TranslateView())
+            except discord.HTTPException:
+                pass
+
+
 class DupView(discord.ui.View):
-    """Buttons on a bug in the mod channel: confirm a suspected duplicate, or reopen one closed automatically."""
+    """Buttons on a bug in the mod channel: confirm a suspected duplicate, or reopen one closed automatically.
+    Always carries the 🌐 Translate button too."""
 
     def __init__(self, show: Optional[str] = None, target: Optional[int] = None):
         super().__init__(timeout=None)
         if target:
             self.confirm.label = f"Close as duplicate of #{target}"
-        if show == "confirm":
-            self.remove_item(self.reopen)
-        elif show == "reopen":
-            self.remove_item(self.confirm)
+        if show != "all":
+            if show != "confirm":
+                self.remove_item(self.confirm)
+            if show != "reopen":
+                self.remove_item(self.reopen)
+        self.add_item(translate_button())
 
     @discord.ui.button(label="Close as duplicate", emoji="🔁", style=discord.ButtonStyle.secondary, custom_id="dup:confirm")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -3182,7 +3275,7 @@ class DupView(discord.ui.View):
         if not is_mod(interaction.user) or r is None:
             return await interaction.response.send_message("Only moderators can do this.", ephemeral=True)
         if r["status"] not in MOD_OPEN or not r["dup_suggest"]:
-            return await interaction.response.edit_message(view=None)
+            return await interaction.response.edit_message(view=DupView())
         await interaction.response.send_modal(ReasonModal("bug", r["id"], "rejected", dup_first=True))
 
     @discord.ui.button(label="Not a duplicate – reopen", emoji="↩️", style=discord.ButtonStyle.secondary, custom_id="dup:reopen")
@@ -3193,7 +3286,7 @@ class DupView(discord.ui.View):
         await interaction.response.defer()
         await reopen_bug(r, interaction.user.display_name, interaction.user.id)
         try:
-            await interaction.message.edit(view=None)
+            await interaction.message.edit(view=DupView())
         except discord.HTTPException:
             pass
 

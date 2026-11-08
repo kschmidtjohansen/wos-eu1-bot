@@ -298,6 +298,10 @@
 .w-sugbody{flex:1;min-width:0}
 .w-sughead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
 .w-sughead .w-badge{margin-left:auto}
+.w-tr{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 4px}
+.w-tr .w-select{width:auto;min-width:0;padding-top:5px;padding-bottom:5px;font-size:13px}
+.w-trout{margin-top:6px;border-left:3px solid var(--w-ice,#7de3f4);padding:8px 12px;border-radius:0 10px 10px 0;background:rgba(125,227,244,.07);white-space:pre-wrap;overflow-wrap:anywhere}
+.w-trout small{display:block;color:var(--w-muted);font-size:12px;margin-bottom:4px}
 .w-sugtext{white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:10px;max-height:9.5em;overflow:auto}
 .w-meter{margin-bottom:14px}
 .w-meter-top{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-bottom:6px}
@@ -1297,6 +1301,17 @@ function reasonBox(id, keys, value) {
 }
 const STATUS_BTNS = [['passed', 'Pass to admins'], ['being_investigated', 'Being investigated'], ['fixed', 'Mark fixed'],
   ['admin_rejected', 'Reject (admins)'], ['rejected', 'Reject (closed)']];
+// 🌐 Translate a report or suggestion – only when someone presses the button (it uses the Google key).
+const TR_LANGS = [['en', 'English'], ['da', 'Dansk'], ['de', 'Deutsch'], ['fr', 'Français'], ['es', 'Español'], ['it', 'Italiano'], ['nl', 'Nederlands'],
+  ['sv', 'Svenska'], ['no', 'Norsk'], ['pl', 'Polski'], ['pt', 'Português'], ['ro', 'Română'], ['tr', 'Türkçe'], ['ru', 'Русский'], ['uk', 'Українська'], ['ar', 'العربية']];
+function trTarget() { let t = ''; try { t = localStorage.getItem('wosd.trlang') || ''; } catch (e) { /* private mode */ } return t || 'en'; }
+function trBox(kind, id) {
+  const k = kind + ':' + id, r = (S.trans || {})[k], tg = trTarget();
+  return html`<div class="w-tr"><button class="w-btn small" data-act="trItem" data-kind="${kind}" data-id="${id}">🌐 Translate</button>
+    <label class="w-hint" style="display:inline-flex;align-items:center;gap:6px">to <select class="w-select" data-act-change="trLang" aria-label="Translate to">${TR_LANGS.map(l => html`<option value="${l[0]}" ${l[0] === tg ? 'selected' : ''}>${l[1]}</option>`)}</select></label></div>
+    ${r ? html`<div class="w-trout"><small>${r.same ? 'Already in ' + (TR_LANGS.find(l => l[0] === r.target) || ['', r.target])[1] + ' – nothing to translate.' : '🌐 Translated from ' + (r.source_name || r.source || '?')}</small>${r.same ? '' : r.text}</div>` : ''}`;
+}
+
 function bugModal() {
   const b = S.detail; if (!b) return '';
   const replies = S.replies || [];
@@ -1304,6 +1319,7 @@ function bugModal() {
     <div class="w-modal-head"><h3>Bug #${b.id}</h3>${bugBadge(b.status)}${b.votes ? html`<span class="w-badge info" title="Players who picked “I have this too”">👥 ${b.votes} affected</span>` : ''}<button class="w-btn small" data-act="closeModal" id="m-close">Close</button></div>
     <div class="w-sub" style="margin-bottom:10px">Reported by <b>${b.reporter || (b.source === 'web' ? (b.chief_name || 'a player') + ' (website)' : 'unknown')}</b> · ${full(b.created_at)}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}${b.announced ? ' · announced in patch notes' : ''}</div>
     <div class="w-pre">${b.text}</div>
+    ${trBox('bugs', b.id)}
     ${(b.chief_name || b.uid || b.contact) ? html`<div class="w-sub" style="margin-top:8px">In-game: <b>${b.chief_name || '–'}</b> · UID <b>${b.uid || '–'}</b>${b.contact ? ' · Contact: ' + b.contact : ''}${b.linked && b.linked.length ? ' · Discord: ' + b.linked.map(l => l.name).join(', ') : ''}</div>` : ''}
     ${b.files && b.files.length ? html`<div class="w-files" id="m-files">${b.files.map(f => html`<button class="w-file" data-act="openFile" data-fid="${f.id}" data-kind="${f.kind}" title="${f.name}">${f.kind === 'video' ? icon('play') : html`<img alt="${f.name}" data-fid="${f.id}">`}</button>`)}</div>` : ''}
     ${b.extra ? html`<div class="w-sub" style="margin-top:8px">Attachment links:</div><div class="w-pre">${b.extra}</div>` : ''}
@@ -1831,6 +1847,7 @@ function sugList() {
     <div class="w-sugbody"><div class="w-sughead"><b>#${x.id}</b> <span class="w-sub">${x.author} · <time title="${full(x.created_at)}">${ago(x.created_at)}</time></span>
       <span class="w-badge ${SUG_BADGE[x.status]}">${SUG_LABEL[x.status]}</span></div>
       <p class="w-sugtext">${x.text}</p>
+      ${trBox('suggestions', x.id)}
       ${x.status === 'rejected' && x.reason ? html`<div class="w-hint" style="margin:-4px 0 10px">💬 Reason sent: ${x.reason}</div>` : ''}
       ${x.status === 'new' ? html`<div class="w-changes" id="rej-${x.id}" hidden><label class="w-label" for="rr-${x.id}">Why are you rejecting it?</label>${reasonBox('rr-' + x.id, SUG_REASON_KEYS, '')}
         <div class="w-inline" style="margin-top:8px"><span class="w-hint">The player gets this reason in their DM.</span><div class="w-spacer"></div><button class="w-btn small danger" data-act="sugDecide" data-id="${x.id}" data-s="rejected">Reject with this reason</button></div></div>` : ''}
@@ -2775,6 +2792,15 @@ root.addEventListener('click', async e => {
       const box = $('#rej-' + el.dataset.id);
       if (box) { box.hidden = !box.hidden; if (!box.hidden) $('#rr-' + el.dataset.id).focus(); }
     }
+    else if (act === 'trItem') {
+      const kind = el.dataset.kind, id = el.dataset.id, target = trTarget();
+      busy(el, true, 'Translating…');
+      try {
+        const r = await call('POST', '/api/' + kind + '/' + id + '/translate', { target });
+        S.trans = S.trans || {}; S.trans[kind + ':' + id] = Object.assign({ target }, r);
+        busy(el, false); kind === 'bugs' && S.detail && String(S.detail.id) === id ? showModal() : renderMain();
+      } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
     else if (act === 'bugReply') {
       const text = $('#m-reply').value.trim();
       if (!text) return toast('Write a message first.', 'err');
@@ -2943,6 +2969,10 @@ function onInput(e) {
   } else if (el.id === 'bugver') {
     clearTimeout(logTimer); logTimer = setTimeout(() => { S.bugs.version = el.value.trim(); loadBugs(true); }, 300);
   } else if (el.id === 'tm-kind') { tmCollect(); S.tmEdit.kind = el.value; renderMain();
+  } else if (el.dataset.actChange === 'trLang') {
+    if (e.type !== 'change') return;
+    try { localStorage.setItem('wosd.trlang', el.value); } catch (err) { /* private mode */ }
+    document.querySelectorAll('[data-act-change="trLang"]').forEach(x => { x.value = el.value; });
   } else if (el.id === 'm-canned') {
     const r = (S.replies || []).find(x => String(x.id) === el.value); if (r) $('#m-reply').value = r.text;
   } else if (el.id === 'logauto') { S.log.auto = el.checked; }
@@ -3216,6 +3246,8 @@ function makeMock() {
       ids.forEach(id => { const i = bugs.findIndex(b => b.id === id); if (i >= 0) { bugs.splice(i, 1); n++; } });
       addLog('admin', 'Deleted ' + n + ' bug' + (n === 1 ? '' : 's') + ' from the dashboard'); return { deleted: n };
     }
+    const tm = p.match(/^\/api\/(bugs|suggestions)\/(\d+)\/translate$/);
+    if (tm) return { text: '(Demo) This is where the report appears in ' + ((TR_LANGS.find(l => l[0] === body.target) || ['', body.target])[1]) + '. In the real dashboard Google translates the player\'s own words.', source: 'de', source_name: 'Deutsch', same: body.target === 'de' };
     let m = p.match(/^\/api\/bugs\/(\d+)(\/reply)?$/);
     if (m && method === 'DELETE') { const i = bugs.findIndex(x => x.id === +m[1]); if (i < 0) throw new Error('Bug not found.'); bugs.splice(i, 1); addLog('admin', 'Deleted bug #' + m[1]); return { deleted: 1 }; }
     if (m) {

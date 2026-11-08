@@ -122,7 +122,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
 
     AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout"}
     MOD_WRITE = [("POST", r"/api/cases/warn"), ("POST", r"/api/cases/\d+/pardon"), (None, r"/api/giveaways(/\d+/(end|reroll))?"),
-                 ("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("PUT", r"/api/suggestions/\d+"),
+                 ("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/(bugs|suggestions)/\d+/translate"), ("PUT", r"/api/suggestions/\d+"),
                  (None, r"/api/replies(/\d+)?"), (None, r"/api/blocklist(/\d+)?"), ("DELETE", r"/api/webblocks")]
     MOD_HIDDEN = [r"/api/backups/.*", r"/api/auth/settings", r"/api/translate", r"/api/drive/.*", r"/api/redeem.*",
                   r"/api/modstats", r"/api/stickers.*", r"/api/emojis.*", r"/api/push.*", r"/api/weekly"]
@@ -1279,6 +1279,34 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if r is None:
             raise ApiError(404, "Suggestion not found.")
         return r
+
+    @routes.post("/api/bugs/{id}/translate")
+    async def translate_bug(request):
+        return await translate_report(request, "bugs")
+
+    @routes.post("/api/suggestions/{id}/translate")
+    async def translate_suggestion(request):
+        return await translate_report(request, "suggestions")
+
+    async def translate_report(request, kind):
+        """Translate one bug report or suggestion – only when a staff member presses Translate."""
+        import translate
+        import texts
+        r = (bug_or_404 if kind == "bugs" else sug_or_404)(int_param(request, "id"))
+        if not translate.key():
+            raise ApiError(400, "Translation isn't set up yet – an admin adds the Google key on the Translations page.")
+        data = await body_json(request)
+        target = str(data.get("target") or "en").strip().lower()
+        if not re.fullmatch(r"[a-z]{2,3}(-[a-z0-9]{2,4})?", target):
+            raise ApiError(400, "Unknown language.")
+        if len(re.sub(r"[\W\d_]+", "", r["text"] or "")) < 2:
+            return web.json_response({"text": "", "source": "", "same": True})
+        try:
+            out, src = await translate.text(r["text"], target)
+        except translate.TranslateError as exc:
+            raise ApiError(400, str(exc))
+        return web.json_response({"text": out, "source": src, "source_name": texts.lang_name(src.split("-")[0]) if src else "",
+                                  "same": translate.same_language(src, target)})
 
     @routes.put("/api/suggestions/{id}")
     async def put_suggestion(request):
