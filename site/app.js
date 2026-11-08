@@ -164,7 +164,8 @@
     document.body.prepend(W.el('a', { class: 'skip', href: '#main', 'data-i': 'skip' }), hdr);
     const ftr = W.el('footer', {}, W.el('div', { class: 'ftr' }, W.el('span', {}, W.t('rights') + ' ' + (C.SERVER_NAME || '')),
       W.el('nav', {}, ...(C.STATUS_URL ? [W.el('a', { href: C.STATUS_URL, 'data-i': 'status' })] : []), ...(C.DISCORD_URL ? [W.el('a', { href: C.DISCORD_URL, rel: 'noopener', 'data-i': 'discord' })] : []))));
-    document.body.append(ftr, tabs);
+    hdr.append(tabs);                 // on phones the tabs sit in the header at the top (the browser's bar covers the bottom)
+    document.body.append(ftr);
     document.getElementById('lang-btn').onclick = () => { W.lang = W.lang === 'en' ? 'pl' : 'en'; try { localStorage.setItem('wos.lang', W.lang); } catch (e) { /* ignore */ } W.apply(); };
     const m = document.querySelector('main'); if (m) m.id = 'main';
     // a little snow, never for people who prefer less motion

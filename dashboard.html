@@ -594,25 +594,25 @@
 .w-loginlogo{display:block;width:64px;height:64px;border-radius:18px;box-shadow:0 0 0 1px var(--w-border-strong),0 14px 34px -12px var(--w-accent)}
 .w-login .w-beam{background:conic-gradient(from var(--w-ang,0deg),transparent 0 75%,var(--w-accent) 86%,#fff 91%,transparent 96%)}
 @media (max-width:860px){
-  .wosd{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
   .w-side{flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px}
   .w-side .w-nav,.w-side .w-sidefoot,.w-side .w-me{display:none}
   .w-side .w-brand{flex:1;min-width:0}
   .w-side .w-status{order:3;flex-basis:100%}
   .w-side .w-search-btn{width:auto;padding:8px 10px}
   .w-side .w-search-btn span,.w-side .w-search-btn kbd{display:none}
-  .w-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:900;padding:6px 6px calc(6px + env(safe-area-inset-bottom));
-    background:rgba(8,14,26,.9);-webkit-backdrop-filter:blur(18px) saturate(140%);backdrop-filter:blur(18px) saturate(140%);border-top:1px solid var(--w-border)}
+  /* phone menu sits at the top (the browser's own bar covers the bottom of the screen) */
+  .w-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:sticky;top:0;z-index:900;margin:-12px -12px 12px;padding:calc(6px + env(safe-area-inset-top)) 6px 6px;
+    background:rgba(8,14,26,.9);-webkit-backdrop-filter:blur(18px) saturate(140%);backdrop-filter:blur(18px) saturate(140%);border-bottom:1px solid var(--w-border);border-radius:0 0 18px 18px}
   .w-tabbar button{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;border:0;border-radius:14px;background:none;color:var(--w-muted);font-size:11.5px;font-weight:650;cursor:pointer;min-width:0}
   .w-tabbar button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .w-tabbar .w-ic{width:22px;height:22px}
   .w-tabbar button[aria-current="page"]{color:var(--w-text);background:var(--w-accent-soft)}
   .w-tabbar button[aria-current="page"] .w-ic{color:var(--w-accent)}
   .w-tabbar .w-count{position:absolute;top:2px;right:calc(50% - 26px);font-size:10.5px;min-width:18px;padding:0 5px}
-  .w-sheetbg{position:fixed;inset:0;z-index:950;background:rgba(3,7,14,.55);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);display:flex;align-items:flex-end}
-  .w-sheet{width:100%;max-height:82vh;overflow:auto;padding:10px 14px calc(16px + env(safe-area-inset-bottom));border-radius:24px 24px 0 0;background:var(--w-surface-solid);border-top:1px solid var(--w-border-strong);animation:w-up .2s ease-out}
-  @keyframes w-up{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}
-  .w-grab{display:block;width:44px;height:5px;border-radius:5px;background:var(--w-border-strong);margin:2px auto 12px}
+  .w-sheetbg{position:fixed;inset:0;z-index:950;background:rgba(3,7,14,.55);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start}
+  .w-sheet{width:100%;max-height:82vh;overflow:auto;padding:calc(14px + env(safe-area-inset-top)) 14px 10px;border-radius:0 0 24px 24px;background:var(--w-surface-solid);border-bottom:1px solid var(--w-border-strong);animation:w-down .2s ease-out;display:flex;flex-direction:column}
+  @keyframes w-down{from{transform:translateY(-30px);opacity:.4}to{transform:none;opacity:1}}
+  .w-grab{display:block;width:44px;height:5px;border-radius:5px;background:var(--w-border-strong);margin:12px auto 2px;order:9}
   .w-sheet .w-search-btn{margin-bottom:6px}
   .w-sheet .w-navgroup{display:block;padding:14px 4px 6px}
   .w-sheetgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -621,8 +621,8 @@
   .w-sheetgrid button[aria-current="page"]{border-color:rgba(125,227,244,.45);background:var(--w-accent-soft)}
   .w-sheetgrid button[aria-current="page"] .w-ic{color:var(--w-accent)}
   .w-sheet .w-sidefoot{display:flex;margin-top:16px;padding:14px 0 0}
-  .w-savebar{bottom:calc(80px + env(safe-area-inset-bottom))}
-  .w-toasts{bottom:calc(84px + env(safe-area-inset-bottom))}
+  .w-savebar{bottom:calc(14px + env(safe-area-inset-bottom))}
+  .w-toasts{bottom:calc(18px + env(safe-area-inset-bottom))}
 }
 .wosd ::-webkit-scrollbar{width:10px;height:10px}
 .wosd ::-webkit-scrollbar-thumb{background:var(--w-border-strong);border-radius:10px;border:2px solid transparent;background-clip:content-box}
@@ -2531,7 +2531,7 @@ async function palGo(i) {
 function renderApp() {
   if (isMod() && !MOD_TABS.includes(S.tab)) S.tab = 'overview';
   const o = S.overview, b = o.bot;
-  root.innerHTML = String(html`
+  root.innerHTML = String(html`${tabBar()}
     <div class="w-layout">
       <aside class="w-card w-side">
         <div class="w-brand">
@@ -2550,7 +2550,7 @@ function renderApp() {
         </div>
       </aside>
       <main class="w-main" id="wosd-main" role="tabpanel"></main>
-    </div>${tabBar()}`);
+    </div>`);
   renderTab();
 }
 function renderLogin(error) {
