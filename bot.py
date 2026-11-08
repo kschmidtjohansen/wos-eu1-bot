@@ -1476,6 +1476,8 @@ class WosBot(discord.Client):
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
                          "drive_backup": drive_backup, "fill_translations": fill_translations,
+                         "access_status": access_status, "setup_languages": setup_languages, "setup_access_roles": setup_access_roles,
+                         "post_gate": post_gate, "start_backfill": start_backfill, "lock_server": lock_server, "unlock_server": unlock_server,
                          "publish_info": publish_info, "publish_role_menu": publish_role_menu, "remove_role_menu": remove_role_menu,
                          "warn_member": warn_member, "start_giveaway": start_giveaway, "end_giveaway": end_giveaway, "send_timer": send_timer, "push_key": lambda: vapid_keys()[1] if push_ready() else None, "push_send": push_send, "post_weekly": post_weekly, "invite_perm": lambda: bool(_invite_uses) or bool(bot.get_guild(GUILD_ID) and bot.get_guild(GUILD_ID).me.guild_permissions.manage_guild), "sticker_status": sticker_status, "install_stickers": install_stickers, "emoji_status": emoji_status, "install_emojis": install_emojis, "suggestion_changes": post_suggestion_changes, "refresh_gift_list": safe_refresh_gift_list, "add_gift_codes": add_gift_codes,
                          "refresh_board": safe_refresh_board, "redeem_one": redeem_one, "start_redeem": start_redeem,
@@ -1503,6 +1505,8 @@ class WosBot(discord.Client):
             await safe_refresh_board()
             start_redeem()
             asyncio.create_task(safe_task(add_translate_buttons(), "translate buttons"))
+            if (access_cfg().get("backfill") or {}).get("state") == "running":
+                _backfill_task[0] = asyncio.create_task(safe_task(run_backfill(), "member backfill"))
             if not await cache_invites():
                 log_event("system", "Invite tracker: give the bot the “Manage Server” permission so it can see who invited whom.", None, brand())
             try:
@@ -1521,6 +1525,11 @@ class WosBot(discord.Client):
                 await handle_translate_button(interaction)
             except Exception as exc:  # noqa: BLE001
                 print(f"[translate button] {exc!r}")
+        if cid.startswith("gate:"):
+            try:
+                await handle_gate(interaction)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[device question] {exc!r}")
         if cid.startswith("rm:"):
             try:
                 await handle_role_menu(interaction)
@@ -3720,12 +3729,17 @@ async def track_join(member):
         log_event("invite", text, member.id, member.display_name)
     ch = chan("invites_channel_id")
     if ch is not None:
+        age = (discord.utils.utcnow() - member.created_at).days
+        why = "invited themselves" if inviter_id == member.id else f"account is only {age} day{'s' if age != 1 else ''} old"
         e = discord.Embed(description=f"📥 {member.mention} joined" + (f" – invited by <@{inviter_id}>" if inviter_id else
-                          " via the server link" if code == "vanity" else ""), color=0x5BE0A8)
+                          " via the server link" if code == "vanity" else " – inviter unknown"),
+                          color=0xF0A33A if fake else 0x5BE0A8)
+        e.add_field(name="Account", value=f"⚠️ **Fake** – {why}" if fake else f"✅ Real – {age} day{'s' if age != 1 else ''} old", inline=True)
+        if code and code != "vanity":
+            e.add_field(name="Link", value=f"`{code}`", inline=True)
         if inviter_id:
-            e.set_footer(text=f"{c['regular']} invites · {c['left']} left" + (f" · {c['fake']} new accounts" if c["fake"] else ""))
-        if fake:
-            e.description += f"\n-# ⚠️ New account ({(discord.utils.utcnow() - member.created_at).days} days old)"
+            e.set_footer(text=f"{c['regular']} invites · {c['total']} joined · {c['left']} left · {c['fake']} fake"
+                              + (f" · {c['bonus']} bonus" if c.get("bonus") else ""))
         try:
             await ch.send(embed=e, allowed_mentions=discord.AllowedMentions.none())
         except discord.HTTPException:
@@ -3743,7 +3757,8 @@ async def track_leave(member):
     ch = chan("invites_channel_id")
     if ch is not None and r is not None:
         try:
-            await ch.send(embed=discord.Embed(description=f"📤 {member.mention} left" + (f" – had been invited by <@{r['inviter_id']}>" if r["inviter_id"] else ""),
+            await ch.send(embed=discord.Embed(description=f"📤 {member.mention} left" + (f" – had been invited by <@{r['inviter_id']}>" if r["inviter_id"] else "")
+                                              + (" · ⚠️ was a fake account" if r["fake"] else ""),
                                               color=0x5C6370), allowed_mentions=discord.AllowedMentions.none())
         except discord.HTTPException:
             pass
@@ -4114,6 +4129,345 @@ async def handle_role_menu(interaction: discord.Interaction):
         return await interaction.response.send_message("I'm not allowed to give that role – an admin needs to move my role above it.", ephemeral=True)
     parts_txt = ([f"✅ Added {' '.join(f'<@&{i}>' for i in add)}"] if add else []) + ([f"➖ Removed {' '.join(f'<@&{i}>' for i in remove)}"] if remove else [])
     await interaction.response.send_message("\n".join(parts_txt) or "Nothing changed.", ephemeral=True)
+
+
+# ------------------------------------------------------------ language chats + "pick your device" gate
+# Everything here only runs when an admin presses a button on the staff page (Access & languages).
+LANG_GUESS = {  # channel name (without flag and "-chat") -> (role name, button label)
+    "eng": ("English", "English"), "en": ("English", "English"), "english": ("English", "English"),
+    "arab": ("Arabic", "العربية"), "ar": ("Arabic", "العربية"), "id": ("Indonesian", "Bahasa Indonesia"),
+    "pl": ("Polish", "Polski"), "de": ("German", "Deutsch"), "fr": ("French", "Français"), "ph": ("Filipino", "Filipino"),
+    "sp": ("Spanish", "Español"), "es": ("Spanish", "Español"), "tr": ("Turkish", "Türkçe"), "nl": ("Dutch", "Nederlands"),
+    "ind": ("India", "India"), "in": ("India", "India"), "hi": ("Hindi", "हिन्दी"), "br": ("Brazil", "Português (BR)"),
+    "pt": ("Portuguese", "Português"), "cn": ("Chinese", "中文"), "zh": ("Chinese", "中文"), "ru": ("Russian", "Русский"),
+    "it": ("Italian", "Italiano"), "jp": ("Japanese", "日本語"), "kr": ("Korean", "한국어"), "vn": ("Vietnamese", "Tiếng Việt"),
+    "th": ("Thai", "ไทย"), "ua": ("Ukrainian", "Українська"), "ro": ("Romanian", "Română"),
+}
+_LEAD_EMOJI = re.compile(r"^([^\w\s-]+)[-\s]*")
+
+
+def guess_language(channel_name: str) -> dict:
+    """'🇩🇪de-chat' -> {'emoji': '🇩🇪', 'role': 'German', 'label': 'Deutsch', 'chat': True}."""
+    m = _LEAD_EMOJI.match(channel_name)
+    emoji = m.group(1) if m else ""
+    rest = channel_name[m.end():] if m else channel_name
+    key = re.sub(r"[-_\s]*chat$", "", rest.lower()).strip("-_ ")
+    role, label = LANG_GUESS.get(key, (key.replace("-", " ").title() or channel_name, key.replace("-", " ").title() or channel_name))
+    return {"emoji": emoji, "role": role, "label": label, "chat": bool(re.search(r"chat$", rest.lower())) and key not in ("general", "")}
+
+
+def access_cfg() -> dict:
+    try:
+        return json.loads(get_raw("access") or "{}")
+    except ValueError:
+        return {}
+
+
+def save_access(d: dict):
+    put_raw("access", json.dumps(d))
+
+
+async def _role(g, rid, name: str, **kw):
+    r = g.get_role(int(rid)) if rid else None
+    if r is None:
+        r = discord.utils.get(g.roles, name=name)
+    if r is None:
+        r = await g.create_role(name=name, reason="Staff page: Access & languages", **kw)
+    return r
+
+
+def _need(g, *perms):
+    me = g.me
+    missing = [p.replace("_", " ").title() for p in perms if not getattr(me.guild_permissions, p)]
+    if missing:
+        raise ValueError("The bot needs these permissions first: " + ", ".join(missing) + ".")
+
+
+async def setup_languages(rows: list, menu_channel_id: int, actor_id=None, actor="Dashboard") -> dict:
+    """rows: [{"channel_id", "label", "role", "emoji"}]. One role per language chat + "All languages".
+    The chats are hidden for everyone else; a button menu lets players pick (tap again to leave)."""
+    g = bot.get_guild(GUILD_ID)
+    if g is None:
+        raise ValueError("The bot isn't connected to the server.")
+    _need(g, "manage_roles", "manage_channels")
+    if not rows:
+        raise ValueError("Pick at least one language chat.")
+    a = access_cfg()
+    old = {int(x["channel_id"]): x for x in a.get("langs", [])}
+    all_role = await _role(g, a.get("all_role"), "🌍 All languages")
+    staff = [r for r in (g.get_role(MOD_ROLE_ID), g.get_role(ADMIN_ROLE_ID)) if r]
+    langs, menu_roles = [], []
+    for row in rows:
+        ch = g.get_channel(int(row["channel_id"]))
+        if not isinstance(ch, discord.TextChannel):
+            continue
+        name = f"{row.get('emoji') or ''} {row.get('role') or ch.name}".strip()[:100]
+        prev = old.get(ch.id)
+        role = await _role(g, prev and prev.get("role_id"), name)
+        if role.name != name:
+            await role.edit(name=name, reason="Language chat renamed")
+        ow = dict(ch.overwrites)
+        ow[g.default_role] = discord.PermissionOverwrite(**{**dict(ow.get(g.default_role, discord.PermissionOverwrite())), "view_channel": False})
+        for r in (role, all_role, *staff):
+            ow[r] = discord.PermissionOverwrite(**{**dict(ow.get(r, discord.PermissionOverwrite())), "view_channel": True})
+        ow[g.me] = discord.PermissionOverwrite(**{**dict(ow.get(g.me, discord.PermissionOverwrite())), "view_channel": True,
+                                                  "send_messages": True, "read_message_history": True})
+        await ch.edit(overwrites=ow, reason=f"Language chat set up by {actor}")
+        langs.append({"channel_id": str(ch.id), "role_id": str(role.id), "label": (row.get("label") or row.get("role") or ch.name)[:80],
+                      "role": row.get("role") or "", "emoji": row.get("emoji") or ""})
+        menu_roles.append({"role_id": str(role.id), "label": langs[-1]["label"], "emoji": row.get("emoji") or "", "desc": ""})
+    menu_roles.append({"role_id": str(all_role.id), "label": "All languages", "emoji": "🌍", "desc": "See every language chat"})
+    fields = dict(channel_id=int(menu_channel_id), title="🌍 Pick your language chats",
+                  description="Tap the languages you want to chat in – their channels show up for you. Tap again to hide them.\n"
+                              "🌍 **All languages** shows every language chat.", style="buttons", mode="multi", roles=json.dumps(menu_roles))
+    menu = store.get_role_menu(a["lang_menu"]) if a.get("lang_menu") else None
+    if menu and menu["channel_id"] != int(menu_channel_id):
+        await remove_role_menu(menu["id"]); menu = None
+    mid = store.save_role_menu(menu["id"] if menu else None, **fields)
+    await publish_role_menu(mid)
+    # chats that were set up before but are now unticked: show them to everyone again
+    keep = {int(x["channel_id"]) for x in langs}
+    for cid, x in old.items():
+        ch = g.get_channel(cid)
+        if cid not in keep and isinstance(ch, discord.TextChannel):
+            ow = dict(ch.overwrites)
+            if g.default_role in ow:
+                o = ow[g.default_role]; o.view_channel = None
+                ow[g.default_role] = o
+            await ch.edit(overwrites=ow, reason=f"No longer a language chat ({actor})")
+    a.update(langs=langs, all_role=str(all_role.id), lang_menu=mid, lang_menu_channel=str(menu_channel_id))
+    save_access(a)
+    log_event("settings", f"Language chats set up by {actor}: {len(langs)} chat(s) + All languages", actor_id, actor)
+    return a
+
+
+# ---- the device question: new members see nothing until they answer
+GATE_TEXT = ("Welcome to **{server}**! 👋\n\nBefore you can see the channels, tell us which device you play on. "
+             "Tap a button below – it takes one second.")
+
+
+def gate_message(a: dict):
+    e = discord.Embed(title="📱 Which device do you play on?", color=0x7DE3F4,
+                      description=(a.get("gate_text") or GATE_TEXT).replace("{server}", bot.get_guild(GUILD_ID).name if bot.get_guild(GUILD_ID) else ""))
+    e.set_footer(text=f"{brand()} · you can change it later by tapping the other button")
+    v = discord.ui.View(timeout=None)
+    v.add_item(discord.ui.Button(custom_id="gate:ios", label="iOS", emoji="🍎", style=discord.ButtonStyle.primary))
+    v.add_item(discord.ui.Button(custom_id="gate:android", label="Android / Emulator", emoji="🤖", style=discord.ButtonStyle.success))
+    return e, v
+
+
+async def setup_access_roles(member_role_id=None, ios_role_id=None, android_role_id=None, actor_id=None, actor="Dashboard") -> dict:
+    g = bot.get_guild(GUILD_ID)
+    if g is None:
+        raise ValueError("The bot isn't connected to the server.")
+    _need(g, "manage_roles")
+    a = access_cfg()
+    member = await _role(g, member_role_id or a.get("member_role"), "Member")
+    ios = await _role(g, ios_role_id or a.get("ios_role"), "🍎 iOS")
+    android = await _role(g, android_role_id or a.get("android_role"), "🤖 Android / Emulator")
+    a.update(member_role=str(member.id), ios_role=str(ios.id), android_role=str(android.id))
+    save_access(a)
+    log_event("settings", f"Access roles set by {actor}: {member.name}, {ios.name}, {android.name}", actor_id, actor)
+    return a
+
+
+async def post_gate(channel_id: int, text: Optional[str] = None, actor_id=None, actor="Dashboard") -> dict:
+    g = bot.get_guild(GUILD_ID)
+    a = access_cfg()
+    if not a.get("member_role"):
+        raise ValueError("Set the roles first (step 1).")
+    ch = g.get_channel(int(channel_id)) if g else None
+    if not isinstance(ch, discord.TextChannel):
+        raise ValueError("Pick a normal text channel for the question.")
+    if text is not None:
+        a["gate_text"] = text.strip()[:1500] or None
+    e, v = gate_message(a)
+    msg = None
+    if a.get("gate_msg") and str(a.get("gate_channel")) == str(ch.id):
+        try:
+            msg = await ch.get_partial_message(int(a["gate_msg"])).edit(embed=e, view=v)
+        except discord.NotFound:
+            msg = None
+    if msg is None:
+        msg = await ch.send(embed=e, view=v)
+    a.update(gate_channel=str(ch.id), gate_msg=str(msg.id))
+    save_access(a)
+    log_event("settings", f"Device question posted in #{ch.name} by {actor}", actor_id, actor)
+    return a
+
+
+async def handle_gate(interaction: discord.Interaction):
+    a = access_cfg()
+    member, g = interaction.user, interaction.guild
+    if g is None or not hasattr(member, "roles") or not a.get("member_role"):
+        return await interaction.response.send_message("This isn't set up yet – please ask a moderator.", ephemeral=True)
+    pick = interaction.data.get("custom_id", "").split(":")[1]
+    want, other = (a.get("ios_role"), a.get("android_role")) if pick == "ios" else (a.get("android_role"), a.get("ios_role"))
+    add = [r for r in (g.get_role(int(want)) if want else None, g.get_role(int(a["member_role"]))) if r and r not in member.roles]
+    remove = [r for r in (g.get_role(int(other)) if other else None,) if r and r in member.roles]
+    new = g.get_role(int(a["member_role"])) not in member.roles
+    try:
+        if add:
+            await member.add_roles(*add, reason="Picked their device")
+        if remove:
+            await member.remove_roles(*remove, reason="Picked their device")
+    except discord.Forbidden:
+        return await interaction.response.send_message("I'm not allowed to give that role – an admin needs to move my role higher.", ephemeral=True)
+    device = "🍎 iOS" if pick == "ios" else "🤖 Android / Emulator"
+    menu = f" Now pick your language chats in <#{a['lang_menu_channel']}>." if a.get("lang_menu_channel") else ""
+    await interaction.response.send_message((f"✅ Welcome in! You're set as **{device}** – the channels are open for you now.{menu}"
+                                             if new else f"✅ Changed to **{device}**."), ephemeral=True)
+    if new:
+        log_event("welcome", f"{member.display_name} picked {device} and got access", member.id, member.display_name)
+
+
+async def run_backfill():
+    """Give the Member role to everyone who was already here (and to all bots), so nobody loses access."""
+    a = access_cfg()
+    g = bot.get_guild(GUILD_ID)
+    b = a.get("backfill") or {}
+    role = g.get_role(int(a["member_role"])) if g and a.get("member_role") else None
+    if role is None:
+        return
+    if not g.chunked:
+        await g.chunk()
+    cutoff = b.get("cutoff") or time.time()
+    todo = [m for m in g.members if role not in m.roles and (m.bot or (m.joined_at and m.joined_at.timestamp() <= cutoff))]
+    start = b.get("done", 0)
+    b.update(state="running", total=start + len(todo), cutoff=cutoff)
+    a["backfill"] = b; save_access(a)
+    failed = 0
+    for i, m in enumerate(todo, 1):
+        try:
+            await m.add_roles(role, reason="Already a member before the device question")
+        except discord.NotFound:
+            pass
+        except discord.HTTPException:
+            failed += 1
+        if i % 20 == 0 or i == len(todo):
+            a = access_cfg(); a["backfill"].update(done=start + i, failed=failed); save_access(a)
+        await asyncio.sleep(0.25)
+    a = access_cfg(); a["backfill"].update(state="done", finished=int(time.time())); save_access(a)
+    log_event("settings", f"Member role given to {len(todo) - failed} existing member(s)" + (f" ({failed} failed)" if failed else ""), None, brand())
+
+
+_backfill_task = [None]
+
+
+def start_backfill(actor_id=None, actor="Dashboard") -> dict:
+    a = access_cfg()
+    if not a.get("member_role"):
+        raise ValueError("Set the roles first (step 1).")
+    if _backfill_task[0] and not _backfill_task[0].done():
+        return a
+    b = a.get("backfill") or {}
+    if b.get("state") != "running":
+        a["backfill"] = {"state": "running", "done": 0, "total": 0, "cutoff": time.time()}
+    a["gate_on"] = True                                  # from now on, new members answer the question first
+    save_access(a)
+    _backfill_task[0] = asyncio.create_task(safe_task(run_backfill(), "member backfill"))
+    log_event("settings", f"{actor} started giving the Member role to everyone already here", actor_id, actor)
+    return a
+
+
+async def lock_server(actor_id=None, actor="Dashboard") -> dict:
+    """New members only see the device question: View Channels moves from @everyone to the Member role.
+    Everything changed is remembered, so 'Undo' puts it back exactly."""
+    g = bot.get_guild(GUILD_ID)
+    a = access_cfg()
+    if not (a.get("member_role") and a.get("gate_msg")):
+        raise ValueError("Do steps 1 and 2 first.")
+    if (a.get("backfill") or {}).get("state") != "done":
+        raise ValueError("Wait until everyone already here has the Member role (step 3) – otherwise they'd lose the channels.")
+    if a.get("locked"):
+        return a
+    _need(g, "manage_roles", "manage_channels")
+    member = g.get_role(int(a["member_role"]))
+    if g.me not in member.members:
+        await g.me.add_roles(member, reason="The bot must keep seeing the channels")
+    gate_ch = g.get_channel(int(a["gate_channel"]))
+    undo = {"everyone_perms": g.default_role.permissions.value, "member_perms": member.permissions.value, "channels": {}}
+    p = g.default_role.permissions; p.update(view_channel=False)
+    mp = member.permissions; mp.update(view_channel=True)
+    await member.edit(permissions=mp, reason=f"Member role sees the channels ({actor})")
+    await g.default_role.edit(permissions=p, reason=f"New members answer the device question first ({actor})")
+    for ch in g.channels:
+        if ch.id == gate_ch.id:
+            continue
+        o = ch.overwrites.get(g.default_role)
+        if o is not None and o.view_channel is True:       # explicitly open to everyone → open to members instead
+            undo["channels"][str(ch.id)] = True
+            ow = dict(ch.overwrites)
+            o.view_channel = None
+            ow[g.default_role] = o
+            mo = ow.get(member, discord.PermissionOverwrite()); mo.view_channel = True; ow[member] = mo
+            await ch.edit(overwrites=ow, reason=f"Visible to members only ({actor})")
+    ow = dict(gate_ch.overwrites)
+    undo["gate"] = {str(k.id): [v.pair()[0].value, v.pair()[1].value] for k, v in ow.items() if isinstance(k, discord.Role)}
+    eo = ow.get(g.default_role, discord.PermissionOverwrite())
+    eo.update(view_channel=True, read_message_history=True, send_messages=False, add_reactions=False)
+    ow[g.default_role] = eo
+    await gate_ch.edit(overwrites=ow, reason=f"Device question visible to new members ({actor})")
+    a.update(locked=True, lock_undo=undo, locked_at=int(time.time()))
+    save_access(a)
+    log_event("settings", f"{actor} switched on the device question: new members only see #{gate_ch.name} until they answer", actor_id, actor)
+    return a
+
+
+async def unlock_server(actor_id=None, actor="Dashboard") -> dict:
+    g = bot.get_guild(GUILD_ID)
+    a = access_cfg()
+    u = a.get("lock_undo")
+    if not a.get("locked") or not u:
+        return a
+    member = g.get_role(int(a["member_role"])) if a.get("member_role") else None
+    await g.default_role.edit(permissions=discord.Permissions(u["everyone_perms"]), reason=f"Device question switched off ({actor})")
+    if member is not None:
+        await member.edit(permissions=discord.Permissions(u["member_perms"]), reason=f"Device question switched off ({actor})")
+    for cid in u.get("channels", {}):
+        ch = g.get_channel(int(cid))
+        if ch is None:
+            continue
+        ow = dict(ch.overwrites)
+        o = ow.get(g.default_role, discord.PermissionOverwrite()); o.view_channel = True; ow[g.default_role] = o
+        if member is not None and member in ow:
+            mo = ow[member]; mo.view_channel = None
+            if mo.is_empty():
+                ow.pop(member)
+            else:
+                ow[member] = mo
+        await ch.edit(overwrites=ow, reason=f"Device question switched off ({actor})")
+    gate_ch = g.get_channel(int(a["gate_channel"])) if a.get("gate_channel") else None
+    if gate_ch is not None and "gate" in u:
+        ow = {k: v for k, v in gate_ch.overwrites.items() if not isinstance(k, discord.Role)}
+        for rid, (al, de) in u["gate"].items():
+            r = g.get_role(int(rid))
+            if r is not None:
+                ow[r] = discord.PermissionOverwrite.from_pair(discord.Permissions(al), discord.Permissions(de))
+        await gate_ch.edit(overwrites=ow, reason=f"Device question switched off ({actor})")
+    a.update(locked=False, gate_on=False, lock_undo=None)
+    save_access(a)
+    log_event("settings", f"{actor} switched off the device question – everyone sees the channels again", actor_id, actor)
+    return a
+
+
+def access_status() -> dict:
+    g = bot.get_guild(GUILD_ID)
+    a = access_cfg()
+    langs = {int(x["channel_id"]): x for x in a.get("langs", [])}
+    detected = []
+    if g is not None:
+        for ch in sorted(g.text_channels, key=lambda c: (c.category.position if c.category else -1, c.position)):
+            gl = guess_language(ch.name)
+            cur = langs.get(ch.id)
+            detected.append({"channel_id": str(ch.id), "name": ch.name, "category": ch.category.name if ch.category else "",
+                             "emoji": (cur or {}).get("emoji") or gl["emoji"], "role": (cur or {}).get("role") or gl["role"],
+                             "label": (cur or {}).get("label") or gl["label"], "checked": bool(cur) if langs else gl["chat"],
+                             "role_id": (cur or {}).get("role_id")})
+    me = g.me.guild_permissions if g else None
+    return {"config": {k: v for k, v in a.items() if k != "lock_undo"}, "detected": detected,
+            "perms": {"manage_roles": bool(me and me.manage_roles), "manage_channels": bool(me and me.manage_channels)},
+            "members": g.member_count if g else 0}
 
 
 # ------------------------------------------------------------ warnings with escalation + cases

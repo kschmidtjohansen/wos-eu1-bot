@@ -125,7 +125,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                  ("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/(bugs|suggestions)/\d+/translate"), ("PUT", r"/api/suggestions/\d+"),
                  (None, r"/api/replies(/\d+)?"), (None, r"/api/blocklist(/\d+)?"), ("DELETE", r"/api/webblocks")]
     MOD_HIDDEN = [r"/api/backups/.*", r"/api/auth/settings", r"/api/translate", r"/api/drive/.*", r"/api/redeem.*",
-                  r"/api/modstats", r"/api/stickers.*", r"/api/emojis.*", r"/api/push.*", r"/api/weekly"]
+                  r"/api/modstats", r"/api/stickers.*", r"/api/emojis.*", r"/api/push.*", r"/api/weekly", r"/api/access.*"]
 
     async def staff_role(user_id: int):
         """'admin', 'mod' or None – checked live against the member's Discord roles."""
@@ -983,6 +983,62 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             "known30": one("SELECT COUNT(*) FROM invite_joins WHERE ts>=? AND inviter_id IS NOT NULL", now - 30 * 86400),
             "inviters": one("SELECT COUNT(DISTINCT inviter_id) FROM invite_joins WHERE inviter_id IS NOT NULL"),
             "top": top, "recent": recent, "carried": store.invite_base_info()})
+
+    # ------------------------------------------------------------ access & language chats (admins)
+    async def access_call(request, fn, *args):
+        try:
+            await fn(*args, who_id(request), who(request))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        except discord.Forbidden:
+            raise ApiError(400, "Discord refused: give the bot Manage Roles and Manage Channels, and move its role above the roles it hands out.")
+        except discord.HTTPException as exc:
+            raise ApiError(502, f"Discord said no: {exc.text or exc.status}")
+        return web.json_response(hooks["access_status"]())
+
+    @routes.get("/api/access")
+    async def access_get(request):
+        return web.json_response(hooks["access_status"]())
+
+    @routes.post("/api/access/languages")
+    async def access_langs(request):
+        d = await body_json(request)
+        rows = [{"channel_id": int(r["channel_id"]), "label": str(r.get("label") or "")[:80], "role": str(r.get("role") or "")[:80],
+                 "emoji": str(r.get("emoji") or "")[:40]} for r in (d.get("channels") or []) if str(r.get("channel_id", "")).isdigit()]
+        if not str(d.get("menu_channel_id") or "").isdigit():
+            raise ApiError(400, "Pick the channel for the language menu.")
+        if len(rows) > 24:
+            raise ApiError(400, "At most 24 language chats (Discord allows 25 buttons, one is “All languages”).")
+        return await access_call(request, hooks["setup_languages"], rows, int(d["menu_channel_id"]))
+
+    @routes.post("/api/access/roles")
+    async def access_roles(request):
+        d = await body_json(request)
+        ids = [int(d[k]) if str(d.get(k) or "").isdigit() else None for k in ("member_role_id", "ios_role_id", "android_role_id")]
+        return await access_call(request, hooks["setup_access_roles"], *ids)
+
+    @routes.post("/api/access/gate")
+    async def access_gate(request):
+        d = await body_json(request)
+        if not str(d.get("channel_id") or "").isdigit():
+            raise ApiError(400, "Pick the channel for the device question.")
+        return await access_call(request, hooks["post_gate"], int(d["channel_id"]), d.get("text"))
+
+    @routes.post("/api/access/backfill")
+    async def access_backfill(request):
+        try:
+            hooks["start_backfill"](who_id(request), who(request))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        return web.json_response(hooks["access_status"]())
+
+    @routes.post("/api/access/lock")
+    async def access_lock(request):
+        return await access_call(request, hooks["lock_server"])
+
+    @routes.post("/api/access/unlock")
+    async def access_unlock(request):
+        return await access_call(request, hooks["unlock_server"])
 
     @routes.delete("/api/invites/base")
     async def clear_invite_base(request):

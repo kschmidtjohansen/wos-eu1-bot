@@ -339,6 +339,19 @@
 .w-discord{width:100%;background:#5865f2 !important;margin-bottom:14px;padding:12px}
 .w-or{display:flex;align-items:center;gap:10px;color:var(--w-muted);font-size:13px;margin:0 0 14px}
 .w-or::before,.w-or::after{content:"";flex:1;height:1px;background:var(--w-border)}
+.w-acc-row{display:grid;grid-template-columns:28px minmax(120px,1.2fr) 70px 1fr 1fr;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--w-border)}
+.w-acc-row:last-child{border-bottom:0}
+.w-acc-row .w-input{padding-top:7px;padding-bottom:7px}
+.w-acc-row.off .w-input{opacity:.45}
+.w-acc-head{font-size:12px;color:var(--w-muted);font-weight:600}
+.w-gstep{display:grid;grid-template-columns:34px 1fr;gap:12px;padding:14px 0;border-top:1px solid var(--w-border)}
+.w-gstep:first-of-type{border-top:0}
+.w-gstep h4{font-size:15px;font-weight:700}
+.w-gnum{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:var(--w-surface-2);color:var(--w-muted)}
+.w-gstep.done .w-gnum{background:rgba(91,224,168,.16);color:#5be0a8}
+.w-bar{height:8px;border-radius:99px;background:var(--w-surface-2);overflow:hidden;margin:8px 0}
+.w-bar i{display:block;height:100%;background:linear-gradient(90deg,#7de3f4,#5be0a8)}
+@media (max-width:700px){.w-acc-row{grid-template-columns:28px 1fr 60px}.w-acc-row .acc-role,.w-acc-row .acc-label{grid-column:2/4}.w-acc-head{display:none}}
 .w-steps{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px}
 .w-steps code{font-size:12.5px;background:var(--w-surface-2);padding:2px 6px;border-radius:6px;overflow-wrap:anywhere}
 .w-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border-radius:14px;background:var(--w-bad-soft);border:1px solid color-mix(in srgb,var(--w-bad) 35%,transparent)}
@@ -690,7 +703,7 @@ const S = {
 const NAV = [
   ['overview', 'Overview', 'grid', 'Daily work'], ['bugs', 'Bugs', 'bug', 'Daily work'], ['suggestions', 'Suggestions', 'bulb', 'Daily work'],
   ['codes', 'Gift codes', 'gift', 'Daily work'], ['players', 'Players', 'users', 'Daily work'], ['warnings', 'Warnings', 'alert', 'Daily work'], ['mod', 'Moderation', 'shield', 'Daily work'],
-  ['rolemenus', 'Role menus', 'tag', 'Community'], ['giveaways', 'Giveaways', 'party', 'Community'], ['timers', 'Timed messages', 'clock', 'Community'],
+  ['access', 'Access & languages', 'globe', 'Community'], ['rolemenus', 'Role menus', 'tag', 'Community'], ['giveaways', 'Giveaways', 'party', 'Community'], ['timers', 'Timed messages', 'clock', 'Community'],
   ['insights', 'Insights', 'chart', 'How it is going'], ['moderators', 'Moderators', 'timer', 'How it is going'], ['invites', 'Invites', 'userplus', 'How it is going'], ['status', 'Server status', 'pulse', 'How it is going'], ['log', 'Activity log', 'list', 'How it is going'],
   ['panel', 'Panel message', 'message', 'Set up'], ['channels', 'Channels', 'hash', 'Set up'], ['features', 'Features', 'sliders', 'Set up'],
   ['welcome', 'Welcome', 'userplus', 'Set up'], ['info', 'Info channel', 'list', 'Set up'], ['translations', 'Translations', 'globe', 'Set up'],
@@ -1648,6 +1661,59 @@ function viewTimers() {
       : (E ? '' : html`<div class="w-card w-pad w-empty">No timed messages yet.</div>`)}`;
 }
 
+/* ---- access & language chats ---- */
+function pollAccess() {
+  clearTimeout(S.accPoll);
+  S.accPoll = setTimeout(async () => {
+    if (S.tab !== 'access') return;
+    try { S.acc = await call('GET', '/api/access'); if (!document.querySelector('.w-acc-row input:focus, #acc-gtext:focus')) renderMain(); } catch (e) { return; }
+    if ((S.acc.config.backfill || {}).state === 'running') pollAccess();
+  }, 3000);
+}
+function viewAccess() {
+  const A = S.acc;
+  if (!A) return html`<div class="w-pagehead"><h2>Access & languages</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  const C = A.config || {}, bf = C.backfill || {}, perms = A.perms || {};
+  const langsSet = (C.langs || []).length;
+  const rolesDone = !!C.member_role, gateDone = !!C.gate_msg, bfDone = bf.state === 'done', locked = !!C.locked;
+  const step = (n, done, title, body) => html`<div class="w-gstep ${done ? 'done' : ''}"><span class="w-gnum">${done ? '✓' : n}</span><div><h4 class="w-h4" style="margin:4px 0 8px">${title}</h4>${body}</div></div>`;
+  const pct = bf.total ? Math.round(100 * (bf.done || 0) / bf.total) : (bfDone ? 100 : 0);
+  return html`
+    <div class="w-pagehead"><h2>Access & languages</h2><p>Language chats that players pick themselves, and a device question new members answer before they can see the server.</p></div>
+    ${!perms.manage_roles || !perms.manage_channels ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>The bot needs more permissions</b><div class="w-sub">Give the bot’s role <b>Manage Roles</b> and <b>Manage Channels</b> in Server Settings → Roles, and drag it above the roles it hands out.</div></div></div>` : ''}
+
+    <section class="w-card w-pad"><h3 class="w-h3">Language chats</h3>
+      <p class="w-sub" style="margin:4px 0 12px">Tick the language chats. Each one gets its own role and is hidden for everyone else; a menu with one button per language (plus 🌍 All languages) lets players open the chats they want. Tapping again hides it.</p>
+      <div class="w-acc-row w-acc-head"><span></span><span>Channel</span><span>Flag</span><span>Role name</span><span>Button text</span></div>
+      ${A.detected.map(d => html`<label class="w-acc-row ${d.checked ? '' : 'off'}" data-cid="${d.channel_id}"><input type="checkbox" class="acc-on" ${d.checked ? 'checked' : ''} aria-label="Language chat #${d.name}">
+        <span><b>#${d.name}</b>${d.category ? html`<div class="w-hint">${d.category}</div>` : ''}</span>
+        <input class="w-input acc-emoji" maxlength="40" value="${d.emoji}" aria-label="Flag for #${d.name}">
+        <input class="w-input acc-role" maxlength="80" value="${d.role}" aria-label="Role name for #${d.name}" placeholder="Role name">
+        <input class="w-input acc-label" maxlength="80" value="${d.label}" aria-label="Button text for #${d.name}" placeholder="Button text"></label>`)}
+      <div class="w-form2" style="margin-top:14px"><div class="w-field"><label class="w-label" for="acc-menu">Post the menu in</label>${chanSelect('acc-menu', C.lang_menu_channel || '')}</div></div>
+      <div class="w-actions"><span class="w-hint">${langsSet ? langsSet + ' language chats set up · running it again updates roles, channels and the menu' : 'Nothing is changed in Discord until you press the button.'}</span><div class="w-spacer"></div>
+        <button class="w-btn primary" data-act="accLangs">${icon('globe')} ${langsSet ? 'Update language chats' : 'Set up language chats'}</button></div>
+      <p class="w-hint" style="margin-top:8px">Moderators and the bot keep seeing every language chat. Players can still use Discord’s own “Browse channels” for the chats they have access to.</p>
+    </section>
+
+    <section class="w-card w-pad"><h3 class="w-h3">Device question for new members</h3>
+      <p class="w-sub" style="margin:4px 0 6px">New members only see one channel with the question <i>“Which device do you play on?”</i>. Tapping 🍎 iOS or 🤖 Android / Emulator gives them that role and the <b>Member</b> role – then the server opens up. People already here get Member straight away and are never asked.</p>
+      ${locked ? html`<div class="w-banner ok" style="margin:10px 0">${icon('check')}<div><b>On – new members answer the question first</b><div class="w-sub">Switched on ${ago(C.locked_at)}.</div></div><button class="w-btn small danger" data-act="accUnlock">Undo</button></div>` : ''}
+      ${step(1, rolesDone, 'Roles', html`<div class="w-form2"><div class="w-field"><label class="w-label" for="acc-member">Member role</label><select class="w-select" id="acc-member">${new Raw(String(roleOptions(C.member_role, true)).replace('— None —', '— Create “Member” —'))}</select></div>
+          <div class="w-field"><label class="w-label" for="acc-ios">iOS role</label><select class="w-select" id="acc-ios">${new Raw(String(roleOptions(C.ios_role, true)).replace('— None —', '— Create “🍎 iOS” —'))}</select></div>
+          <div class="w-field"><label class="w-label" for="acc-android">Android / Emulator role</label><select class="w-select" id="acc-android">${new Raw(String(roleOptions(C.android_role, true)).replace('— None —', '— Create “🤖 Android / Emulator” —'))}</select></div></div>
+        <div class="w-actions"><button class="w-btn" data-act="accRoles">${rolesDone ? 'Save roles' : 'Create / save roles'}</button></div>`)}
+      ${step(2, gateDone, 'The question', html`<div class="w-form2"><div class="w-field"><label class="w-label" for="acc-gch">Channel new members see</label>${chanSelect('acc-gch', C.gate_channel || '')}</div></div>
+        <div class="w-field"><label class="w-label" for="acc-gtext">Text <span class="w-hint">– {server} becomes the server name</span></label><textarea class="w-textarea" id="acc-gtext" maxlength="1500" style="min-height:80px">${C.gate_text || "Welcome to **{server}**! 👋\n\nBefore you can see the channels, tell us which device you play on. Tap a button below – it takes one second."}</textarea></div>
+        <div class="w-actions"><button class="w-btn" data-act="accGate" ${rolesDone ? '' : 'disabled'}>${icon('send')} ${gateDone ? 'Update the question' : 'Post the question'}</button></div>`)}
+      ${step(3, bfDone, 'Give Member to everyone already here', html`<p class="w-hint">So nobody who is already in the server loses the channels. Bots get it too. About 4 members a second – it keeps going if the bot restarts.</p>
+        ${bf.state ? html`<div class="w-bar"><i style="width:${pct}%"></i></div><div class="w-hint">${bfDone ? '✅ Done – ' + (bf.done || 0) + ' member(s) got the role' + (bf.failed ? ', ' + bf.failed + ' failed' : '') : 'Working… ' + (bf.done || 0) + ' of ' + (bf.total || '?')}</div>` : ''}
+        <div class="w-actions"><button class="w-btn" data-act="accBackfill" ${rolesDone && bf.state !== 'running' ? '' : 'disabled'}>${bfDone ? 'Run again (catches anyone missed)' : 'Give Member to everyone (' + (A.members || 0) + ')'}</button></div>`)}
+      ${step(4, locked, 'Switch it on', html`<p class="w-hint">Moves “View Channels” from @everyone to the Member role, and opens the question channel to everyone. Private staff channels are left alone. Everything is remembered, so <b>Undo</b> puts it back exactly.</p>
+        <div class="w-actions"><button class="w-btn primary" data-act="accLock" ${rolesDone && gateDone && bfDone && !locked ? '' : 'disabled'}>${locked ? 'It’s on' : 'Hide channels until they answer'}</button></div>`)}
+    </section>`;
+}
+
 /* ---- invites ---- */
 function viewInvites() {
   const V = S.invites;
@@ -2168,12 +2234,13 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { warnings: viewWarnings, rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: viewInvites, players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+const VIEWS = { access: viewAccess, warnings: viewWarnings, rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: viewInvites, players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
   features: viewFeatures, welcome: viewWelcome, patch: viewPatch, mod: viewMod, bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
   codes: async () => { const [c, r] = await Promise.all([call('GET', '/api/giftcodes'), call('GET', '/api/redeem').catch(() => null)]); S.codes = c; S.redeem = r; },
   invites: async () => { S.invites = await call('GET', '/api/invites'); },
+  access: async () => { const [a, r] = await Promise.all([call('GET', '/api/access'), call('GET', '/api/roles').catch(() => ({ roles: [] }))]); S.acc = a; S.roles = r.roles; },
   warnings: async () => { S.cases = await call('GET', '/api/cases?q=' + encodeURIComponent((S.cases && S.cases.q) || '')); },
   rolemenus: async () => { const [m, r] = await Promise.all([call('GET', '/api/rolemenus'), call('GET', '/api/roles')]); S.rm = m.items; S.roles = r.roles; },
   giveaways: async () => { const [g, r] = await Promise.all([call('GET', '/api/giveaways'), call('GET', '/api/roles').catch(() => ({ roles: [] }))]); S.gw = g.items; S.roles = r.roles; },
@@ -2803,6 +2870,38 @@ root.addEventListener('click', async e => {
       const box = $('#rej-' + el.dataset.id);
       if (box) { box.hidden = !box.hidden; if (!box.hidden) $('#rr-' + el.dataset.id).focus(); }
     }
+    else if (act === 'accLangs') {
+      const channels = [...document.querySelectorAll('.w-acc-row[data-cid]')].filter(r => r.querySelector('.acc-on').checked)
+        .map(r => ({ channel_id: r.dataset.cid, emoji: r.querySelector('.acc-emoji').value.trim(), role: r.querySelector('.acc-role').value.trim(), label: r.querySelector('.acc-label').value.trim() }));
+      const menu_channel_id = $('#acc-menu').value;
+      if (!channels.length) return toast('Tick at least one language chat.', 'err');
+      if (!menu_channel_id) return toast('Pick the channel for the menu.', 'err');
+      busy(el, true, 'Setting up ' + channels.length + ' chats…');
+      try { S.acc = await call('POST', '/api/access/languages', { channels, menu_channel_id }); toast('Language chats set up – the menu is posted.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'accRoles') {
+      busy(el, true, 'Saving…');
+      try { S.acc = await call('POST', '/api/access/roles', { member_role_id: $('#acc-member').value, ios_role_id: $('#acc-ios').value, android_role_id: $('#acc-android').value });
+        const r = await call('GET', '/api/roles').catch(() => null); if (r) S.roles = r.roles; toast('Roles saved.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'accGate') {
+      if (!$('#acc-gch').value) return toast('Pick the channel for the question.', 'err');
+      busy(el, true, 'Posting…');
+      try { S.acc = await call('POST', '/api/access/gate', { channel_id: $('#acc-gch').value, text: $('#acc-gtext').value }); toast('The question is posted.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'accBackfill') {
+      try { S.acc = await call('POST', '/api/access/backfill'); toast('Giving the Member role to everyone already here…'); renderMain(); pollAccess(); } catch (err) { toast(err.message, 'err'); }
+    }
+    else if (act === 'accLock') {
+      if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Press again – new members will only see the question'; setTimeout(() => { if (el.isConnected) { delete el.dataset.sure; el.textContent = 'Hide channels until they answer'; } }, 6000); return; }
+      busy(el, true, 'Switching on…');
+      try { S.acc = await call('POST', '/api/access/lock'); toast('On – new members answer the device question first.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
+    else if (act === 'accUnlock') {
+      if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Press again to undo'; setTimeout(() => { if (el.isConnected) { delete el.dataset.sure; el.textContent = 'Undo'; } }, 5000); return; }
+      busy(el, true, 'Undoing…');
+      try { S.acc = await call('POST', '/api/access/unlock'); toast('Off – everyone sees the channels again.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
     else if (act === 'invBaseClear') {
       if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Press again – players keep only what this bot counted'; setTimeout(() => { if (el.isConnected) { delete el.dataset.sure; el.textContent = 'Remove carried-over counts'; } }, 5000); return; }
       try { const r = await call('DELETE', '/api/invites/base'); toast(r.removed + ' removed.'); S.invites = await call('GET', '/api/invites'); renderMain(); } catch (err) { toast(err.message, 'err'); }
@@ -2984,6 +3083,8 @@ function onInput(e) {
   } else if (el.id === 'bugver') {
     clearTimeout(logTimer); logTimer = setTimeout(() => { S.bugs.version = el.value.trim(); loadBugs(true); }, 300);
   } else if (el.id === 'tm-kind') { tmCollect(); S.tmEdit.kind = el.value; renderMain();
+  } else if (el.classList.contains('acc-on')) {
+    el.closest('.w-acc-row').classList.toggle('off', !el.checked);
   } else if (el.dataset.actChange === 'trLang') {
     if (e.type !== 'change') return;
     try { localStorage.setItem('wosd.trlang', el.value); } catch (err) { /* private mode */ }
@@ -3170,6 +3271,22 @@ function makeMock() {
         known: Object.keys(names).map(c => ({ code: c, name: names[c] })) };
     }
     if (p === '/api/translations') { trOver[body.lang] = Object.assign(trOver[body.lang] || {}, body.items); Object.keys(trOver[body.lang]).forEach(k => { if (!trOver[body.lang][k]) delete trOver[body.lang][k]; }); return { ok: true }; }
+    if (p.startsWith('/api/access')) {
+      const A = S.demoAcc = S.demoAcc || { config: {}, perms: { manage_roles: true, manage_channels: true }, members: 1843,
+        detected: [['🌍general', '🌍', 'General', 'General', false], ['🇺🇸eng-chat', '🇺🇸', 'English', 'English', true], ['🇸🇦arab-chat', '🇸🇦', 'Arabic', 'العربية', true], ['🇮🇩id-chat', '🇮🇩', 'Indonesian', 'Bahasa Indonesia', true],
+          ['🇵🇱pl-chat', '🇵🇱', 'Polish', 'Polski', true], ['🇩🇪de-chat', '🇩🇪', 'German', 'Deutsch', true], ['🇫🇷fr-chat', '🇫🇷', 'French', 'Français', true], ['🇵🇭ph-chat', '🇵🇭', 'Filipino', 'Filipino', true],
+          ['🇪🇸sp-chat', '🇪🇸', 'Spanish', 'Español', true], ['🇹🇷tr-chat', '🇹🇷', 'Turkish', 'Türkçe', true], ['🇳🇱nl-chat', '🇳🇱', 'Dutch', 'Nederlands', true], ['🇮🇳ind-chat', '🇮🇳', 'India', 'India', true],
+          ['🇧🇷br-chat', '🇧🇷', 'Brazil', 'Português (BR)', true], ['🇨🇳cn-chat', '🇨🇳', 'Chinese', '中文', true], ['🇷🇺ru-chat', '🇷🇺', 'Russian', 'Русский', true]]
+          .map((d, i) => ({ channel_id: String(2000 + i), name: d[0], category: '💬 DISCUSSION', emoji: d[1], role: d[2], label: d[3], checked: d[4] })) };
+      const C = A.config;
+      if (p === '/api/access/languages') { C.langs = body.channels; C.lang_menu_channel = body.menu_channel_id; A.detected.forEach(d => { d.checked = body.channels.some(c => c.channel_id === d.channel_id); }); addLog('settings', 'Language chats set up'); }
+      if (p === '/api/access/roles') { C.member_role = body.member_role_id || '507'; C.ios_role = body.ios_role_id || '508'; C.android_role = body.android_role_id || '509'; }
+      if (p === '/api/access/gate') { C.gate_channel = body.channel_id; C.gate_msg = '1'; C.gate_text = body.text; }
+      if (p === '/api/access/backfill') C.backfill = { state: 'done', done: 1843, total: 1843 };
+      if (p === '/api/access/lock') { C.locked = true; C.locked_at = now; }
+      if (p === '/api/access/unlock') { C.locked = false; }
+      return JSON.parse(JSON.stringify(A));
+    }
     if (p === '/api/roles') return { roles: [['Admin', false], ['Moderator', false], ['FRZ Alliance', true], ['ICE Alliance', true], ['WLF Alliance', true], ['Polski', true], ['English', true], ['Bear pings', true], ['SvS pings', true], ['Gift code pings', true]].map((r, i) => ({ id: String(500 + i), name: r[0], color: null, assignable: r[1] })) };
     if (p === '/api/rolemenus' && method === 'GET') return { items: rmenus };
     if (p === '/api/rolemenus') { const m = Object.assign({}, body, { id: body.id || rmenus.length + 1, url: '#' }); const i = rmenus.findIndex(x => x.id === m.id); if (i >= 0) rmenus[i] = m; else rmenus.push(m); return m; }
