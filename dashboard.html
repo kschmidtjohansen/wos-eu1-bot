@@ -1658,9 +1658,19 @@ function viewInvites() {
     ${!V.can_read ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>The bot can’t read the invite links</b><div class="w-sub">Give the bot’s role the <b>Manage Server</b> permission in Discord – it needs it to see which link someone used.</div></div></div>` : ''}
     ${!V.enabled ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>Invite tracking is switched off</b><div class="w-sub">Turn it on under Features → Invites.</div></div><button class="w-btn small" data-act="goto" data-tab="features">Fix</button></div>` : ''}
     <div class="w-tiles w-tiles4">${tile(V.joins30, 'Joined, last 30 days')}${tile(V.known30, 'With a known inviter', 'ok')}${tile(V.inviters, 'People who invited someone')}${tile(V.top.length ? V.top[0].regular : 0, V.top.length ? 'Top: ' + V.top[0].name : 'No inviters yet')}</div>
-    <section class="w-card w-pad"><h3 class="w-h3">Top inviters</h3><p class="w-sub" style="margin-bottom:8px">Counted from the day this bot started tracking.</p>
-      ${V.top.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Member</th><th>Invites</th><th>Joined</th><th>Left</th><th>New accounts</th></tr></thead><tbody>
-        ${V.top.map(r => html`<tr><td>${r.name}</td><td><b>${r.regular}</b></td><td>${r.total}</td><td>${r.left || '–'}</td><td>${r.fake || '–'}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">Nobody has joined through an invite yet.</div>`}
+    <section class="w-card w-pad"><h3 class="w-h3">Carry over from Invite Tracker</h3>
+      ${V.carried && V.carried.players ? html`<div class="w-banner ok" style="margin:6px 0 12px">${icon('check')}<div><b>${V.carried.players} player${V.carried.players === 1 ? '' : 's'} carried over</b><div class="w-sub">Last import ${ago(V.carried.ts)}. New joins are added on top, so nobody starts from zero.</div></div></div>`
+        : html`<p class="w-sub" style="margin:6px 0 10px">Nothing carried over yet – everyone’s count starts from the day this bot started tracking.</p>`}
+      <ol class="w-steps" style="margin:0 0 10px 18px;line-height:1.7">
+        <li>In Discord, run Invite Tracker’s <code>/leaderboard invites</code>.</li>
+        <li>Long-press (phone) or right-click the leaderboard → <b>Apps</b> → <b>Import invite counts</b>. Admins only.</li>
+        <li>Press ▶ on the leaderboard to go through the remaining pages – the bot picks up each page you open for 14 minutes.</li></ol>
+      <p class="w-hint">Importing the same page twice is safe – it sets the numbers, it doesn’t add them twice. When everything matches, you can remove Invite Tracker from the server.</p>
+      ${V.carried && V.carried.players && !isMod() ? html`<div class="w-actions"><button class="w-btn small danger" data-act="invBaseClear">Remove carried-over counts</button></div>` : ''}
+    </section>
+    <section class="w-card w-pad"><h3 class="w-h3">Top inviters</h3><p class="w-sub" style="margin-bottom:8px">${V.carried && V.carried.players ? 'Includes the counts carried over from Invite Tracker.' : 'Counted from the day this bot started tracking.'}</p>
+      ${V.top.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Member</th><th>Invites</th><th>Joined</th><th>Left</th><th>New accounts</th><th>Bonus</th></tr></thead><tbody>
+        ${V.top.map(r => html`<tr><td>${r.name}</td><td><b>${r.regular}</b></td><td>${r.total}</td><td>${r.left || '–'}</td><td>${r.fake || '–'}</td><td>${r.bonus || '–'}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">Nobody has joined through an invite yet.</div>`}
     </section>
     <section class="w-card w-pad"><h3 class="w-h3">Recent joins</h3>
       ${V.recent.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Member</th><th style="text-align:left">Invited by</th><th>Link</th><th>Joined</th><th>Status</th></tr></thead><tbody>
@@ -2792,6 +2802,10 @@ root.addEventListener('click', async e => {
       const box = $('#rej-' + el.dataset.id);
       if (box) { box.hidden = !box.hidden; if (!box.hidden) $('#rr-' + el.dataset.id).focus(); }
     }
+    else if (act === 'invBaseClear') {
+      if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Press again – players keep only what this bot counted'; setTimeout(() => { if (el.isConnected) { delete el.dataset.sure; el.textContent = 'Remove carried-over counts'; } }, 5000); return; }
+      try { const r = await call('DELETE', '/api/invites/base'); toast(r.removed + ' removed.'); S.invites = await call('GET', '/api/invites'); renderMain(); } catch (err) { toast(err.message, 'err'); }
+    }
     else if (act === 'trItem') {
       const kind = el.dataset.kind, id = el.dataset.id, target = trTarget();
       busy(el, true, 'Translating…');
@@ -3171,7 +3185,8 @@ function makeMock() {
     if (p === '/api/push' && method === 'GET') return { enabled: true, ready: true, total: 142, codes: 142, news: 118 };
     if (p === '/api/push/send') return { sent: 139, gone: 2, failed: 1 };
     if (p === '/api/weekly') return { ok: true, channel: 'announcements' };
-    if (p === '/api/invites') return { enabled: true, can_read: true, joins30: 86, known30: 79, inviters: 23,
+    if (p === '/api/invites/base') return { removed: 42 };
+    if (p === '/api/invites') return { enabled: true, can_read: true, joins30: 86, known30: 79, inviters: 23, carried: { players: 42, ts: now - 3600 },
       top: [['Jonas', 14, 17, 2, 1], ['Mira', 11, 12, 1, 0], ['Freja', 7, 9, 1, 1], ['Lars', 4, 4, 0, 0], ['Sofie', 3, 5, 2, 0]].map(a => ({ inviter_id: '9', name: a[0], regular: a[1], total: a[2], left: a[3], fake: a[4] })),
       recent: Array.from({ length: 12 }, (_, i) => ({ member_id: '8' + i, member: ['Ragnar', 'Ida', 'Theo', 'Nova', 'Kai', 'Liv'][i % 6] + (i > 5 ? ' ' + i : ''), inviter_id: i % 5 === 3 ? null : '9', inviter: i % 5 === 3 ? null : ['Jonas', 'Mira', 'Freja'][i % 3], code: i % 5 === 3 ? 'vanity' : ['wos-eu1', 'aB3xY', 'frost'][i % 3], ts: now - i * 9000, left: i === 4 ? now - 600 : null, fake: i === 2 })) };
     if (p === '/api/emojis' && method === 'GET') return emj;

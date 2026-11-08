@@ -175,6 +175,15 @@ db.executescript(
         ts INTEGER NOT NULL,
         PRIMARY KEY (code, uid)
     );
+    CREATE TABLE IF NOT EXISTS invite_base (   -- counts carried over from the old Invite Tracker bot
+        user_id INTEGER PRIMARY KEY,
+        joins INTEGER NOT NULL DEFAULT 0,          -- Invite Tracker's "regular" (everyone who joined)
+        left_n INTEGER NOT NULL DEFAULT 0,
+        fake INTEGER NOT NULL DEFAULT 0,
+        bonus INTEGER NOT NULL DEFAULT 0,
+        ts INTEGER,
+        name TEXT
+    );
     CREATE TABLE IF NOT EXISTS invite_joins (  -- who invited whom (one row per join)
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         member_id INTEGER NOT NULL,
@@ -1163,13 +1172,50 @@ def record_leave(member_id: int):
     return r
 
 
-def invite_counts(inviter_id: int) -> dict:
-    """Per inviter, counting each member once (their latest join): regular = still here and not a new account."""
+def _tracked_counts(inviter_id: int) -> dict:
+    """Only what this bot has seen itself, counting each member once (their latest join)."""
     rows = db.execute("SELECT j.* FROM invite_joins j JOIN (SELECT member_id, MAX(id) AS id FROM invite_joins WHERE inviter_id=? "
                       "GROUP BY member_id) l ON l.id=j.id", (inviter_id,)).fetchall()
     left = sum(1 for r in rows if r["left_ts"])
     fake = sum(1 for r in rows if r["fake"] and not r["left_ts"])
-    return {"total": len(rows), "left": left, "fake": fake, "regular": len(rows) - left - fake}
+    return {"total": len(rows), "left": left, "fake": fake}
+
+
+def _finish(c: dict) -> dict:
+    c["regular"] = c["total"] - c["left"] - c["fake"] + c.get("bonus", 0)
+    return c
+
+
+def invite_counts(inviter_id: int) -> dict:
+    """Invites = joined − left − new accounts + bonus, including the counts carried over from Invite Tracker.
+    "regular" is the invite number shown everywhere."""
+    c = _tracked_counts(inviter_id)
+    b = db.execute("SELECT * FROM invite_base WHERE user_id=?", (inviter_id,)).fetchone()
+    c["bonus"] = 0
+    if b is not None:
+        c["total"] += b["joins"]; c["left"] += b["left_n"]; c["fake"] += b["fake"]; c["bonus"] = b["bonus"]
+    return _finish(c)
+
+
+def set_invite_base(user_id: int, joins: int, left: int, fake: int, bonus: int, name: str = "") -> dict:
+    """Carry over someone's numbers from Invite Tracker. Whatever this bot already counted itself is taken off,
+    so the totals match Invite Tracker right after the import and keep growing from there (importing twice is safe)."""
+    t = _tracked_counts(user_id)
+    db.execute("INSERT OR REPLACE INTO invite_base (user_id, joins, left_n, fake, bonus, ts, name) VALUES (?,?,?,?,?,?,?)",
+               (user_id, joins - t["total"], left - t["left"], fake - t["fake"], bonus, int(time.time()), (name or "")[:60]))
+    db.commit()
+    return invite_counts(user_id)
+
+
+def clear_invite_base() -> int:
+    n = db.execute("DELETE FROM invite_base").rowcount
+    db.commit()
+    return n
+
+
+def invite_base_info() -> dict:
+    r = db.execute("SELECT COUNT(*) AS n, MAX(ts) AS ts FROM invite_base").fetchone()
+    return {"players": r["n"] or 0, "ts": r["ts"]}
 
 
 def invite_top(limit: int = 10, since: Optional[int] = None) -> list:
@@ -1177,10 +1223,15 @@ def invite_top(limit: int = 10, since: Optional[int] = None) -> list:
            "SUM(j.fake=1 AND j.left_ts IS NULL) AS fake_n FROM invite_joins j JOIN (SELECT member_id, MAX(id) AS id FROM invite_joins "
            "WHERE inviter_id IS NOT NULL" + (" AND ts>=?" if since else "") + " GROUP BY member_id) l ON l.id=j.id GROUP BY j.inviter_id")
     rows = db.execute(sql, (since,) if since else ()).fetchall()
-    out = [{"inviter_id": r["inviter_id"], "total": r["total"], "left": r["left_n"] or 0, "fake": r["fake_n"] or 0,
-            "regular": r["total"] - (r["left_n"] or 0) - (r["fake_n"] or 0)} for r in rows]
-    out.sort(key=lambda x: (-x["regular"], -x["total"]))
-    return out[:limit]
+    out = {r["inviter_id"]: {"inviter_id": r["inviter_id"], "total": r["total"], "left": r["left_n"] or 0, "fake": r["fake_n"] or 0, "bonus": 0}
+           for r in rows}
+    if not since:                                      # all-time lists include the counts carried over from Invite Tracker
+        for b in db.execute("SELECT * FROM invite_base").fetchall():
+            c = out.setdefault(b["user_id"], {"inviter_id": b["user_id"], "total": 0, "left": 0, "fake": 0, "bonus": 0})
+            c["total"] += b["joins"]; c["left"] += b["left_n"]; c["fake"] += b["fake"]; c["bonus"] = b["bonus"]
+    res = [_finish(c) for c in out.values()]
+    res.sort(key=lambda x: (-x["regular"], -x["total"]))
+    return res[:limit]
 
 
 def recent_joins(limit: int = 50):

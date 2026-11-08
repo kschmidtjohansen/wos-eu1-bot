@@ -982,7 +982,13 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             "joins30": one("SELECT COUNT(*) FROM invite_joins WHERE ts>=?", now - 30 * 86400),
             "known30": one("SELECT COUNT(*) FROM invite_joins WHERE ts>=? AND inviter_id IS NOT NULL", now - 30 * 86400),
             "inviters": one("SELECT COUNT(DISTINCT inviter_id) FROM invite_joins WHERE inviter_id IS NOT NULL"),
-            "top": top, "recent": recent})
+            "top": top, "recent": recent, "carried": store.invite_base_info()})
+
+    @routes.delete("/api/invites/base")
+    async def clear_invite_base(request):
+        n = store.clear_invite_base()
+        store.log_event("invite", f"Invite counts carried over from Invite Tracker removed ({n} player(s))", who_id(request), who(request))
+        return web.json_response({"removed": n})
 
     @routes.get("/api/push")
     async def push_info(request):

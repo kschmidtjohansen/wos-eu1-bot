@@ -1544,6 +1544,13 @@ class WosBot(discord.Client):
         except discord.HTTPException as exc:
             log_event("system", f"Could not send the welcome message: {exc}", member.id, member.display_name)
 
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
+        if _import_watch:
+            try:
+                await on_leaderboard_edit(payload)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[invite import] {exc!r}")
+
     async def on_member_remove(self, member: discord.Member):
         if member.guild.id != GUILD_ID or member.bot:
             return
@@ -3593,7 +3600,8 @@ async def invites_show(interaction: discord.Interaction, user: Optional[discord.
     c = store.invite_counts(who.id)
     await interaction.response.send_message(
         f"📨 {who.mention} has **{c['regular']}** invite{'s' if c['regular'] != 1 else ''}"
-        f" ({c['total']} joined · {c['left']} left" + (f" · {c['fake']} new accounts" if c["fake"] else "") + ")",
+        f" ({c['total']} joined · {c['left']} left" + (f" · {c['fake']} new accounts" if c["fake"] else "")
+        + (f" · {c['bonus']} bonus" if c.get("bonus") else "") + ")",
         ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
 
@@ -3603,8 +3611,81 @@ async def invites_top(interaction: discord.Interaction):
     e = discord.Embed(title="📨 Top inviters", color=0x7DE3F4)
     e.description = "\n".join(f"**{i + 1}.** <@{r['inviter_id']}> – **{r['regular']}**" + (f" ({r['left']} left)" if r["left"] else "")
                               for i, r in enumerate(rows)) or "Nobody has invited anyone yet."
-    e.set_footer(text="Counts people who are still here, from the day the bot started tracking.")
+    e.set_footer(text="Counts people who are still here" + (" – including the counts carried over from Invite Tracker."
+                     if store.invite_base_info()["players"] else ", from the day the bot started tracking."))
     await interaction.response.send_message(embed=e, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+
+# ---- carry over the counts from the old Invite Tracker bot, so nobody starts from zero
+_IT_LINE = re.compile(r"<@!?(\d{15,21})>[^\n(]*?\(\s*(-?\d+)\s*regular\s*,\s*(-?\d+)\s*left\s*,\s*(-?\d+)\s*fake\s*,\s*(-?\d+)\s*bonus\s*\)", re.I)
+_import_watch: dict = {}      # leaderboard message id -> (until, interaction) – next pages are imported as they are opened
+
+
+def parse_invite_tracker(message_or_embeds) -> list:
+    """[(user_id, joined, left, fake, bonus)] from an Invite Tracker leaderboard or /invites message."""
+    embeds = getattr(message_or_embeds, "embeds", message_or_embeds) or []
+    parts = [getattr(message_or_embeds, "content", "") or ""]
+    for e in embeds:
+        parts += [e.title or "", e.description or ""] + [f"{f.name}\n{f.value}" for f in e.fields]
+    text = re.sub(r"[*_`]", "", "\n".join(parts))
+    found = {}
+    for m in _IT_LINE.finditer(text):
+        found[int(m.group(1))] = tuple(int(x) for x in m.groups()[1:])
+    return [(uid, *v) for uid, v in found.items()]
+
+
+def import_invite_rows(rows, guild=None) -> list:
+    out = []
+    for uid, joined, left, fake, bonus in rows:
+        m = guild.get_member(uid) if guild else None
+        c = store.set_invite_base(uid, joined, left, fake, bonus, m.display_name if m else "")
+        out.append((uid, c["regular"]))
+    return out
+
+
+@bot.tree.context_menu(name="Import invite counts", guild=_GUILD)
+async def import_invites_menu(interaction: discord.Interaction, message: discord.Message):
+    """Admins: right-click (long-press) Invite Tracker's leaderboard → Apps → Import invite counts."""
+    if not is_admin(interaction.user):
+        return await interaction.response.send_message("Only admins can import invite counts.", ephemeral=True)
+    rows = parse_invite_tracker(message)
+    if not rows:
+        return await interaction.response.send_message(
+            "I couldn't find any invite counts in that message. Use it on Invite Tracker's `/leaderboard invites` "
+            "(or `/invites`) message – the lines that say “… regular, … left, … fake, … bonus”.", ephemeral=True)
+    done = import_invite_rows(rows, interaction.guild)
+    _import_watch[message.id] = (time.time() + 14 * 60, interaction)
+    who = interaction.user.display_name
+    log_event("invite", f"{who} carried over the invite counts of {len(done)} player(s) from Invite Tracker", interaction.user.id, who)
+    lines = "\n".join(f"<@{u}> – **{n}** invites" for u, n in done[:10])
+    await interaction.response.send_message(
+        f"✅ Carried over **{len(done)}** player(s):\n{lines}\n\nNow press ▶ on the leaderboard to go through the next pages – "
+        "I pick up every page you open for the next 14 minutes. Importing a page twice is safe.",
+        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+
+async def on_leaderboard_edit(payload: discord.RawMessageUpdateEvent):
+    w = _import_watch.get(payload.message_id)
+    if not w:
+        return
+    until, interaction = w
+    if time.time() > until:
+        _import_watch.pop(payload.message_id, None)
+        return
+    data = payload.data or {}
+    embeds = [discord.Embed.from_dict(e) for e in data.get("embeds") or []]
+    rows = parse_invite_tracker(embeds)
+    if not rows:
+        return
+    done = import_invite_rows(rows, bot.get_guild(GUILD_ID))
+    who = interaction.user.display_name
+    log_event("invite", f"{who} carried over the invite counts of {len(done)} more player(s) from Invite Tracker", interaction.user.id, who)
+    try:
+        await interaction.followup.send(f"✅ Next page: carried over **{len(done)}** more player(s) "
+                                        f"({', '.join(f'<@{u}> {n}' for u, n in done[:10])}).",
+                                        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        pass
 
 
 bot.tree.add_command(invites_group)
