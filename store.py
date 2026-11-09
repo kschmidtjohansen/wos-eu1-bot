@@ -265,7 +265,7 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "public INTEGER NOT NULL DEFAULT 0"),
                      ("bug_reports", "ip_hash TEXT"),
                      ("bug_reports", "reject_reason TEXT"), ("suggestions", "reject_reason TEXT"),
-                     ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"), ("bug_reports", "dup_dismissed INTEGER"),
+                     ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"), ("bug_reports", "dup_dismissed INTEGER"), ("bug_files", "img_hash TEXT"),
                      ("bug_reports", "mod_pinged INTEGER"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
@@ -1508,14 +1508,75 @@ def remove_web_block(key: str) -> bool:
 
 
 # --------------------------------------------------------- similar bugs / changelog
-_STOP = set("the and for with that this when after before have has had not but are was were from into over under "
-            "there their then than they them your you our its it's cant can't dont don't does doesn't just very "
-            "again still some any all bug game issue problem error".split())
+# ---------------------------------------------------------------- duplicate detection
+# Words that say nothing about *which* bug it is (English + Polish + the ticket's own questions).
+_STOP = set("""the and for with that this when after before have has had not but are was were from into over under there their then
+than they them your you our its cant dont does doesnt just very again still some any all bug bugs game issue issues problem problems
+error errors please help fix fixed work works working happen happens happening know why what correct way feature should would could
+also only even get got can will one two time times now today yesterday since every everything something nothing thing things
+make made see seen saw use used using player players server like same other another more less much many really
+jest nie się że na do to co jak ale czy już tak mam gra błąd problem""".split())
+# Game words that mean the same thing for this purpose.
+_SYN = {}
+for _group in ("lose lost loses losing disappear disappears disappeared vanish vanished missing gone deleted removed",
+               "crash crashes crashed closes closing kicked kick freeze freezes frozen stuck hang hangs lag lags loading",
+               "teleport teleported teleports relocate relocation tp",
+               "reward rewards prize prizes chest chests gift gifts",
+               "gem gems diamond diamonds", "march marches troop troops army armies", "rally rallies",
+               "price prices cost costs expensive", "wrong incorrect invalid broken bugged", "alliance alli guild clan",
+               "furnace fc", "hero heroes", "pet pets", "bear hunt bearhunt", "svs statevstate", "shop store",
+               "upgrade upgrades upgrading level levels", "event events", "mail mails inbox", "chat chats message messages"):
+    _w = _group.split()
+    for _x in _w:
+        _SYN[_x] = _w[0]
+_TEMPLATE_RE = None
+
+
+def _template_re():
+    """The ticket's own questions in every language – removed before comparing, they're in every report."""
+    global _TEMPLATE_RE
+    if _TEMPLATE_RE is None:
+        qs = set(_TEMPLATE_LINES)
+        try:
+            import texts
+            for lang in texts.DEFAULTS.values():
+                for line in str(lang.get("bug.template", "")).splitlines():
+                    if line.strip():
+                        qs.add(line.strip().lower().rstrip("?:"))
+        except Exception:  # noqa: BLE001
+            pass
+        qs = {_fold(q) for q in qs}
+        _TEMPLATE_RE = re.compile("|".join(re.escape(q) for q in sorted(qs, key=len, reverse=True)) + r"|chief:.*|uid:.*|\d+\.\s+", re.I)
+    return _TEMPLATE_RE
+
+
+def _fold(text: str) -> str:
+    import unicodedata
+    t = unicodedata.normalize("NFKD", (text or "").lower())
+    return "".join(c for c in t if not unicodedata.combining(c)).replace("ł", "l")
+
+
+def _stem(w: str) -> str:
+    w = _SYN.get(w, w)
+    for suf in ("ings", "ing", "edly", "ed", "ies", "es", "s", "ly"):
+        if len(w) > len(suf) + 3 and w.endswith(suf):
+            w = w[: -len(suf)]
+            break
+    return _SYN.get(w, w)[:7]
 
 
 def _tokens(text: str) -> set:
-    words = re.findall(r"[a-z0-9ąćęłńóśźż]{3,}", (text or "").lower())
-    return {w[:6] for w in words if w not in _STOP}        # crude stemming: first 6 letters
+    t = _template_re().sub(" ", _fold(text))
+    words = re.findall(r"[^\W\d_]{3,}|\d{3,}", t)                     # any alphabet (Latin, Cyrillic, Arabic …)
+    out = {_stem(w) for w in words if w not in _STOP and _SYN.get(w, w) not in _STOP}
+    for run in re.findall(r"[぀-ヿ㐀-鿿가-힯]{2,}", t):   # Chinese/Japanese/Korean: pairs of characters
+        out |= {run[i:i + 2] for i in range(len(run) - 1)}
+    return out
+
+
+def _trigrams(text: str) -> set:
+    t = " " + re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", _fold(text))).strip() + " "
+    return {t[i:i + 3] for i in range(len(t) - 2)} if len(t) > 4 else set()
 
 
 OPEN_STATUSES = ("new", "investigating", "passed", "being_investigated")
@@ -1525,30 +1586,126 @@ def _norm(text: str) -> str:
     return re.sub(r"\W+", " ", (text or "").lower()).strip()
 
 
+_FEAT: dict = {}
+
+
+def _features(r) -> dict:
+    """Cached per bug: title words, body words, title letter-triplets, screenshot fingerprints."""
+    key = (r["id"], len(r["text"] or ""), r["summary"] or "")
+    f = _FEAT.get(r["id"])
+    if f is None or f["key"] != key:
+        title = r["summary"] or bug_summary(r)
+        f = {"key": key, "title": _tokens(title), "body": _tokens((r["text"] or "")[:1500]), "tri": _trigrams(title),
+             "norm": _norm(_template_re().sub(" ", (r["text"] or "").lower()))}
+        _FEAT[r["id"]] = f
+    if "img" not in f or f.get("img_n") != _img_count(r["id"]):
+        f["img"], f["img_n"] = image_hashes(r["id"]), _img_count(r["id"])
+    return f
+
+
+_IDF: dict = {"n": 0, "df": {}, "ts": 0}
+
+
+def _idf(tok: str) -> float:
+    """Rare words count more ("furnace" says more than "village"). Rebuilt every 10 minutes from recent reports."""
+    import math
+    if time.time() - _IDF["ts"] > 600:
+        df, n = {}, 0
+        for row in db.execute("SELECT id, text, summary FROM bug_reports ORDER BY id DESC LIMIT 1500").fetchall():
+            n += 1
+            for w in _tokens((row["summary"] or "") + " " + (row["text"] or "")[:1500]):
+                df[w] = df.get(w, 0) + 1
+        _IDF.update(n=max(n, 1), df=df, ts=time.time())
+    return math.log(1 + _IDF["n"] / (1 + _IDF["df"].get(tok, 0)))
+
+
+def _wsim(a: set, b: set) -> float:
+    """Weighted overlap of two word sets (0–1)."""
+    if not a or not b:
+        return 0.0
+    common = sum(_idf(w) for w in a & b)
+    return 2 * common / (sum(_idf(w) for w in a) + sum(_idf(w) for w in b))
+
+
 def duplicate_score(a, b) -> int:
-    """0–100: how much two bug reports look like the same problem (title counts most)."""
-    if _norm(a["text"]) and _norm(a["text"]) == _norm(b["text"]):
+    """0–100: how much two bug reports look like the same problem – titles, descriptions (any language,
+    typos and synonyms) and screenshots."""
+    fa, fb = _features(a), _features(b)
+    if fa["norm"] and len(fa["norm"]) > 12 and fa["norm"] == fb["norm"]:
         return 100
-    ta, tb = _tokens(a["summary"] or ""), _tokens(b["summary"] or "")
-    da, db_ = _tokens((a["text"] or "")[:400]), _tokens((b["text"] or "")[:400])
-    title = 0.0
-    if len(ta) >= 2 and len(tb) >= 2:
-        common = len(ta & tb)
-        title = common / min(len(ta), len(tb)) if common >= 2 else 0.0
-    A, B = ta | da, tb | db_
-    dice = 2 * len(A & B) / (len(A) + len(B)) if A and B else 0.0
-    score = max(title * 0.92, dice, (title + dice) / 2 + 0.1 if title and dice > 0.3 else 0)
+    title = _wsim(fa["title"], fb["title"]) if len(fa["title"]) >= 1 and len(fb["title"]) >= 1 else 0.0
+    body = _wsim(fa["title"] | fa["body"], fb["title"] | fb["body"])
+    tri = len(fa["tri"] & fb["tri"]) / len(fa["tri"] | fb["tri"]) if fa["tri"] and fb["tri"] else 0.0
+    score = max(title * 0.9, body * 1.05, 0.45 * title + 0.35 * body + 0.3 * tri, tri * 0.85 if tri > 0.55 else 0)
     if a["area"] and b["area"] and a["area"] != b["area"]:
-        score *= 0.8
+        score *= 0.85
+    # screenshots: the same picture (or nearly) is a strong sign
+    d = _img_distance(fa["img"], fb["img"])
+    if d is not None:
+        if d <= 4:
+            score = max(score, 0.9)
+        elif d <= 8:
+            score = max(score + 0.25, 0.6)
+        elif d <= 12:
+            score += 0.12
     return int(round(min(score, 1.0) * 100))
+
+
+# ---- screenshot fingerprints (difference hash: same screenshot ⇒ almost the same 64 bits, even resized or re-compressed)
+_IMG_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
+
+
+def _img_count(bug_id: int) -> int:
+    return db.execute("SELECT COUNT(*) FROM bug_files WHERE bug_id=?", (bug_id,)).fetchone()[0]
+
+
+def image_hashes(bug_id: int) -> list:
+    out = []
+    for f in bug_files(bug_id):
+        if not f["filename"].lower().endswith(_IMG_EXT):
+            continue
+        h = f["img_hash"] if "img_hash" in f.keys() else None
+        if not h:
+            h = _dhash(ATTACH_DIR / f["path"])
+            if h:
+                db.execute("UPDATE bug_files SET img_hash=? WHERE id=?", (h, f["id"]))
+                db.commit()
+        if h and h != "-":
+            out.append(int(h, 16))
+    return out
+
+
+def _dhash(path) -> Optional[str]:
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            im = im.convert("L")
+            w, h = im.size
+            if h > w * 1.2:                                    # phone screenshots: compare the middle (no status bars)
+                im = im.crop((0, int(h * 0.08), w, int(h * 0.92)))
+            px = list(im.resize((9, 8), Image.LANCZOS).getdata())
+        bits = 0
+        for row in range(8):
+            for col in range(8):
+                bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
+        return f"{bits:016x}"
+    except Exception:  # noqa: BLE001 – not an image, or Pillow missing
+        return "-"
+
+
+def _img_distance(a: list, b: list) -> Optional[int]:
+    if not a or not b:
+        return None
+    return min(bin(x ^ y).count("1") for x in a for y in b)
 
 
 def find_duplicate(r, days: int = 120):
     """The open bug this new report most likely duplicates: (row, percent) or (None, 0)."""
     since = int(time.time()) - days * 86400
-    rows = db.execute(f"SELECT * FROM bug_reports WHERE id<>? AND id<? AND duplicate_of IS NULL AND status IN "
-                      f"({','.join('?' * len(OPEN_STATUSES))}) AND created_at>=? ORDER BY id DESC LIMIT 400",
-                      (r["id"], r["id"], *OPEN_STATUSES, since)).fetchall()
+    rows = db.execute(f"SELECT * FROM bug_reports WHERE id<>? AND id<? AND duplicate_of IS NULL AND created_at>=? AND "
+                      f"(status IN ({','.join('?' * len(OPEN_STATUSES))}) OR public=1 OR (status='fixed' AND id IN (SELECT item_id FROM actions WHERE kind='bug' AND action='fixed' AND ts>=?))) "
+                      "ORDER BY id DESC LIMIT 500",
+                      (r["id"], r["id"], since, *OPEN_STATUSES, int(time.time()) - 21 * 86400)).fetchall()
     best, best_s = None, 0
     for c in rows:
         s = duplicate_score(r, c)

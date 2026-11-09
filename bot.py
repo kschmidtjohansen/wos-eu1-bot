@@ -1505,6 +1505,7 @@ class WosBot(discord.Client):
             await safe_refresh_board()
             start_redeem()
             asyncio.create_task(safe_task(add_translate_buttons(), "translate buttons"))
+            asyncio.create_task(safe_task(fix_language_flags(), "language flags"))
             if (access_cfg().get("backfill") or {}).get("state") == "running":
                 _backfill_task[0] = asyncio.create_task(safe_task(run_backfill(), "member backfill"))
             if not await cache_invites():
@@ -1520,6 +1521,11 @@ class WosBot(discord.Client):
 
     async def on_interaction(self, interaction: discord.Interaction):
         cid = (interaction.data or {}).get("custom_id", "") if interaction.type == discord.InteractionType.component else ""
+        if cid == "bug:known":
+            try:
+                await handle_known_button(interaction)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[known button] {exc!r}")
         if cid == "tr:item":
             try:
                 await handle_translate_button(interaction)
@@ -3273,6 +3279,33 @@ async def typed_reason(message: discord.Message) -> bool:
 
 
 # ------------------------------------------------------------ automatic duplicate detection
+def known_button() -> discord.ui.Button:
+    """📌 Known issue under bug posts in the staff channels – handled in on_interaction (custom_id bug:known)."""
+    return discord.ui.Button(label="Known issue", emoji="📌", style=discord.ButtonStyle.secondary, custom_id="bug:known", row=1)
+
+
+async def handle_known_button(interaction: discord.Interaction):
+    """Staff tap 📌 on a bug post: show it on the Known issues list (or take it off). One tap, no forms."""
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Only moderators and admins can do this.", ephemeral=True)
+    kind, r = item_for_message(interaction.message.id) if interaction.message else (None, None)
+    if kind != "bug" or r is None:
+        return await interaction.response.send_message("I can't find this bug any more.", ephemeral=True)
+    if r["duplicate_of"] or r["status"] in ("rejected", "admin_rejected"):
+        return await interaction.response.send_message(f"Bug #{r['id']} is closed – open the original bug instead.", ephemeral=True)
+    on = not r["public"]
+    set_bug(r["id"], public=1 if on else 0)
+    who = interaction.user.display_name
+    log_event("bug", f"Bug #{r['id']} {'marked as a known issue' if on else 'removed from the known issues'} by {who}", interaction.user.id, who)
+    await interaction.response.send_message(
+        f"📌 Bug #{r['id']} is now a **known issue** – players see it on the website and the Known issues board."
+        if on else f"Bug #{r['id']} is no longer listed as a known issue.", ephemeral=True)
+    try:
+        await refresh_board()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[known issues board] {exc!r}")
+
+
 def translate_button() -> discord.ui.Button:
     """🌐 Translate under bug and suggestion posts – handled in on_interaction (custom_id tr:item)."""
     return discord.ui.Button(label="Translate", emoji="🌐", style=discord.ButtonStyle.secondary, custom_id="tr:item", row=1)
@@ -3334,9 +3367,9 @@ async def safe_task(coro, label: str):
 
 async def add_translate_buttons():
     """Once after the update: put 🌐 Translate under the open bugs and suggestions that were posted before it."""
-    if get_raw("translate_buttons_v1"):
+    if get_raw("translate_buttons_v2"):
         return
-    put_raw("translate_buttons_v1", "1")
+    put_raw("translate_buttons_v2", "1")
     mod, admin = chan("mod_channel_id"), chan("admin_channel_id")
     marks = ",".join("?" * len(store.OPEN_STATUSES))
     for r in store.db.execute(f"SELECT * FROM bug_reports WHERE status IN ({marks}) ORDER BY id DESC LIMIT 150",
@@ -3370,6 +3403,7 @@ class DupView(discord.ui.View):
                 self.remove_item(self.confirm)
             if show != "reopen":
                 self.remove_item(self.reopen)
+        self.add_item(known_button())
         self.add_item(translate_button())
 
     @discord.ui.button(label="Close as duplicate", emoji="🔁", style=discord.ButtonStyle.secondary, custom_id="dup:confirm")
@@ -4177,6 +4211,13 @@ LANG_GUESS = {  # channel name (without flag and "-chat") -> (role name, button 
     "th": ("Thai", "ไทย"), "ua": ("Ukrainian", "Українська"), "ro": ("Romanian", "Română"),
 }
 _LEAD_EMOJI = re.compile(r"^([^\w\s-]+)[-\s]*")
+# The right flag for each language – used instead of the channel's emoji (some channel names use a look-alike flag).
+LANG_FLAG = {"Arabic": "🇸🇦", "Indonesian": "🇮🇩", "Polish": "🇵🇱", "German": "🇩🇪", "French": "🇫🇷", "Filipino": "🇵🇭",
+             "Spanish": "🇪🇸", "Turkish": "🇹🇷", "Dutch": "🇳🇱", "India": "🇮🇳", "Hindi": "🇮🇳", "Brazil": "🇧🇷", "Portuguese": "🇵🇹",
+             "Chinese": "🇨🇳", "Russian": "🇷🇺", "Italian": "🇮🇹", "Japanese": "🇯🇵", "Korean": "🇰🇷", "Vietnamese": "🇻🇳",
+             "Thai": "🇹🇭", "Ukrainian": "🇺🇦", "Romanian": "🇷🇴",
+             "Philippines": "🇵🇭", "Tagalog": "🇵🇭", "Pilipino": "🇵🇭", "Indonesia": "🇮🇩", "Poland": "🇵🇱", "Germany": "🇩🇪",
+             "France": "🇫🇷", "Spain": "🇪🇸", "Turkey": "🇹🇷", "Netherlands": "🇳🇱", "China": "🇨🇳", "Russia": "🇷🇺"}
 
 
 def guess_language(channel_name: str) -> dict:
@@ -4186,7 +4227,45 @@ def guess_language(channel_name: str) -> dict:
     rest = channel_name[m.end():] if m else channel_name
     key = re.sub(r"[-_\s]*chat$", "", rest.lower()).strip("-_ ")
     role, label = LANG_GUESS.get(key, (key.replace("-", " ").title() or channel_name, key.replace("-", " ").title() or channel_name))
+    emoji = LANG_FLAG.get(role, emoji)
     return {"emoji": emoji, "role": role, "label": label, "chat": bool(re.search(r"chat$", rest.lower())) and key not in ("general", "")}
+
+
+async def fix_language_flags():
+    """Once after the update: language chats set up with a look-alike flag (e.g. Philippines) get the right flag –
+    in the role name and in the language menu."""
+    a = access_cfg()
+    langs, g = a.get("langs") or [], bot.get_guild(GUILD_ID)
+    if not langs or g is None:
+        return
+    changed = False
+    for x in langs:
+        want = LANG_FLAG.get(x.get("role") or "")
+        if want and x.get("emoji") != want:
+            x["emoji"] = want
+            changed = True
+            role = g.get_role(int(x["role_id"]))
+            if role is not None:
+                try:
+                    await role.edit(name=f"{want} {x['role']}"[:100], reason="Correct flag for this language")
+                except discord.HTTPException:
+                    pass
+    if not changed:
+        return
+    save_access(a)
+    menu = store.get_role_menu(a["lang_menu"]) if a.get("lang_menu") else None
+    if menu is not None:
+        flags = {str(x["role_id"]): x["emoji"] for x in langs}
+        items = json.loads(menu["roles"] or "[]")
+        for it in items:
+            if str(it.get("role_id")) in flags:
+                it["emoji"] = flags[str(it["role_id"])]
+        store.save_role_menu(menu["id"], roles=json.dumps(items))
+        try:
+            await publish_role_menu(menu["id"])
+        except Exception as exc:  # noqa: BLE001
+            print(f"[language flags] {exc!r}")
+    log_event("settings", "Language chats: corrected the flags in the language menu and role names", None, brand())
 
 
 def access_cfg() -> dict:

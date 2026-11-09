@@ -2,3 +2,4 @@ discord.py>=2.4
 python-dotenv>=1.0
 aiohttp>=3.9
 pywebpush>=2.0
+Pillow>=10.0      # screenshot fingerprints for duplicate detection
