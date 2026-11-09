@@ -23,7 +23,7 @@ Welcome:   new members are greeted (and tagged) in the welcome channel; edit the
 Channels, toggles and limits are stored in the database and edited from the dashboard.
 """
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
 import re
 import base64
@@ -155,15 +155,52 @@ def is_admin(user) -> bool:
         isinstance(user, discord.Member) and user.guild_permissions.administrator)
 
 
-async def dm(user_id: int, text: str):
+async def dm(user_id: int, text: str, embed: Optional[discord.Embed] = None, file: Optional[discord.File] = None):
     """DM a reporter about their report (can be switched off on the dashboard)."""
     if not cfg("dm_notifications") or not user_id:   # reporter_id 0 = report from the website
         return
     try:
         user = await bot.fetch_user(user_id)
-        await user.send(text)
+        kw = {"embed": embed} if embed is not None else {}
+        if file is not None:
+            kw["file"] = file
+        await user.send(text, **kw)
     except discord.HTTPException:
         pass
+
+
+def report_copy(r, lg: str, kind: str = "bug"):
+    """A copy of the player's own report under every status message – so “#28 was fixed” says which bug."""
+    if kind == "suggestion":
+        e = discord.Embed(title=T("dm.copy_sug", lg, id=r["id"]), description=(r["text"] or "")[:1500], color=0xFEE75C)
+        if r["created_at"]:
+            e.set_footer(text=f"{T('dm.copy_sent', lg)} {datetime.fromtimestamp(r['created_at'], store.tz()):%d %b %Y}")
+        return e, None
+    title = store.bug_summary(r)
+    body = "\n".join(line for line in (r["text"] or "").splitlines()
+                     if line.strip() and line.strip().strip("*#>-: ").lower().rstrip("?:") not in store._TEMPLATE_LINES)
+    color = {"fixed": 0x57F287, "rejected": 0x99AAB5, "admin_rejected": 0x99AAB5}.get(r["status"], 0x5865F2)
+    e = discord.Embed(title=T("dm.copy_bug", lg, id=r["id"]), color=color,
+                      description=(f"**{title}**\n\n" if title else "") + (body[:1200] + ("…" if len(body) > 1200 else "")))
+    if r["area"]:
+        e.add_field(name=T("dm.copy_area", lg), value=r["area"], inline=True)
+    if r["game_version"]:
+        e.add_field(name=T("dm.copy_version", lg), value=r["game_version"], inline=True)
+    fixed_in = r["fixed_version"] if "fixed_version" in r.keys() else None
+    if r["status"] == "fixed" and fixed_in:
+        e.add_field(name=T("dm.copy_fixed_in", lg), value=fixed_in, inline=True)
+    if r["created_at"]:
+        e.set_footer(text=f"{T('dm.copy_sent', lg)} {datetime.fromtimestamp(r['created_at'], store.tz()):%d %b %Y}")
+    # their first screenshot, so they recognise it at a glance
+    for f in store.bug_files(r["id"]):
+        if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+            path = store.ATTACH_DIR / f["path"]
+            if path.exists() and path.stat().st_size <= 8 * 1024 * 1024:
+                name = "report" + path.suffix.lower()
+                e.set_image(url=f"attachment://{name}")
+                return e, discord.File(str(path), filename=name)
+            break
+    return e, None
 
 
 T, lang_for = store.T, store.lang_for
@@ -178,13 +215,21 @@ def ilang(interaction: discord.Interaction) -> str:
     return lang_for(interaction.user.id)
 
 
-async def dm_t(user_id: int, key: str, reason: Optional[str] = None, **kw):
+async def dm_t(user_id: int, key: str, reason: Optional[str] = None, bug=None, suggestion=None, **kw):
     """DM a player in their own language (texts.py / the dashboard's Translations page). A reason from the
-    team (why a report was closed) is added underneath."""
+    team (why a report was closed) is added underneath, and a copy of their report (bug= / suggestion=)."""
     if not user_id:
         return
     lg = lang_for(user_id)
-    await dm(user_id, T(key, lg, **kw) + (T("dm.reason", lg, reason=reason[:900]) if reason else ""))
+    embed = file = None
+    try:
+        if bug is not None:
+            embed, file = report_copy(get_bug(bug["id"]) or bug, lg)
+        elif suggestion is not None:
+            embed, file = report_copy(get_suggestion(suggestion["id"]) or suggestion, lg, "suggestion")
+    except Exception as exc:  # noqa: BLE001 – the message itself must always go out
+        print(f"[report copy] {exc!r}")
+    await dm(user_id, T(key, lg, **kw) + (T("dm.reason", lg, reason=reason[:900]) if reason else ""), embed, file)
 
 
 # ------------------------------------------- player: bug ticket (private thread)
@@ -895,7 +940,7 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
         log_event("mod", f"Bug #{r['id']} passed to admins by {who}", member.id, who)
         if r["severity"] == "critical":
             await ping_critical(r, who)
-        await dm_t(r["reporter_id"], "dm.passed", id=r["id"])
+        await dm_t(r["reporter_id"], "dm.passed", id=r["id"], bug=r)
 
     elif emoji == REJECT_EMOJI:
         await prompt_reason(channel, "bug", r["id"], member, "rejected")
@@ -929,7 +974,7 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
         r = get_bug(r["id"])
         await msg.edit(embed=bug_embed(r, f"Ticket opened by {who}"))
         log_event("mod", f"Bug #{r['id']}: info ticket opened by {who}", member.id, who)
-        await dm_t(r["reporter_id"], "dm.investigating", id=r["id"], link=thread.jump_url)
+        await dm_t(r["reporter_id"], "dm.investigating", id=r["id"], link=thread.jump_url, bug=r)
 
 
 async def handle_admin(payload: discord.RawReactionActionEvent, emoji: str):
@@ -978,7 +1023,7 @@ async def handle_admin(payload: discord.RawReactionActionEvent, emoji: str):
             pass
     label = STATUS[new][0]
     log_event("admin", f"Bug #{r['id']} marked “{label.split(' ', 1)[1]}” by {who}", member.id, who)
-    await dm_t(r["reporter_id"], "dm." + new, id=r["id"])
+    await dm_t(r["reporter_id"], "dm." + new, id=r["id"], bug=r)
     if new == "fixed":
         await notify_followers(r)
 
@@ -1041,7 +1086,7 @@ async def post_suggestion_changes(sid: int, text: str, actor_id, who: str):
         except discord.HTTPException as exc:
             log_event("system", f"Could not post the update for suggestion #{sid}: {exc}", actor_id, who)
     if first:
-        await dm_t(r["author_id"], "dm.sug_changed", id=r["id"], changes=text)
+        await dm_t(r["author_id"], "dm.sug_changed", id=r["id"], changes=text, suggestion=r)
     log_event("mod", f"Suggestion #{sid}: “what we changed” {'posted' if first else 'updated'} by {who}", actor_id, who)
     return get_suggestion(sid)
 
@@ -1093,7 +1138,7 @@ async def decide_suggestion(r, new: str, actor_id, who: str, reason: Optional[st
                 log_event("system", f"Could not post accepted suggestion #{r['id']}: {exc}", actor_id, who)
     log_event("mod", f"Suggestion #{r['id']} {new} by {who}" + (f" – “{reason[:120]}”" if reason else ""), actor_id, who)
     await dm_t(r["author_id"], "dm.sug_accepted" if new == "accepted" else "dm.sug_rejected", id=r["id"],
-               reason=reason if new == "rejected" else None)
+               reason=reason if new == "rejected" else None, suggestion=r)
     return get_suggestion(r["id"])
 
 
@@ -1753,9 +1798,9 @@ async def apply_bug_status(r, new: str, actor_name: str, actor_id: Optional[int]
     if dup:
         lg = lang_for(r["reporter_id"])
         await dm_t(r["reporter_id"], "dm.duplicate", id=r["id"], original=dup["id"],
-                   status=T("st." + dup["status"], lg).split(" ", 1)[-1], reason=reason if closing else None)
+                   status=T("st." + dup["status"], lg).split(" ", 1)[-1], reason=reason if closing else None, bug=r)
     else:
-        await dm_t(r["reporter_id"], "dm." + new, id=r["id"], reason=reason if closing else None)
+        await dm_t(r["reporter_id"], "dm." + new, id=r["id"], reason=reason if closing else None, bug=r)
     if dup:
         await sync_bug_messages(dup)             # the original now shows how many others hit the same bug
     if new == "fixed":
@@ -1770,7 +1815,7 @@ async def notify_followers(r):
     for d in store.duplicates_of(r["id"]):
         if d["reporter_id"] and d["reporter_id"] not in told:
             told.add(d["reporter_id"])
-            await dm_t(d["reporter_id"], "dm.follow_fixed", id=d["id"], original=r["id"])
+            await dm_t(d["reporter_id"], "dm.follow_fixed", id=d["id"], original=r["id"], bug=d)
     if len(told) > 1:
         log_event("system", f"Told {len(told) - 1} player(s) who reported duplicates that bug #{r['id']} is fixed",
                   None, brand())
@@ -1779,7 +1824,7 @@ async def notify_followers(r):
         if uid not in told:
             told.add(uid)
             n += 1
-            await dm_t(uid, "dm.vote_fixed", id=r["id"], title=store.bug_summary(r)[:100])
+            await dm_t(uid, "dm.vote_fixed", id=r["id"], title=store.bug_summary(r)[:100], bug=r)
     if n:
         log_event("system", f"Told {n} player(s) who also had bug #{r['id']} that it is fixed", None, brand())
 
@@ -2258,7 +2303,7 @@ async def check_info_tickets(now: Optional[float] = None):
                                         allowed_mentions=discord.AllowedMentions(users=True))
             except discord.HTTPException:
                 continue
-            await dm_t(r["reporter_id"], "dm.info_reminder", id=r["id"], link=thread.jump_url)
+            await dm_t(r["reporter_id"], "dm.info_reminder", id=r["id"], link=thread.jump_url, bug=r)
             state[key] = {"since": waiting_since, "reminders": (st.get("reminders", []) + [msg.id])[-5:]}
             log_event("mod", f"Bug #{r['id']}: reminded the reporter to answer the info ticket", None, brand())
     put_raw("info_tickets", json.dumps(state))
@@ -3434,7 +3479,7 @@ async def reopen_bug(r, who: str, actor_id=None):
     r = get_bug(r["id"])
     await sync_bug_messages(r, f"Reopened by {who}")
     log_event("mod", f"Bug #{r['id']} reopened by {who} – not a duplicate", actor_id, who)
-    await dm_t(r["reporter_id"], "dm.reopened", id=r["id"])
+    await dm_t(r["reporter_id"], "dm.reopened", id=r["id"], bug=r)
     return r
 
 
