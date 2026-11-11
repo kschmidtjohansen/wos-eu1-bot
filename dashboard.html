@@ -1123,7 +1123,7 @@ function withSettings(view, names, label) {
 const FSEC = {
   duplicates: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Duplicate check</div>
-      <p class="w-hint" style="margin:0 0 8px">Before sending, players are shown the closest known bugs (“Is it one of these?”) and can tap 👍 instead of reporting. Each report that is sent is compared with open bugs and bugs fixed in the last 3 weeks: words in every language (and the English text once a report is translated), titles, screenshots and video frames.</p>
+      <p class="w-hint" style="margin:0 0 8px">Before sending, players are shown the closest known bugs (“Is it one of these?”) and can tap 👍 instead of reporting. Each report that is sent is compared with open bugs and bugs fixed in the last 3 weeks: titles, text, screenshots and video frames. Reports that aren’t in English are translated once with your Google key (Translations page) so every language is compared in English – only for this check, nothing is posted. It stops when fewer than 100,000 characters of the month’s limit are left, so 🌐 Translate keeps working.</p>
       ${selectRow('dup_mode', 'Duplicate check', 'Each new report is compared with the open bugs. Auto = clear duplicates are closed by themselves (the player is told which bug it matches, and moderators can reopen it). Flag = only marked for the moderators. Off = no check.', ['auto', 'flag', 'off'])}
       ${numberRow('dup_auto_percent', 'Close automatically from', 'Reports still waiting for a moderator that match an existing bug at least this much are closed as duplicates. From 35 % up to this they are only marked for the moderators. Recommended: 50 %.', 40, 100, '% match')}
     </section>`,

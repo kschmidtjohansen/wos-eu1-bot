@@ -268,7 +268,7 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "reject_reason TEXT"), ("suggestions", "reject_reason TEXT"),
                      ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"), ("bug_reports", "dup_dismissed INTEGER"), ("bug_reports", "ai_title TEXT"), ("bug_reports", "ai_summary TEXT"),
                      ("bug_reports", "ai_checked INTEGER"), ("bug_reports", "ai_dup INTEGER"), ("bug_reports", "ai_conf INTEGER"),
-                     ("bug_reports", "ai_reason TEXT"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
+                     ("bug_reports", "ai_reason TEXT"), ("bug_reports", "match_en TEXT"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
                      ("bug_reports", "mod_pinged INTEGER"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
@@ -1610,7 +1610,7 @@ _FEAT: dict = {}
 def _features(r) -> dict:
     """Cached per bug: title words, body words, title letter-triplets, screenshot fingerprints."""
     g = lambda k: r[k] if k in r.keys() else None
-    key = (r["id"], len(r["text"] or ""), r["summary"] or "", g("ai_title"), len(g("text_en") or ""))
+    key = (r["id"], len(r["text"] or ""), r["summary"] or "", g("ai_title"), len(g("text_en") or ""), len(g("match_en") or ""))
     f = _FEAT.get(r["id"])
     if f is None or f["key"] != key:
         title = r["summary"] or bug_summary(r)
@@ -1619,6 +1619,8 @@ def _features(r) -> dict:
              "body": _tokens((r["text"] or "")[:1500]) | _tokens(en[:1500]),
              "tri": _trigrams(title), "tri_en": _trigrams(g("ai_title") or ""),
              "norm": _norm(_template_re().sub(" ", (r["text"] or "").lower()))}
+        # everything in English (the report itself when it's English, else its translation) – compares any two languages
+        f["en"] = _tokens(en[:2500]) if en else (f["title"] | f["body"])
         _FEAT[r["id"]] = f
     if "img" not in f or f.get("img_n") != _img_count(r["id"]):
         f["img"], f["img_n"] = image_hashes(r["id"]), _img_count(r["id"])
@@ -1660,7 +1662,8 @@ def duplicate_score(a, b) -> int:
     tri = len(fa["tri"] & fb["tri"]) / len(fa["tri"] | fb["tri"]) if fa["tri"] and fb["tri"] else 0.0
     if fa["tri_en"] and fb["tri_en"]:                # English titles from the AI: reports in different languages
         tri = max(tri, len(fa["tri_en"] & fb["tri_en"]) / len(fa["tri_en"] | fb["tri_en"]))
-    score = max(title * 0.9, body * 1.05, 0.45 * title + 0.35 * body + 0.3 * tri, tri * 0.85 if tri > 0.55 else 0)
+    en = _wsim(fa["en"], fb["en"])
+    score = max(title * 0.9, body * 1.05, en * 1.05, 0.45 * title + 0.35 * body + 0.3 * tri, tri * 0.85 if tri > 0.55 else 0)
     if a["area"] and b["area"] and a["area"] != b["area"]:
         score *= 0.85
     # screenshots: the same picture (or nearly) is a strong sign
@@ -1688,7 +1691,8 @@ def clean_report(text: str) -> str:
 def english_text(r) -> str:
     """English text for matching: the AI summary, a moderator's 🌐 translation, or a cached translation."""
     g = lambda k: r[k] if k in r.keys() else None
-    parts = [g("ai_summary") or "", g("text_en") or ""]
+    m = g("match_en") or ""
+    parts = [g("ai_summary") or "", g("text_en") or (m if m != "-" else "")]
     if not parts[1] and r["text"]:
         import hashlib
         t = (r["text"] or "").strip()[:2000]
@@ -1808,6 +1812,30 @@ def find_duplicate(r, days: int = 120):
     return best, best_s
 
 
+_EN_WORDS = set("""the and is it in to of my i when a on was not can't cant doesn't dont don't after with at be have this that
+for you are but get got its it's there they then from i'm im what why how no all your if or so up out just""".split())
+
+
+def looks_english(text: str) -> bool:
+    """Cheap guess so English reports never use the translation allowance."""
+    words = re.findall(r"[^\W\d_]+(?:'[a-z]+)?", (text or "").lower())
+    if not words:
+        return True                                   # nothing to translate (numbers, links, emojis)
+    latin = sum(1 for w in words if w.isascii())
+    if latin < len(words) * 0.9:
+        return False
+    common = sum(1 for w in words if w in _EN_WORDS)
+    return common >= max(1, len(words) * 0.12)
+
+
+def bugs_needing_translation(limit: int = 10) -> list:
+    """Open bugs, known issues and recently fixed bugs whose English version for matching isn't known yet."""
+    return db.execute(f"SELECT * FROM bug_reports WHERE match_en IS NULL AND (text_en IS NULL OR text_en='') AND duplicate_of IS NULL AND "
+                      f"(status IN ({','.join('?' * len(OPEN_STATUSES))}) OR (public=1 AND status NOT IN ('rejected','admin_rejected')) "
+                      "OR (status='fixed' AND id IN (SELECT item_id FROM actions WHERE kind='bug' AND action='fixed' AND ts>=?))) "
+                      "ORDER BY id DESC LIMIT ?", (*OPEN_STATUSES, int(time.time()) - 21 * 86400, limit)).fetchall()
+
+
 class _Draft(dict):
     """A report that hasn't been sent yet, shaped like a bug_reports row for duplicate_score()."""
     def keys(self):
@@ -1818,11 +1846,12 @@ _draft_seq = [0]
 
 
 def match_draft(title: str, text: str, area: Optional[str] = None, reporter_id: Optional[int] = None,
-                img_hashes: Optional[list] = None, limit: int = 3, min_score: int = 35) -> list:
+                img_hashes: Optional[list] = None, limit: int = 3, min_score: int = 35, english: Optional[str] = None) -> list:
     """Before a report is sent: existing bugs it most likely is, best first: [(row, percent)].
     Looks at open bugs, known issues and bugs fixed in the last 3 weeks – title, text in any language and screenshots."""
     _draft_seq[0] -= 1
-    d = _Draft(id=_draft_seq[0], text=text or "", summary=(title or "").strip() or None, area=area, reporter_id=reporter_id)
+    d = _Draft(id=_draft_seq[0], text=text or "", summary=(title or "").strip() or None, area=area, reporter_id=reporter_id,
+               match_en=english or None)
     try:
         f = _features(d)
         f["img"], f["img_n"] = list(img_hashes or []), 0

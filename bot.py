@@ -668,7 +668,9 @@ class BugFormModal(discord.ui.Modal):
             except Exception:  # noqa: BLE001 – a screenshot we can't read just isn't compared
                 pass
         try:
-            matches = store.match_draft(title, report["text"], report["area"], interaction.user.id, hashes)
+            en = await english_for_match(title, report["text"])
+            matches = store.match_draft(title, report["text"], report["area"], interaction.user.id, hashes,
+                                        english=en if en and en != "-" else None)
         except Exception as exc:  # noqa: BLE001 – never block a report because of the check
             print(f"[match draft] {exc!r}")
         if matches:
@@ -3557,6 +3559,9 @@ async def scan_duplicates() -> int:
     handled yet that match at least dup_auto_percent are closed; lower matches are flagged for the moderators."""
     if cfg("dup_mode") == "off":
         return 0
+    for r in store.bugs_needing_translation(10):    # older reports in other languages, a few per run
+        if not await translate_for_match(r) and translate.remaining() < MATCH_RESERVE:
+            break
     mod, n, closed = chan("mod_channel_id"), 0, 0
     auto, need = cfg("dup_mode") == "auto", cfg("dup_auto_percent")
     if auto:   # bugs marked earlier that are over the limit: close them now
@@ -3633,7 +3638,42 @@ async def check_duplicate(r):
     return "flag"
 
 
+MATCH_RESERVE = 100_000      # translation characters per month always kept free for staff pressing 🌐 Translate
+
+
+async def english_for_match(title: Optional[str], text: str) -> Optional[str]:
+    """English version of a report, only for the duplicate check (never posted). None when it's already English,
+    no Google key is set, or the month's translation allowance is nearly used. '-' = checked, it is English."""
+    body = store.clean_report(text or "")
+    joined = "\n".join(x for x in ((title or "").strip(), body) if x)[:1500]
+    if not joined.strip() or store.looks_english(joined):
+        return "-"
+    if not translate.key() or translate.remaining() - len(joined) < MATCH_RESERVE:
+        return None
+    try:
+        out, src = await asyncio.wait_for(translate.text(joined, "en"), timeout=12)
+    except Exception as exc:  # noqa: BLE001 – matching still works on the original words
+        print(f"[match translate] {exc!r}")
+        return None
+    return "-" if translate.same_language(src, "en") else out[:4000]
+
+
+async def translate_for_match(r) -> bool:
+    """Store the English version of one bug for matching. True when something was stored."""
+    if r is None or r["match_en"] is not None or (r["text_en"] or ""):
+        return False
+    en = await english_for_match(r["summary"], r["text"] or "")
+    if en is None:
+        return False
+    set_bug(r["id"], match_en=en)
+    return True
+
+
 async def safe_check_duplicate(bug_id: int):
+    try:
+        await translate_for_match(get_bug(bug_id))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[match translate] {exc!r}")
     try:
         res = await check_duplicate(get_bug(bug_id))
     except Exception as exc:  # noqa: BLE001 – the report itself is already safe
