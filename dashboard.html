@@ -1035,37 +1035,7 @@ function previewHtml() {
     <div class="w-dp-reacts"><span class="w-dp-btn pri">🐛 Report a bug</span><span class="w-dp-btn">💡 Suggest an idea</span></div>
   </div>`;
 }
-const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['dups', 'Duplicates & AI'], ['staff', 'Reminders & digest']];
-// Settings → Bug bot → Duplicates & AI. The key is never sent back; only whether one is saved.
-function aiCard() {
-  const A = S.ai;
-  if (!A) return html`<section class="w-card w-pad"><div class="w-empty">Loading…</div></section>`;
-  const u = A.usage, cost = ((u.in_tokens * 1 + u.out_tokens * 5) / 1e6).toFixed(2), T = S.aiTest;
-  return html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">AI duplicate check</h3>
-      <span class="w-badge ${A.enabled ? 'ok' : 'todo'}">${A.enabled ? 'On' : A.key_set ? 'Off' : 'Needs a key'}</span></div>
-    <p class="w-hint" style="margin:0 0 12px">Claude reads each new report – text in any language, screenshots and frames from videos – and compares it with open and recently fixed bugs.
-      It only keeps a short English summary for matching; nothing is translated or posted. Costs about $0.002–0.01 per report on your Anthropic account.</p>
-    <div class="w-row"><div><div class="w-row-label">Anthropic API key</div><div class="w-row-desc">Create one at console.anthropic.com → API keys. ${A.key_set ? 'A key is saved – type a new one to replace it.' : ''}</div></div>
-      <div style="display:flex;gap:6px"><input class="w-input" type="password" id="ai-key" autocomplete="off" placeholder="${A.key_set ? '•••••••• saved' : 'sk-ant-…'}" style="max-width:220px">
-      <button class="w-btn" data-act="aiSave" data-f="key">Save key</button></div></div>
-    <div class="w-row"><div><div class="w-row-label">Use the AI</div><div class="w-row-desc">Checks every new bug report in the background.</div></div>
-      <button class="w-btn ${A.enabled ? '' : 'primary'}" data-act="aiSave" data-f="enabled" ${A.key_set ? '' : 'disabled'}>${A.enabled ? 'Turn off' : 'Turn on'}</button></div>
-    <div class="w-row"><div><div class="w-row-label">Close duplicates automatically ${A.auto_close ? html`<span class="w-badge ok">On</span>` : ''}</div><div class="w-row-desc">Only new reports nobody has handled yet. The player is told which bug it matches, and anyone can press “Not a duplicate” to reopen it. Below this, the bug is only marked for moderators.</div></div>
-      <div style="display:flex;gap:8px;align-items:center"><input class="w-input" type="number" id="ai-pct" min="60" max="100" value="${A.auto_percent}" style="width:72px" aria-label="Minimum certainty"><span class="w-hint">% sure</span>
-      <button class="w-btn ${A.auto_close ? '' : 'primary'}" data-act="aiSave" data-f="auto_close" ${A.enabled ? '' : 'disabled'}>${A.auto_close ? 'Turn off' : 'Turn on'}</button></div></div>
-    <div class="w-row"><div><div class="w-row-label">Monthly limit</div><div class="w-row-desc">The AI stops for the rest of the month after this many checks. The free check keeps working.</div></div>
-      <div style="display:flex;gap:6px;align-items:center"><input class="w-input" type="number" id="ai-limit" min="10" max="100000" value="${u.limit}" style="width:90px" aria-label="Monthly limit"><span class="w-hint">checks</span></div></div>
-    <div class="w-row"><div><div class="w-row-label">Model</div><div class="w-row-desc">Leave empty for ${A.default_model}.</div></div>
-      <div style="display:flex;gap:6px"><input class="w-input" id="ai-model" value="${A.model === A.default_model ? '' : A.model}" placeholder="${A.default_model}" style="max-width:200px">
-      <button class="w-btn" data-act="aiSave" data-f="numbers">Save</button></div></div>
-    <div class="w-mysum" style="margin-top:12px"><span>This month: <b>${u.calls}</b> of ${u.limit} checks · about <b>$${cost}</b></span><span><b>${A.checked}</b> bugs checked</span><span><b>${A.auto_closed}</b> closed automatically</span></div>
-    <div class="w-actions"><input class="w-input" type="number" id="ai-bug" placeholder="Bug #" style="width:90px" aria-label="Bug number">
-      <button class="w-btn" data-act="aiTest" ${A.key_set ? '' : 'disabled'}>Test on this bug</button>
-      <button class="w-btn" data-act="aiScan" ${A.enabled ? '' : 'disabled'}>Check open bugs now</button></div>
-    ${T ? html`<div class="w-ai" style="margin-top:10px">${T.duplicate_of ? html`Bug #${T.bug} looks like a duplicate of <b>#${T.duplicate_of}</b> ${T.dup_title} (${T.confidence}% sure)` : html`Bug #${T.bug}: no duplicate found`}
-      <span class="w-hint" style="display:block">${T.title} – ${T.reason}</span></div>` : ''}
-  </section>`;
-}
+const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['dups', 'Duplicates'], ['staff', 'Reminders & digest']];
 function viewPanel() {
   const d = S.panelDraft, p = S.health.panel, sub = subOf(BUGBOT_SUBS);
   const head = html`<div class="w-pagehead"><h2>Bug bot</h2>
@@ -1074,7 +1044,7 @@ function viewPanel() {
   if (sub === 'suggestions') return html`${head}${fsec('suggestions')}${saveBar()}`;
   if (sub === 'website') return html`${head}${fsec('website')}${saveBar()}`;
   if (sub === 'staff') return html`${head}${fsec('reminders', 'digest')}${saveBar()}`;
-  if (sub === 'dups') return html`${head}${aiCard()}${fsec('duplicates')}${saveBar()}`;
+  if (sub === 'dups') return html`${head}${fsec('duplicates')}${saveBar()}`;
   return html`${head}
     <div class="w-grid2">
       <section class="w-card w-pad">
@@ -1152,10 +1122,10 @@ function withSettings(view, names, label) {
 // Settings, grouped by feature – each page shows the groups that belong to it (admins only).
 const FSEC = {
   duplicates: () => html`
-    <section class="w-card w-pad"><div class="w-group-title">Built-in duplicate check (free)</div>
-      <p class="w-hint" style="margin:0 0 8px">Compares words in every language (using the English text when a report was translated), titles, screenshots and video frames.</p>
+    <section class="w-card w-pad"><div class="w-group-title">Duplicate check</div>
+      <p class="w-hint" style="margin:0 0 8px">Each report is compared with open bugs and bugs fixed in the last 3 weeks: words in every language (and the English text once a report is translated), titles, screenshots and video frames.</p>
       ${selectRow('dup_mode', 'Duplicate check', 'Each new report is compared with the open bugs. Auto = clear duplicates are closed by themselves (the player is told which bug it matches, and moderators can reopen it). Flag = only marked for the moderators. Off = no check.', ['auto', 'flag', 'off'])}
-      ${numberRow('dup_auto_percent', 'Close automatically from', 'How similar a report must be to close it by itself. Lower matches are only marked for the moderators.', 50, 100, '% match')}
+      ${numberRow('dup_auto_percent', 'Close automatically from', 'Reports still waiting for a moderator that match an existing bug at least this much are closed as duplicates. 45 % up to this are only marked for the moderators. 60 % is the recommended setting.', 50, 100, '% match')}
     </section>`,
   bugReports: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Bug reports</div>
@@ -1461,7 +1431,7 @@ function bugList() {
   if (!B.items.length) return html`<div class="w-empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`;
   return html`${B.items.map(b => html`<div class="w-bugrow${B.selecting ? ' sel' : ''}" role="button" tabindex="0" data-act="${B.selecting ? 'bugPick' : 'bugOpen'}" data-id="${b.id}" data-sev="${b.severity || ''}"${B.selecting ? html` aria-pressed="${String(B.sel.includes(b.id))}"` : ''}>
     <b>${B.selecting ? (B.sel.includes(b.id) ? '☑' : '☐') : ''} #${b.id}</b>
-    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? (b.auto_closed ? ' · 🤖 closed automatically as duplicate of #' : ' · duplicate of #') + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}${b.public ? html` · <span class="w-knowntag">📌 Known issue</span>` : ''}</div>
+    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? (b.auto_closed ? ' · closed automatically as duplicate of #' : ' · duplicate of #') + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}${b.public ? html` · <span class="w-knowntag">📌 Known issue</span>` : ''}</div>
       ${dupHint(b) ? html`<div class="w-duphint">🔁 Looks like <b>#${b.dup_suggest}</b> ${b.dup_title ? '“' + b.dup_title.slice(0, 60) + '”' : ''} · ${b.dup_score}% match
         ${B.selecting ? '' : html`<button class="w-btn small" data-act="dupMerge" data-id="${b.id}" data-orig="${b.dup_suggest}">Merge into #${b.dup_suggest}</button>`}</div>` : ''}</div>
     ${bugBadge(b.status)}${B.selecting ? html`<span></span>` : quickBtns(b)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}`;
@@ -1562,7 +1532,7 @@ function reportText(t) {
   return html`<div class="w-report">${String(t || '').split('\n').map(line => TEMPLATE_Q.test(line.trim().replace(/[*#>]/g, '').trim()) ? html`<div class="w-q">${line.replace(/[*#>]/g, '').trim()}</div>` : line.trim() ? html`<div>${line}</div>` : html`<div class="w-gap"></div>`)}</div>`;
 }
 function bugActions(b) {
-  if (b.duplicate_of) return html`<div class="w-decide"><div class="w-decide-text">${b.auto_closed ? '🤖 Closed automatically' : 'Closed'} as a duplicate of <button class="w-linkbtn" data-act="bugOpen" data-id="${b.duplicate_of}">#${b.duplicate_of}</button></div>
+  if (b.duplicate_of) return html`<div class="w-decide"><div class="w-decide-text">${b.auto_closed ? 'Closed automatically' : 'Closed'} as a duplicate of <button class="w-linkbtn" data-act="bugOpen" data-id="${b.duplicate_of}">#${b.duplicate_of}</button></div>
     <button class="w-btn" data-act="bugReopen">↩️ Not a duplicate – reopen</button></div>`;
   const modOpen = ['new', 'investigating'].includes(b.status), adminOpen = ['passed', 'being_investigated'].includes(b.status);
   const btns = modOpen ? [['passed', '✅ Pass to admins', 'primary']] : adminOpen && !isMod() ? [['being_investigated', '🔍 Being investigated', ''], ['fixed', '✔️ Mark fixed', 'primary']].filter(x => x[0] !== b.status) : [];
@@ -1587,7 +1557,6 @@ function bugModal() {
     ${reportText(b.text)}
     ${b.files && b.files.length ? html`<div class="w-files" id="m-files">${b.files.map(f => html`<button class="w-file" data-act="openFile" data-fid="${f.id}" data-kind="${f.kind}" title="${f.name}">${f.kind === 'video' ? icon('play') : html`<img alt="${f.name}" data-fid="${f.id}">`}</button>`)}</div>` : ''}
     ${b.extra ? html`<div class="w-pre" style="margin-top:8px">${b.extra}</div>` : ''}
-    ${b.ai_summary ? html`<div class="w-ai">🤖 <b>${b.ai_title}</b> – ${b.ai_summary}</div>` : ''}
     <div class="w-bugtools">${trBox('bugs', b.id)}${b.mod_url ? html`<a class="w-linkbtn" href="${b.mod_url}" target="_blank" rel="noopener">Mod channel ↗</a>` : ''}${b.admin_url ? html`<a class="w-linkbtn" href="${b.admin_url}" target="_blank" rel="noopener">Admin channel ↗</a>` : ''}</div>
 
     ${bugActions(b)}
@@ -1651,7 +1620,6 @@ function similarBox(b) {
       <div class="w-simtext"><div><b>#${x.id}</b> ${x.summary} ${bugBadge(x.status)}</div><div class="w-hint">${x.reporter || 'Unknown'} · ${ago(x.created_at)}${x.area ? ' · ' + x.area : ''}</div>
         <div class="w-simsnip">${x.snippet}</div></div>
       <div class="w-simacts"><button class="w-btn small primary" data-act="dupMergeModal" data-orig="${x.id}">Duplicate of #${x.id}</button><button class="w-linkbtn" data-act="bugOpen" data-id="${x.id}">Open</button></div></div>`)}
-    ${b.ai_dup && b.ai_reason ? html`<div class="w-ai" style="margin-top:8px">🤖 AI, ${b.ai_conf}% sure it’s #${b.ai_dup}: ${b.ai_reason}</div>` : ''}
     <div class="w-hint">“Duplicate of” closes this report, tells the player it’s already known, and links it to the original – they get a message when the original is fixed.</div></div>`;
 }
 const fileUrls = {};
@@ -2563,7 +2531,6 @@ const LOADERS = {
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
-  panel: async () => { S.ai = isMod() ? null : await call('GET', '/api/ai').catch(() => null); },
   insights: async () => { S.insights = await call('GET', '/api/insights'); },
   overview: async () => { if (isMod()) { const [i, m] = await Promise.all([call('GET', '/api/insights'), call('GET', '/api/mybugs')]); S.insights = i; S.mybugs = m; } },
   patch: async () => { const [pn, pu] = await Promise.all([call('GET', '/api/patchnotes'), isMod() ? null : call('GET', '/api/push').catch(() => null)]); S.patch = pn; S.push = pu; },
@@ -2881,16 +2848,6 @@ root.addEventListener('click', async e => {
     if (act === 'nav' || act === 'goto') { S.tab = el.dataset.tab; if (el.dataset.sub) { S.sub = S.sub || {}; S.sub[S.tab] = el.dataset.sub; } renderTab(); }
     else if (act === 'hub') { const h = HUBS.find(x => x[0] === el.dataset.hub); S.hubLast = S.hubLast || {}; const kids = hubKids(h);
       S.tab = kids.includes(S.hubLast[h[0]]) ? S.hubLast[h[0]] : kids[0]; renderTab(); }
-    else if (act === 'aiSave') { const f = el.dataset.f, b = {};
-      if (f === 'key') { b.key = document.getElementById('ai-key').value.trim(); if (!b.key) return toast('Paste the key first.', 'err'); b.enabled = true; }
-      else if (f === 'enabled') b.enabled = !S.ai.enabled;
-      else if (f === 'auto_close') { b.auto_close = !S.ai.auto_close; b.auto_percent = +document.getElementById('ai-pct').value; }
-      else { b.model = document.getElementById('ai-model').value.trim(); b.limit = +document.getElementById('ai-limit').value; b.auto_percent = +document.getElementById('ai-pct').value; }
-      try { S.ai = await call('PUT', '/api/ai', b); toast('Saved'); renderMain(); } catch (e) { toast(e.message, 'err'); } }
-    else if (act === 'aiTest') { const id = +document.getElementById('ai-bug').value; if (!id) return toast('Type a bug number.', 'err'); el.disabled = true;
-      try { const r = await call('POST', '/api/ai/test', { bug_id: id }); S.aiTest = Object.assign(r, { bug: id }); S.ai = r.info; renderMain(); } catch (e) { toast(e.message, 'err'); el.disabled = false; } }
-    else if (act === 'aiScan') { el.disabled = true;
-      try { const r = await call('POST', '/api/ai/scan', {}); S.ai = r.info; toast(r.checked ? r.checked + ' bugs checked' : 'Nothing left to check'); renderMain(); } catch (e) { toast(e.message, 'err'); el.disabled = false; } }
     else if (act === 'sub') { S.sub = S.sub || {}; S.sub[S.tab] = el.dataset.v; renderMain(); updateSaveBar(); }
     else if (act === 'sheet') openSheet();
     else if (act === 'caseSearch') { S.cases.q = $('#cs-q').value.trim(); loadTab('warnings'); }
@@ -3525,7 +3482,7 @@ function makeMock() {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
     timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
-    automod_mentions_on: true, automod_mentions_max: 5, automod_repeat_on: true, automod_warn: true, weekly_enabled: false, weekly_channel_id: null, weekly_weekday: 'sunday', weekly_hour: 18, push_enabled: true, guard_enabled: true, guard_timeout_minutes: 60, guard_block_invites: false, guard_allow_domains: 'discord.com\ndiscord.gg\ndiscordapp.com\nyoutube.com\ntenor.com', log_channel_kinds: 'all', dup_mode: 'auto', dup_auto_percent: 75, mod_ping_hours: 4, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
+    automod_mentions_on: true, automod_mentions_max: 5, automod_repeat_on: true, automod_warn: true, weekly_enabled: false, weekly_channel_id: null, weekly_weekday: 'sunday', weekly_hour: 18, push_enabled: true, guard_enabled: true, guard_timeout_minutes: 60, guard_block_invites: false, guard_allow_domains: 'discord.com\ndiscord.gg\ndiscordapp.com\nyoutube.com\ntenor.com', log_channel_kinds: 'all', dup_mode: 'auto', dup_auto_percent: 60, mod_ping_hours: 4, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
     backup_channel_id: null, bug_areas: 'City\nAlliance\nCombat\nHeroes\nEvents\nShop & payments\nChat\nLogin & connection\nUI & display\nOther',
@@ -3702,11 +3659,6 @@ function makeMock() {
       if (p === '/api/access/unlock') { C.locked = false; }
       return JSON.parse(JSON.stringify(A));
     }
-    if (p.startsWith('/api/ai')) { const A = (window.__mockAi = window.__mockAi || { key_set: false, enabled: false, model: 'claude-haiku-5-5', default_model: 'claude-haiku-5-5', auto_close: false, auto_percent: 90, usage: { month: '2026-11', calls: 37, in_tokens: 210000, out_tokens: 9000, limit: 2000 }, checked: 37, auto_closed: 5 });
-      if (p === '/api/ai' && method === 'PUT') { if (body.key) A.key_set = true; ['enabled', 'auto_close', 'auto_percent', 'model'].forEach(k => { if (k in body && body[k] !== '') A[k] = body[k]; }); if (body.limit) A.usage.limit = body.limit; }
-      if (p === '/api/ai/test') return { title: 'Game freezes on the alliance screen', summary: '', duplicate_of: 12, confidence: 92, reason: 'Same freeze, same screen, same screenshot.', dup_title: 'Alliance screen freezes', info: A };
-      if (p === '/api/ai/scan') return { checked: 3, info: A };
-      return JSON.parse(JSON.stringify(A)); }
     if (p === '/api/mybugs') { const mine = bugs.slice(0, 7); const st = {}; mine.forEach(b => { st[b.status] = (st[b.status] || 0) + 1; });
       return { total: mine.length, week: 4, status_now: st, actions: { passed: 4, rejected: 2, replied: 1 },
         recent: mine.map((b, i) => Object.assign(briefBug(b), { status: b.status, created_at: b.created_at, my_action: ['passed', 'rejected', 'passed', 'replied', 'passed', 'rejected', 'passed'][i], my_ts: Math.floor(Date.now() / 1000) - i * 5400 })) }; }

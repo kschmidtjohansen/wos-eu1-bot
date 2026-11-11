@@ -447,7 +447,7 @@ SCHEMA = {
     "invites_channel_id": {"type": "channel", "default": None},
     "invites_fake_days": {"type": "int", "default": 7, "min": 0, "max": 90},
     "dup_mode": {"type": "choice", "default": "auto", "choices": ["off", "flag", "auto"]},
-    "dup_auto_percent": {"type": "int", "default": 75, "min": 50, "max": 100},
+    "dup_auto_percent": {"type": "int", "default": 60, "min": 50, "max": 100},
     "mod_ping_hours": {"type": "int", "default": 4, "min": 0, "max": 72},
     "log_channel_kinds": {"type": "lines", "default": "all", "max_lines": 20, "max_len": 20},
     "redeem_enabled": {"type": "bool", "default": False},
@@ -552,6 +552,15 @@ def get_raw(key: str) -> Optional[str]:
 def put_raw(key: str, value: str):
     db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, value))
     db.commit()
+
+
+# One-time switch (Nov 2026): no AI – duplicates matching 60 %+ are closed automatically by the built-in check.
+if get_raw("dup_auto_60") != "1":
+    set_cfg("dup_mode", "auto")
+    set_cfg("dup_auto_percent", 60)
+    for _k in ("ai_key", "ai_enabled", "ai_auto_close", "ai_auto_percent", "ai_model", "ai_monthly_limit", "ai_usage"):
+        db.execute("DELETE FROM settings WHERE key=?", (_k,))
+    put_raw("dup_auto_60", "1")
 
 
 # ------------------------------------------------------------ activity log
@@ -1713,11 +1722,32 @@ def image_hashes(bug_id: int) -> list:
     return out
 
 
+def video_frames(path, n: int = 3) -> list:
+    """A few still frames from a video (start, middle, end) as PIL images. Empty when the video can't be read."""
+    try:
+        import av
+    except ImportError:
+        return []
+    frames = []
+    try:
+        with av.open(str(path)) as c:
+            s = c.streams.video[0]
+            dur = float(s.duration * s.time_base) if s.duration else float(c.duration or 0) / 1_000_000
+            points = [dur * x for x in (0.1, 0.5, 0.9)][:n] if dur > 0 else [0]
+            for t in points:
+                c.seek(int(t / s.time_base) if s.time_base else 0, stream=s, any_frame=False, backward=True)
+                for fr in c.decode(s):
+                    frames.append(fr.to_image())
+                    break
+    except Exception:  # noqa: BLE001 – broken or unsupported video
+        return frames
+    return frames
+
+
 def _video_hashes(path) -> str:
     """Fingerprints of 3 frames (start, middle, end) of a video, comma-separated."""
     try:
-        import ai
-        frames = ai.video_frames(path)
+        frames = video_frames(path)
     except Exception:  # noqa: BLE001
         frames = []
     hs = []
@@ -1788,6 +1818,13 @@ def similar_reports(r, limit: int = 3, days: int = 180, min_score: int = 35) -> 
             out.append((c, s))
     out.sort(key=lambda x: (-x[1], x[0]["id"]))
     return out[:limit]
+
+
+def flagged_dups(min_pct: int) -> list:
+    """Bugs still waiting for a moderator that were marked as a likely duplicate at or above min_pct."""
+    return db.execute(f"SELECT * FROM bug_reports WHERE status IN ({','.join('?' * len(OPEN_STATUSES))}) AND duplicate_of IS NULL "
+                      "AND dup_suggest IS NOT NULL AND dup_score >= ? AND dup_dismissed IS NULL ORDER BY id",
+                      (*OPEN_STATUSES, min_pct)).fetchall()
 
 
 def bugs_needing_dup_check() -> list:

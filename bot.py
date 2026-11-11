@@ -47,7 +47,6 @@ from store import (cfg, db, get_bug, get_bug_by_admin_msg, get_bug_by_msg, get_r
 from store import record_action
 import texts
 import drive
-import ai
 import translate
 
 
@@ -1518,7 +1517,7 @@ class WosBot(discord.Client):
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
-                         "ai_check": ai_check, "ai_backfill": ai_backfill, "run_backup": run_backup, "post_digest": post_digest,
+                         "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
@@ -3490,14 +3489,24 @@ async def reopen_bug(r, who: str, actor_id=None):
 
 
 async def scan_duplicates() -> int:
-    """Every few minutes: look at open bugs that have no duplicate suggestion yet and compare them with the
-    reports that came before. Likely duplicates get flagged (never closed) – on the staff page and in #mod."""
+    """Every few minutes: compare open bugs with the reports that came before. In 'auto' mode, reports nobody has
+    handled yet that match at least dup_auto_percent are closed; lower matches are flagged for the moderators."""
     if cfg("dup_mode") == "off":
         return 0
-    mod, n = chan("mod_channel_id"), 0
+    mod, n, closed = chan("mod_channel_id"), 0, 0
+    auto, need = cfg("dup_mode") == "auto", cfg("dup_auto_percent")
+    if auto:   # bugs marked earlier that are over the limit: close them now
+        for r in store.flagged_dups(need):
+            if r["status"] in MOD_OPEN and get_bug(r["dup_suggest"]) is not None:
+                await auto_close_dup(r, r["dup_suggest"], r["dup_score"])
+                closed += 1
     for r in store.bugs_needing_dup_check():
         best, pct = store.find_duplicate(r)
         if best is None or pct < 45:
+            continue
+        if auto and pct >= need and r["status"] in MOD_OPEN:
+            await auto_close_dup(r, best["id"], pct)
+            closed += 1
             continue
         set_bug(r["id"], dup_suggest=best["id"], dup_score=pct)
         n += 1
@@ -3509,7 +3518,7 @@ async def scan_duplicates() -> int:
                 pass
     if n:
         log_event("bug", f"Found {n} possible duplicate(s) among the open bugs", None, brand())
-    return n
+    return n + closed
 
 
 async def dup_dismissed(r):
@@ -3518,6 +3527,21 @@ async def dup_dismissed(r):
     if mod is not None and r["msg_id"]:
         try:
             await mod.get_partial_message(r["msg_id"]).edit(embed=bug_embed(r), view=DupView())
+        except discord.HTTPException:
+            pass
+
+
+async def auto_close_dup(r, orig_id: int, pct: int):
+    """Close a report as a duplicate by itself. The player is told which bug it matches (and hears when that one is
+    fixed); the Discord post gets a 'Not a duplicate' button, and the staff page can reopen it too."""
+    await apply_bug_status(r, "rejected", brand(), None, duplicate_of=orig_id, log_kind="bug",
+                           reason=store.REJECT_PRESETS["duplicate"])
+    set_bug(r["id"], auto_closed=1, dup_suggest=None, dup_score=None)
+    log_event("bug", f"Bug #{r['id']} closed automatically as a duplicate of #{orig_id} ({pct}% match)", None, brand())
+    mod = chan("mod_channel_id")
+    if mod is not None and r["msg_id"]:
+        try:
+            await mod.get_partial_message(r["msg_id"]).edit(view=DupView("reopen"))
         except discord.HTTPException:
             pass
 
@@ -3532,15 +3556,8 @@ async def check_duplicate(r):
     if best is None or pct < 45:
         return None
     mod = chan("mod_channel_id")
-    if mode == "auto" and pct >= cfg("dup_auto_percent"):
-        await apply_bug_status(r, "rejected", brand(), None, duplicate_of=best["id"], log_kind="bug",
-                               reason=store.REJECT_PRESETS["duplicate"])
-        log_event("bug", f"Bug #{r['id']} closed automatically as a duplicate of #{best['id']} ({pct}% match)", None, brand())
-        if mod is not None and r["msg_id"]:
-            try:
-                await mod.get_partial_message(r["msg_id"]).edit(view=DupView("reopen"))
-            except discord.HTTPException:
-                pass
+    if mode == "auto" and pct >= cfg("dup_auto_percent") and r["status"] in MOD_OPEN and not r["dup_dismissed"]:
+        await auto_close_dup(r, best["id"], pct)
         return "auto"
     set_bug(r["id"], dup_suggest=best["id"], dup_score=pct)
     r = get_bug(r["id"])
@@ -3558,70 +3575,7 @@ async def safe_check_duplicate(bug_id: int):
     except Exception as exc:  # noqa: BLE001 – the report itself is already safe
         print(f"[duplicates] {exc!r}")
         res = None
-    if res != "auto" and ai.enabled():
-        asyncio.create_task(safe_task(ai_check(bug_id), "AI duplicate check"))   # in the background, a few seconds
     return res
-
-
-def ai_auto() -> tuple:
-    """(auto-close on?, minimum confidence) for the AI."""
-    return get_raw("ai_auto_close") == "1", int(get_raw("ai_auto_percent") or 90)
-
-
-async def ai_check(bug_id: int, backfill: bool = False) -> Optional[str]:
-    """Let the AI read the report (any language, screenshots, video frames) and compare it with the existing bugs.
-    Sure duplicates are closed automatically when that's switched on; likely ones are flagged for the moderators."""
-    r = get_bug(bug_id)
-    if r is None or r["duplicate_of"] or r["status"] not in MOD_OPEN + ADMIN_OPEN:
-        return None
-    try:
-        v = await ai.analyse(r)
-    except ai.AIError as exc:
-        log_event("system", f"AI check of bug #{bug_id} failed: {exc}", None, brand())
-        return None
-    r = get_bug(bug_id)
-    dup, conf = v["duplicate_of"], v["confidence"]
-    if not dup or r["duplicate_of"] or r["dup_dismissed"]:
-        return None
-    orig = get_bug(dup)
-    if orig is None:
-        return None
-    auto_on, need = ai_auto()
-    mod = chan("mod_channel_id")
-    if auto_on and conf >= need and r["status"] in MOD_OPEN:
-        reason = store.REJECT_PRESETS["duplicate"]
-        await apply_bug_status(r, "rejected", brand(), None, duplicate_of=dup, log_kind="bug", reason=reason)
-        set_bug(bug_id, auto_closed=1)
-        log_event("bug", f"Bug #{bug_id} closed automatically as a duplicate of #{dup} – AI {conf}% sure: {v['reason']}", None, brand())
-        if mod is not None and r["msg_id"]:
-            try:
-                await mod.get_partial_message(r["msg_id"]).edit(view=DupView("reopen"))
-            except discord.HTTPException:
-                pass
-        return "auto"
-    if conf >= 60 and (not r["dup_suggest"] or conf >= (r["dup_score"] or 0) or r["dup_suggest"] == dup):
-        set_bug(bug_id, dup_suggest=dup, dup_score=conf)
-        r = get_bug(bug_id)
-        if mod is not None and r["msg_id"] and r["status"] in MOD_OPEN:
-            try:
-                await mod.get_partial_message(r["msg_id"]).edit(embed=bug_embed(r), view=DupView("confirm", dup))
-            except discord.HTTPException:
-                pass
-        return "flag"
-    return None
-
-
-async def ai_backfill(n: int = 4) -> int:
-    """A few older open bugs per run that the AI hasn't seen yet (so the English summaries fill in slowly)."""
-    if not ai.enabled():
-        return 0
-    marks = ",".join("?" * len(MOD_OPEN + ADMIN_OPEN))
-    rows = store.db.execute(f"SELECT id FROM bug_reports WHERE ai_checked IS NULL AND duplicate_of IS NULL AND status IN ({marks}) "
-                            "ORDER BY id LIMIT ?", (*(MOD_OPEN + ADMIN_OPEN), n)).fetchall()
-    for row in rows:
-        await ai_check(row["id"], backfill=True)
-        await asyncio.sleep(3)
-    return len(rows)
 
 
 # ------------------------------------------------------------ ping moderators about untouched bugs
@@ -5053,7 +5007,6 @@ async def run_schedules(now=None):
     try:
         if await scan_duplicates():
             done.append("duplicates")
-        await ai_backfill()
     except Exception as exc:  # noqa: BLE001
         print(f"[duplicate scan] {exc!r}")
     if cfg("digest_enabled"):
