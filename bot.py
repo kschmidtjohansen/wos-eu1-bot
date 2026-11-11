@@ -2186,64 +2186,116 @@ async def post_digest(force: bool = False):
 SEV_NAME = {"critical": "Critical", "major": "Major", "minor": "Minor"}
 
 
-def dev_list_file(items: list, when) -> tuple:
-    """The developers' list as an Excel file (CSV if openpyxl is missing). Returns (filename, bytes)."""
-    import io as _io
-    head = ["Bug", "New", "Status", "Passed to admins", "Severity", "Area", "Game version", "Title", "What happened (player)",
-            "English translation", "Players affected", "Duplicates", "Chief name", "Player UID", "Screenshots/videos", "Reported"]
+def _dev_pictures(bug_id: int, side: int) -> list:
+    """Screenshots (and the first frame of each video) of a bug as small JPEGs: [(bytes, w, h, is_video)]."""
+    from PIL import Image
+    out = []
+    for f in store.bug_files(bug_id):
+        p, name = store.ATTACH_DIR / f["path"], f["filename"].lower()
+        try:
+            if name.endswith(store._IMG_EXT):
+                im = Image.open(p)
+                im.load()
+                video = False
+            elif name.endswith(store._VID_EXT):
+                frames = store.video_frames(p, 1)
+                if not frames:
+                    continue
+                im, video = frames[0], True
+            else:
+                continue
+            im = im.convert("RGB")
+            im.thumbnail((side, side), Image.LANCZOS)
+            if video:                                      # ▶ on the frame so it's clear it's a video
+                from PIL import ImageDraw
+                d, c, r = ImageDraw.Draw(im, "RGBA"), (im.width // 2, im.height // 2), max(14, min(im.size) // 8)
+                d.ellipse([c[0] - r, c[1] - r, c[0] + r, c[1] + r], fill=(0, 0, 0, 150))
+                d.polygon([(c[0] - r * 0.35, c[1] - r * 0.5), (c[0] - r * 0.35, c[1] + r * 0.5), (c[0] + r * 0.55, c[1])], fill=(255, 255, 255, 230))
+            b = io.BytesIO()
+            im.save(b, "JPEG", quality=72)
+            out.append((b.getvalue(), im.width, im.height, video))
+        except Exception:  # noqa: BLE001 – a broken file is just left out
+            continue
+    return out[:4]
+
+
+def dev_list_file(items: list, when, pictures: int = 900) -> tuple:
+    """The developers' list as an Excel file with the screenshots in it (CSV if openpyxl is missing).
+    pictures = longest side of the stored pictures in pixels, 0 = none. Returns (filename, bytes)."""
+    head = ["Reported", "Bug", "Area", "Game version", "Title", "What happened (player)", "English translation",
+            "Duplicates", "Chief name", "Player UID"]
     tzone = store.tz()
     fmt = lambda ts: datetime.fromtimestamp(ts, tzone).strftime("%Y-%m-%d %H:%M") if ts else ""  # noqa: E731
     rows = []
     for it in items:
         r = it["r"]
-        rows.append([r["id"], "NEW" if it["new"] else "", "Being fixed" if r["status"] == "being_investigated" else "With admins",
-                     fmt(it["passed_at"]), SEV_NAME.get(r["severity"] or "", ""), r["area"] or "", r["game_version"] or "",
-                     store.bug_summary(r), "\n".join(x for x in (store.clean_report(ln) for ln in (r["text"] or "").splitlines()) if x),
-                     store.dev_english(r), it["affected"], ", ".join(f"#{d}" for d in it["dups"]),
-                     r["chief_name"] or "", r["player_uid"] or "", len(store.bug_files(r["id"])), fmt(r["created_at"])])
+        rows.append([fmt(r["created_at"]), r["id"], r["area"] or "", r["game_version"] or "", store.bug_summary(r),
+                     "\n".join(x for x in (store.clean_report(ln) for ln in (r["text"] or "").splitlines()) if x),
+                     store.dev_english(r), ", ".join(f"#{d}" for d in it["dups"]), r["chief_name"] or "", r["player_uid"] or ""])
     stamp = when.strftime("%Y-%m-%d")
     try:
         from openpyxl import Workbook
+        from openpyxl.drawing.image import Image as XLImage
         from openpyxl.styles import Alignment, Font, PatternFill
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Bugs for developers"
-        ws.append(head)
-        for row in rows:
-            ws.append(row)
-        widths = [7, 6, 13, 17, 10, 14, 13, 40, 70, 60, 10, 14, 16, 14, 10, 17]
-        for i, w in enumerate(widths, 1):
-            ws.column_dimensions[ws.cell(1, i).column_letter].width = w
-        for c in ws[1]:
-            c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F3A5F")
-        for row in ws.iter_rows(min_row=2):
-            for c in row:
-                c.alignment = Alignment(vertical="top", wrap_text=True)
-            if row[1].value == "NEW":
-                row[1].font = Font(bold=True, color="C0392B")
-        ws.freeze_panes = "B2"
-        ws.auto_filter.ref = ws.dimensions
-        b = _io.BytesIO()
-        wb.save(b)
-        return f"bugs-for-developers-{stamp}.xlsx", b.getvalue()
+        from openpyxl.utils import get_column_letter
     except ImportError:
         import csv
-        b = _io.StringIO()
+        b = io.StringIO()
         w = csv.writer(b)
         w.writerow(head)
         w.writerows(rows)
-        return f"bugs-for-developers-{stamp}.csv", ("\ufeff" + b.getvalue()).encode("utf-8")
+        return f"bugs-for-developers-{stamp}.csv", ("﻿" + b.getvalue()).encode("utf-8")
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Bugs for developers"
+    shot_col = len(head) + 1
+    ws.append(head + (["Screenshots / videos"] if pictures else []))
+    for row in rows:
+        ws.append(row)
+    for i, w in enumerate([17, 7, 14, 13, 40, 70, 60, 14, 16, 14], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    for k in range(1, len(head) + (5 if pictures else 1)):
+        c = ws.cell(1, k)
+        c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F3A5F")
+    for row in ws.iter_rows(min_row=2):
+        for c in row:
+            c.alignment = Alignment(vertical="top", wrap_text=True)
+    if pictures:
+        show_h = 220                                       # pixels high in the sheet; click a picture to see it full size
+        widest = 0
+        for n, it in enumerate(items, start=2):
+            pics = _dev_pictures(it["r"]["id"], pictures)
+            if not pics:
+                continue
+            for k, (data, w, h, _video) in enumerate(pics):
+                img = XLImage(io.BytesIO(data))
+                img.height, img.width = show_h, int(w * show_h / h)
+                img.anchor = f"{get_column_letter(shot_col + k)}{n}"
+                ws.add_image(img)
+                widest = max(widest, img.width)
+            ws.row_dimensions[n].height = show_h * 0.75 + 6
+            if any(p[3] for p in pics):
+                ws.cell(1, shot_col).value = "Screenshots / videos (▶ = first frame of a video, the video is in the zip)"
+        for k in range(4):
+            ws.column_dimensions[get_column_letter(shot_col + k)].width = max(20, widest / 7 + 2)
+    ws.freeze_panes = "C2"
+    ws.page_setup.orientation = "landscape"                 # prints on one page width
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(head))}{len(rows) + 1}"
+    b = io.BytesIO()
+    wb.save(b)
+    return f"bugs-for-developers-{stamp}.xlsx", b.getvalue()
 
 
-def dev_files_zip(items: list, limit: int) -> Optional[tuple]:
-    """Screenshots and videos of the NEW bugs in one zip, if it fits Discord's upload limit."""
-    import io as _io
+def dev_videos_zip(items: list, limit: int) -> Optional[bytes]:
+    """The videos of the listed bugs in one zip (they can't go inside Excel), if it fits Discord's upload limit."""
     import zipfile
-    files = [(it["r"]["id"], f) for it in items if it["new"] for f in store.bug_files(it["r"]["id"])]
+    files = [(it["r"]["id"], f) for it in items for f in store.bug_files(it["r"]["id"])
+             if f["filename"].lower().endswith(store._VID_EXT)]
     if not files:
         return None
-    b = _io.BytesIO()
-    size = 0
+    b, size = io.BytesIO(), 0
     with zipfile.ZipFile(b, "w", zipfile.ZIP_STORED) as z:
         for bug_id, f in files:
             p = store.ATTACH_DIR / f["path"]
@@ -2254,7 +2306,7 @@ def dev_files_zip(items: list, limit: int) -> Optional[tuple]:
                 return None
             z.write(p, f"bug-{bug_id}/{f['filename']}")
     data = b.getvalue()
-    return (data if len(data) < limit else None) and data
+    return data if len(data) < limit else None
 
 
 async def post_dev_list(force: bool = False):
@@ -2279,15 +2331,22 @@ async def post_dev_list(force: bool = False):
             r = it["r"]
             lines.append(f"• **#{r['id']}** {store.bug_summary(r)[:80]}" + (f" – {r['area']}" if r["area"] else "")
                          + (f" · 👥 {it['affected']}" if it["affected"] > 1 else ""))
-        name, data = dev_list_file(items, now)
-        files = [discord.File(io.BytesIO(data), filename=name)]
         limit = getattr(ch.guild, "filesize_limit", 10 * 1024 * 1024) if getattr(ch, "guild", None) else 10 * 1024 * 1024
+        name, data = dev_list_file(items, now, 900 if cfg("devlist_files") else 0)
+        for side in (600, 380):                           # too big for Discord: smaller pictures
+            if len(data) <= limit - 100_000 or not cfg("devlist_files"):
+                break
+            name, data = dev_list_file(items, now, side)
+        if len(data) > limit - 100_000:
+            name, data = dev_list_file(items, now, 0)
+            lines.append("*The screenshots made the file too big for Discord – they're on the staff page.*")
+        files = [discord.File(io.BytesIO(data), filename=name)]
         if cfg("devlist_files"):
-            z = dev_files_zip(items, limit - len(data))
+            z = dev_videos_zip(items, limit - len(data))
             if z:
-                files.append(discord.File(io.BytesIO(z), filename=f"screenshots-{now:%Y-%m-%d}.zip"))
-            elif any(it["new"] and store.bug_files(it["r"]["id"]) for it in items):
-                lines.append("*Screenshots of the new bugs were too big to attach – they're on the staff page.*")
+                files.append(discord.File(io.BytesIO(z), filename=f"videos-{now:%Y-%m-%d}.zip"))
+            elif any(f["filename"].lower().endswith(store._VID_EXT) for it in items for f in store.bug_files(it["r"]["id"])):
+                lines.append("*The videos were too big to attach – the first frame is in the file, the videos are on the staff page.*")
         await ch.send(_cap("\n".join(lines)), files=files, allowed_mentions=discord.AllowedMentions.none())
     put_raw("devlist_last_ts", str(int(now.timestamp())))
     log_event("system", f"Developers' list posted: {len(items)} bugs ({new} new)" + (" (sent manually)" if force else ""), None, brand())

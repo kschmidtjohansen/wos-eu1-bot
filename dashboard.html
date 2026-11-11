@@ -1181,9 +1181,9 @@ const FSEC = {
     </section>`,
   devlist: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Daily list for the developers</div>
-      ${toggleRow('devlist_enabled', 'Post the list every day', 'An Excel file with every bug passed to the admins that is still open – duplicates left out (they count as extra players affected). New bugs since the last list are marked NEW. Posted in the Developers’ list channel (Channels page).')}
+      ${toggleRow('devlist_enabled', 'Post the list every day', 'An Excel file with every bug passed to the admins that is still open – duplicates left out – with the screenshots inside (videos as their first frame, the videos themselves in a zip). Posted in the Developers’ list channel (Channels page).')}
       ${numberRow('devlist_hour', 'Time', 'Posted at this hour (0–23) in the time zone below.', 0, 23, 'o\u2019clock')}
-      ${toggleRow('devlist_files', 'Attach screenshots and videos', 'The files of the new bugs in a zip, when they fit Discord’s upload limit.')}
+      ${toggleRow('devlist_files', 'Attach screenshots and videos', 'Screenshots go inside the Excel file (smaller if needed to fit Discord’s upload limit), videos in a zip next to it.')}
       <div class="w-actions" style="margin-top:10px"><button class="w-btn small" data-act="sendDevList">Post the list now</button></div>
     </section>`,
   digest: () => html`
