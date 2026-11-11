@@ -400,6 +400,10 @@ SCHEMA = {
     "digest_weekday": {"type": "choice", "default": "monday",
                        "choices": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
     "digest_hour": {"type": "int", "default": 9, "min": 0, "max": 23},
+    "devlist_enabled": {"type": "bool", "default": True},
+    "devlist_channel_id": {"type": "channel", "default": None},
+    "devlist_hour": {"type": "int", "default": 8, "min": 0, "max": 23},
+    "devlist_files": {"type": "bool", "default": True},
     "update_notice_enabled": {"type": "bool", "default": True},
     "report_style": {"type": "choice", "default": "form", "choices": ["form", "ticket"]},
     "info_remind_hours": {"type": "int", "default": 48, "min": 0, "max": 720},
@@ -2058,6 +2062,28 @@ def previous_month() -> str:
     from datetime import datetime
     n = datetime.now(tz())
     return f"{n.year - (n.month == 1):04d}-{(n.month - 2) % 12 + 1:02d}"
+
+
+# ------------------------------------------------------------- daily list for the developers
+def dev_list(since: Optional[int] = None) -> list:
+    """Bugs the moderators passed to the admins that are still open (not duplicates), oldest first.
+    Each: the bug row plus passed_at, new (passed since `since`), affected and duplicate ids."""
+    rows = db.execute("SELECT * FROM bug_reports WHERE status IN ('passed','being_investigated') AND duplicate_of IS NULL "
+                      "ORDER BY id").fetchall()
+    out = []
+    for r in rows:
+        a = db.execute("SELECT MAX(ts) FROM actions WHERE kind='bug' AND item_id=? AND action='passed'", (r["id"],)).fetchone()[0]
+        passed_at = a or r["created_at"]
+        dups = [d["id"] for d in duplicates_of(r["id"])]
+        out.append({"r": r, "passed_at": passed_at, "new": since is None or passed_at > since, "dups": dups,
+                    "affected": 1 + len(dups) + vote_count(r["id"])})
+    return out
+
+
+def dev_english(r) -> str:
+    """The English text of a report if it was translated (by a moderator or for the duplicate check)."""
+    en = r["text_en"] or (r["match_en"] if r["match_en"] and r["match_en"] != "-" else "")
+    return en or ""
 
 
 # ------------------------------------------------------------- weekly digest

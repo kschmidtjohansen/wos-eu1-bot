@@ -1582,7 +1582,7 @@ class WosBot(discord.Client):
                          "set_bug_status": apply_bug_status, "send_reply": send_bug_reply,
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
-                         "set_severity": set_severity, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
+                         "set_severity": set_severity, "post_dev_list": post_dev_list, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
                          "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
@@ -2180,6 +2180,117 @@ async def post_digest(force: bool = False):
         raise ValueError("Choose the admin channel (or a digest channel) first.")
     await ch.send(embed=digest_embed(store.digest_data()), allowed_mentions=discord.AllowedMentions.none())
     log_event("system", "Weekly digest posted" + (" (sent manually)" if force else ""), None, brand())
+    return ch
+
+
+SEV_NAME = {"critical": "Critical", "major": "Major", "minor": "Minor"}
+
+
+def dev_list_file(items: list, when) -> tuple:
+    """The developers' list as an Excel file (CSV if openpyxl is missing). Returns (filename, bytes)."""
+    import io as _io
+    head = ["Bug", "New", "Status", "Passed to admins", "Severity", "Area", "Game version", "Title", "What happened (player)",
+            "English translation", "Players affected", "Duplicates", "Chief name", "Player UID", "Screenshots/videos", "Reported"]
+    tzone = store.tz()
+    fmt = lambda ts: datetime.fromtimestamp(ts, tzone).strftime("%Y-%m-%d %H:%M") if ts else ""  # noqa: E731
+    rows = []
+    for it in items:
+        r = it["r"]
+        rows.append([r["id"], "NEW" if it["new"] else "", "Being fixed" if r["status"] == "being_investigated" else "With admins",
+                     fmt(it["passed_at"]), SEV_NAME.get(r["severity"] or "", ""), r["area"] or "", r["game_version"] or "",
+                     store.bug_summary(r), "\n".join(x for x in (store.clean_report(ln) for ln in (r["text"] or "").splitlines()) if x),
+                     store.dev_english(r), it["affected"], ", ".join(f"#{d}" for d in it["dups"]),
+                     r["chief_name"] or "", r["player_uid"] or "", len(store.bug_files(r["id"])), fmt(r["created_at"])])
+    stamp = when.strftime("%Y-%m-%d")
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Bugs for developers"
+        ws.append(head)
+        for row in rows:
+            ws.append(row)
+        widths = [7, 6, 13, 17, 10, 14, 13, 40, 70, 60, 10, 14, 16, 14, 10, 17]
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[ws.cell(1, i).column_letter].width = w
+        for c in ws[1]:
+            c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F3A5F")
+        for row in ws.iter_rows(min_row=2):
+            for c in row:
+                c.alignment = Alignment(vertical="top", wrap_text=True)
+            if row[1].value == "NEW":
+                row[1].font = Font(bold=True, color="C0392B")
+        ws.freeze_panes = "B2"
+        ws.auto_filter.ref = ws.dimensions
+        b = _io.BytesIO()
+        wb.save(b)
+        return f"bugs-for-developers-{stamp}.xlsx", b.getvalue()
+    except ImportError:
+        import csv
+        b = _io.StringIO()
+        w = csv.writer(b)
+        w.writerow(head)
+        w.writerows(rows)
+        return f"bugs-for-developers-{stamp}.csv", ("\ufeff" + b.getvalue()).encode("utf-8")
+
+
+def dev_files_zip(items: list, limit: int) -> Optional[tuple]:
+    """Screenshots and videos of the NEW bugs in one zip, if it fits Discord's upload limit."""
+    import io as _io
+    import zipfile
+    files = [(it["r"]["id"], f) for it in items if it["new"] for f in store.bug_files(it["r"]["id"])]
+    if not files:
+        return None
+    b = _io.BytesIO()
+    size = 0
+    with zipfile.ZipFile(b, "w", zipfile.ZIP_STORED) as z:
+        for bug_id, f in files:
+            p = store.ATTACH_DIR / f["path"]
+            if not p.exists():
+                continue
+            size += p.stat().st_size
+            if size > limit - 200_000:
+                return None
+            z.write(p, f"bug-{bug_id}/{f['filename']}")
+    data = b.getvalue()
+    return (data if len(data) < limit else None) and data
+
+
+async def post_dev_list(force: bool = False):
+    """Post today's list of bugs with the admins (not duplicates) as a file in the developers' channel."""
+    ch = chan("devlist_channel_id")
+    if ch is None:
+        raise ValueError("Choose the developers' list channel first (Channels page).")
+    now = datetime.now(store.tz())
+    since = int(get_raw("devlist_last_ts") or 0) or None
+    items = store.dev_list(since)
+    new = sum(1 for it in items if it["new"])
+    if not items:
+        await ch.send(f"📋 **Bugs for the developers – {now:%d %b %Y}**\nNothing is waiting with the admins today. ✅")
+    else:
+        crit = sum(1 for it in items if it["r"]["severity"] == "critical")
+        lines = [f"📋 **Bugs for the developers – {now:%d %b %Y}**",
+                 f"**{len(items)}** bug{'s' if len(items) != 1 else ''} passed to the admins and still open"
+                 + (f" · **{new} new** since the last list" if since else "") + (f" · 🚨 {crit} critical" if crit else "")
+                 + ". Duplicates are left out (they're counted under *Players affected*)."]
+        top = [it for it in items if it["new"]][:10] if since else items[:10]
+        for it in top:
+            r = it["r"]
+            lines.append(f"• **#{r['id']}** {store.bug_summary(r)[:80]}" + (f" – {r['area']}" if r["area"] else "")
+                         + (f" · 👥 {it['affected']}" if it["affected"] > 1 else ""))
+        name, data = dev_list_file(items, now)
+        files = [discord.File(io.BytesIO(data), filename=name)]
+        limit = getattr(ch.guild, "filesize_limit", 10 * 1024 * 1024) if getattr(ch, "guild", None) else 10 * 1024 * 1024
+        if cfg("devlist_files"):
+            z = dev_files_zip(items, limit - len(data))
+            if z:
+                files.append(discord.File(io.BytesIO(z), filename=f"screenshots-{now:%Y-%m-%d}.zip"))
+            elif any(it["new"] and store.bug_files(it["r"]["id"]) for it in items):
+                lines.append("*Screenshots of the new bugs were too big to attach – they're on the staff page.*")
+        await ch.send(_cap("\n".join(lines)), files=files, allowed_mentions=discord.AllowedMentions.none())
+    put_raw("devlist_last_ts", str(int(now.timestamp())))
+    log_event("system", f"Developers' list posted: {len(items)} bugs ({new} new)" + (" (sent manually)" if force else ""), None, brand())
     return ch
 
 
@@ -5130,6 +5241,16 @@ async def run_schedules(now=None):
             except (ValueError, discord.HTTPException) as exc:
                 put_raw("digest_last", week)               # don't retry every 10 minutes
                 log_event("system", f"Could not post the weekly digest: {exc}", None, brand())
+    if cfg("devlist_enabled") and cfg("devlist_channel_id"):
+        today = now.strftime("%Y-%m-%d")
+        due = now.replace(hour=cfg("devlist_hour"), minute=0, second=0, microsecond=0)
+        if now >= due and get_raw("devlist_day") != today:
+            put_raw("devlist_day", today)                  # once a day, even if Discord refuses
+            try:
+                await post_dev_list()
+                done.append("devlist")
+            except (ValueError, discord.HTTPException) as exc:
+                log_event("system", f"Could not post the developers' list: {exc}", None, brand())
     if cfg("weekly_enabled") and cfg("weekly_channel_id"):
         days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
         monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)

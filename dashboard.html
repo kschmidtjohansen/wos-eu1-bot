@@ -833,6 +833,7 @@ const CHANNELS = [
   ['patchnotes_channel_id', 'Patch notes channel', 'Where the list of fixed bugs is announced (/patchnotes publish or the Patch notes page). Optional.'],
   ['backup_channel_id', 'Backup channel', 'Optional. A copy of the database is posted here every day. It contains player data – make it admin-only.'],
   ['digest_channel_id', 'Weekly digest channel', 'Optional. Where the Monday summary is posted. Empty = the admin channel.'],
+  ['devlist_channel_id', 'Developers\u2019 list channel', 'Optional. Every day the bot posts an Excel file here with the bugs passed to the admins that are still open (no duplicates) – ready to send to the developers. The bot needs “Attach Files”.'],
   ['giftcodes_channel_id', 'Gift codes channel', 'Optional. New gift codes are announced here. Give the bot “Mention @everyone” if you ping @everyone or @here.'],
   ['log_channel_id', 'Bot log channel', 'Optional, keep it staff-only. Everything the bot does is posted here too – who did what, and when (shown in each reader’s own time). Choose what to post on the Channels page below the list.'],
   ['invites_channel_id', 'Invite log channel', 'Optional. Posts “Mira joined – invited by Jonas (12 invites)” and who left. Works like an invite-tracker bot, so you can remove that one.'],
@@ -846,7 +847,7 @@ const FEATURE_KEYS = ['warn_timeout_at', 'warn_timeout_minutes', 'warn_ban_at', 
   'reminders_enabled', 'reminder_mod_hours', 'reminder_admin_hours', 'reminder_critical_hours',
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
-  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'update_notice_enabled',
+  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'devlist_enabled', 'devlist_hour', 'devlist_files', 'update_notice_enabled',
   'report_style', 'info_remind_hours', 'info_close_hours', 'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'giftcodes_delete_expired', 'giftcodes_list', 'giftcodes_site_url', 'drive_enabled', 'drive_every_days', 'drive_keep'];
 const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'];
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
@@ -1035,7 +1036,7 @@ function previewHtml() {
     <div class="w-dp-reacts"><span class="w-dp-btn pri">🐛 Report a bug</span><span class="w-dp-btn">💡 Suggest an idea</span></div>
   </div>`;
 }
-const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['dups', 'Duplicates'], ['staff', 'Reminders & digest']];
+const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['dups', 'Duplicates'], ['staff', 'Developers & digest']];
 // Settings → Bug bot → Duplicates: which languages players report in.
 function langCard() {
   const L = S.langs;
@@ -1053,7 +1054,7 @@ function viewPanel() {
   if (sub === 'reports') return html`${head}${fsec('bugReports', 'modMessages')}${saveBar()}`;
   if (sub === 'suggestions') return html`${head}${fsec('suggestions')}${saveBar()}`;
   if (sub === 'website') return html`${head}${fsec('website')}${saveBar()}`;
-  if (sub === 'staff') return html`${head}${fsec('reminders', 'digest')}${saveBar()}`;
+  if (sub === 'staff') return html`${head}${fsec('devlist', 'reminders', 'digest')}${saveBar()}`;
   if (sub === 'dups') return html`${head}${fsec('duplicates')}${langCard()}${saveBar()}`;
   return html`${head}
     <div class="w-grid2">
@@ -1177,6 +1178,13 @@ const FSEC = {
       ${numberRow('reminder_mod_hours', 'Moderators: remind after', 'New bugs and suggestions nobody has handled yet.', 1, 720, 'hours')}
       ${numberRow('reminder_admin_hours', 'Admins: remind after', 'Bugs passed on that are still not fixed or rejected.', 1, 720, 'hours')}
       ${numberRow('reminder_critical_hours', 'Critical bugs: remind after', '🚨 Critical bugs are reminded much sooner.', 1, 72, 'hours')}
+    </section>`,
+  devlist: () => html`
+    <section class="w-card w-pad"><div class="w-group-title">Daily list for the developers</div>
+      ${toggleRow('devlist_enabled', 'Post the list every day', 'An Excel file with every bug passed to the admins that is still open – duplicates left out (they count as extra players affected). New bugs since the last list are marked NEW. Posted in the Developers’ list channel (Channels page).')}
+      ${numberRow('devlist_hour', 'Time', 'Posted at this hour (0–23) in the time zone below.', 0, 23, 'o\u2019clock')}
+      ${toggleRow('devlist_files', 'Attach screenshots and videos', 'The files of the new bugs in a zip, when they fit Discord’s upload limit.')}
+      <div class="w-actions" style="margin-top:10px"><button class="w-btn small" data-act="sendDevList">Post the list now</button></div>
     </section>`,
   digest: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Weekly digest</div>
@@ -3353,6 +3361,11 @@ root.addEventListener('click', async e => {
       await call('DELETE', '/api/blocklist/' + el.dataset.id);
       S.blocks = (await call('GET', '/api/blocklist')).items; toast('Player unblocked.'); renderMain();
     }
+    else if (act === 'sendDevList') {
+      busy(el, true, 'Posting…');
+      try { const r = await call('POST', '/api/devlist'); toast('List posted in #' + r.channel + '.'); } catch (err) { toast(err.message, 'err'); }
+      busy(el, false);
+    }
     else if (act === 'sendDigest') {
       busy(el, true, 'Sending…');
       try { const r = await call('POST', '/api/digest'); toast('Digest posted in #' + r.channel + '.'); } catch (err) { toast(err.message, 'err'); }
@@ -3492,7 +3505,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
     automod_mentions_on: true, automod_mentions_max: 5, automod_repeat_on: true, automod_warn: true, weekly_enabled: false, weekly_channel_id: null, weekly_weekday: 'sunday', weekly_hour: 18, push_enabled: true, guard_enabled: true, guard_timeout_minutes: 60, guard_block_invites: false, guard_allow_domains: 'discord.com\ndiscord.gg\ndiscordapp.com\nyoutube.com\ntenor.com', log_channel_kinds: 'all', dup_mode: 'auto', dup_auto_percent: 50, mod_ping_hours: 4, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
@@ -3809,6 +3822,7 @@ function makeMock() {
     if (p === '/api/replies') { replies.push({ id: nextReply++, title: body.title, text: body.text }); return { id: nextReply - 1 }; }
     m = p.match(/^\/api\/replies\/(\d+)$/);
     if (m) { const i = replies.findIndex(r => r.id === +m[1]); if (method === 'DELETE') { if (i >= 0) replies.splice(i, 1); } else if (i >= 0) Object.assign(replies[i], { title: body.title, text: body.text }); return { ok: true }; }
+    if (p === '/api/devlist') { addLog('system', 'Developers\u2019 list posted: 5 bugs (2 new) (sent manually)'); return { ok: true, channel: 'dev-bugs' }; }
     if (p === '/api/digest') { addLog('system', 'Weekly digest posted (sent manually)'); return { ok: true, channel: 'admin-bugs' }; }
     if (p === '/api/webblocks' && method === 'GET') return { items: webBlocks.map(x => Object.assign({}, x)) };
     if (p === '/api/webblocks') { webBlocks = webBlocks.filter(x => x.key !== q.get('key')); addLog('block', 'Website pause lifted from the dashboard'); return { ok: true }; }

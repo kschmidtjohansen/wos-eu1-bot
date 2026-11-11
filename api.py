@@ -53,12 +53,13 @@ CHANNEL_NEEDS = {
     "patchnotes_channel_id": ("Patch notes channel", list(_BASE)),
     "backup_channel_id": ("Backup channel", _BASE + ["attach_files"]),
     "digest_channel_id": ("Weekly digest channel", _BASE),
+    "devlist_channel_id": ("Developers' list channel", _BASE + ["attach_files"]),
     "giftcodes_channel_id": ("Gift codes channel", _BASE + ["read_message_history"]),
     "board_channel_id": ("Known issues board channel", _BASE + ["read_message_history"]),
     "log_channel_id": ("Bot log channel", list(_BASE)),
     "invites_channel_id": ("Invite log channel", list(_BASE)),
 }
-OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id",
+OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id", "devlist_channel_id",
                      "giftcodes_channel_id", "board_channel_id", "log_channel_id", "invites_channel_id")
 # accepted suggestions are only posted here; moderators decide in the mod channel
 
@@ -261,7 +262,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             optional = key in OPTIONAL_CHANNELS
             enabled = {"welcome_channel_id": bool(store.cfg("welcome_enabled")),
                        "patchnotes_channel_id": bool(cid), "backup_channel_id": bool(cid),
-                       "digest_channel_id": bool(cid)}.get(key, True)
+                       "digest_channel_id": bool(cid), "devlist_channel_id": bool(cid)}.get(key, True)
             chans.append({"key": key, "label": label, "optional": optional,
                           "enabled": enabled,
                           "configured": bool(cid), "found": ch is not None,
@@ -1699,6 +1700,16 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     async def send_digest(request):
         try:
             ch = await hooks["post_digest"](True)
+        except discord.HTTPException as exc:
+            raise ApiError(502, f"Discord refused: {exc.text or exc}")
+        return web.json_response({"ok": True, "channel": ch.name})
+
+    @routes.post("/api/devlist")
+    async def send_dev_list(request):
+        try:
+            ch = await hooks["post_dev_list"](True)
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
         except discord.HTTPException as exc:
             raise ApiError(502, f"Discord refused: {exc.text or exc}")
         return web.json_response({"ok": True, "channel": ch.name})
