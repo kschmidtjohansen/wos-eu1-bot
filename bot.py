@@ -657,14 +657,78 @@ class BugFormModal(discord.ui.Modal):
             return await interaction.response.send_message(T("form.need_title", lg), ephemeral=True)
         report = {"title": title or None, "area": (self.area.values or [None])[0], "game_version": cfg("game_version") or None,
                   "chief_name": chief, "player_uid": uid, "text": str(self.desc.value).strip(), "files": list(self.files.values)[:4]}
-        similar = store.similar_bugs(title, area=None) if title else []
-        if similar:
-            text = (T("form.similar", lg) + "\n" + "\n".join(
-                f"• {s['title']} – *{T('st.' + s['status'], lg)}*" + (T("modal.similar_fixed", lg, version=s["fixed_in"]) if s["fixed_in"] else "")
-                for s in similar) + "\n\n" + T("form.similar_tail", lg))
-            return await interaction.response.send_message(text, view=SimilarView(lg, report, similar), ephemeral=True)
-        await interaction.response.send_message(T("form.sending", lg), ephemeral=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        matches, hashes = [], []
+        for att in report["files"]:
+            try:
+                if (att.content_type or "").startswith("image/") and (att.size or 0) <= 8_000_000:
+                    h = store.image_hash_bytes(await att.read())
+                    if h is not None:
+                        hashes.append(h)
+            except Exception:  # noqa: BLE001 – a screenshot we can't read just isn't compared
+                pass
+        try:
+            matches = store.match_draft(title, report["text"], report["area"], interaction.user.id, hashes)
+        except Exception as exc:  # noqa: BLE001 – never block a report because of the check
+            print(f"[match draft] {exc!r}")
+        if matches:
+            return await interaction.edit_original_response(content=match_text(matches, lg), view=MatchView(lg, report, matches))
+        await interaction.edit_original_response(content=T("form.sending", lg))
         await send_form_report(interaction, report, lg)
+
+
+def match_text(matches, lg) -> str:
+    lines = []
+    for r, _ in matches:
+        line = f"• **#{r['id']}** {store.bug_summary(r)[:90]} – "
+        if r["status"] == "fixed":
+            line += T("form.match_fixed", lg, version=T("modal.similar_fixed", lg, version=r["fixed_version"]) if r["fixed_version"] else "")
+        else:
+            line += f"*{T('st.' + r['status'], lg)}*"
+        lines.append(line)
+    return _cap(T("form.match", lg) + "\n" + "\n".join(lines) + "\n\n" + T("form.match_tail", lg))
+
+
+class MatchButton(discord.ui.Button):
+    def __init__(self, lg, bug_id: int, owner):
+        super().__init__(style=discord.ButtonStyle.success, label=T("form.match_btn", lg, id=bug_id)[:80], row=0)
+        self.lg, self.bug_id, self.owner = lg, bug_id, owner
+
+    async def callback(self, interaction: discord.Interaction):
+        r = get_bug(self.bug_id)
+        if r is None or r["duplicate_of"] or r["status"] not in store.OPEN_STATUSES:
+            return await interaction.response.edit_message(content=T("board.gone", self.lg), view=self.owner)
+        store.add_vote(r["id"], interaction.user.id)
+        n = store.vote_count(r["id"])
+        await interaction.response.edit_message(content=T("board.voted", self.lg, n=n, id=r["id"]), view=None)
+        log_event("bug", f"{interaction.user.display_name} also has bug #{r['id']} – no new report needed ({n} affected)",
+                  interaction.user.id, interaction.user.display_name)
+        self.owner.stop()
+        await sync_bug_messages(r)
+        await safe_refresh_board()
+
+
+class MatchView(discord.ui.View):
+    """'Is it one of these?' before a report is sent: 👍 on a matching open bug instead of a new ticket."""
+
+    def __init__(self, lg, report, matches):
+        super().__init__(timeout=900)
+        self.lg, self.report = lg, report
+        for r, _ in matches:
+            if r["status"] in store.OPEN_STATUSES:
+                self.add_item(MatchButton(lg, r["id"], self))
+        self.send.label, self.drop.label = T("form.different", lg)[:80], T("form.cancel", lg)[:80]
+
+    @discord.ui.button(style=discord.ButtonStyle.primary, label="Mine is different – send", row=1)
+    async def send(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content=T("form.sending", self.lg), view=None)
+        await send_form_report(interaction, self.report, self.lg)
+        self.stop()
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, label="Don't send", row=1)
+    async def drop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content=T("form.cancelled", self.lg), view=None)
+        self.stop()
 
 
 async def send_form_report(interaction: discord.Interaction, report: dict, lg: Optional[str]):
@@ -3502,7 +3566,7 @@ async def scan_duplicates() -> int:
                 closed += 1
     for r in store.bugs_needing_dup_check():
         best, pct = store.find_duplicate(r)
-        if best is None or pct < 45:
+        if best is None or pct < 35:
             continue
         if auto and pct >= need and r["status"] in MOD_OPEN:
             await auto_close_dup(r, best["id"], pct)
@@ -3553,7 +3617,7 @@ async def check_duplicate(r):
     if mode == "off" or r is None:
         return None
     best, pct = store.find_duplicate(r)
-    if best is None or pct < 45:
+    if best is None or pct < 35:
         return None
     mod = chan("mod_channel_id")
     if mode == "auto" and pct >= cfg("dup_auto_percent") and r["status"] in MOD_OPEN and not r["dup_dismissed"]:

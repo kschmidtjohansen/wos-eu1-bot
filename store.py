@@ -447,7 +447,7 @@ SCHEMA = {
     "invites_channel_id": {"type": "channel", "default": None},
     "invites_fake_days": {"type": "int", "default": 7, "min": 0, "max": 90},
     "dup_mode": {"type": "choice", "default": "auto", "choices": ["off", "flag", "auto"]},
-    "dup_auto_percent": {"type": "int", "default": 60, "min": 50, "max": 100},
+    "dup_auto_percent": {"type": "int", "default": 50, "min": 40, "max": 100},
     "mod_ping_hours": {"type": "int", "default": 4, "min": 0, "max": 72},
     "log_channel_kinds": {"type": "lines", "default": "all", "max_lines": 20, "max_len": 20},
     "redeem_enabled": {"type": "bool", "default": False},
@@ -561,6 +561,12 @@ if get_raw("dup_auto_60") != "1":
     for _k in ("ai_key", "ai_enabled", "ai_auto_close", "ai_auto_percent", "ai_model", "ai_monthly_limit", "ai_usage"):
         db.execute("DELETE FROM settings WHERE key=?", (_k,))
     put_raw("dup_auto_60", "1")
+
+# One-time: auto-close from 50 % (non-duplicates scored at most ~33 % in testing, real duplicates 60 %+).
+if get_raw("dup_auto_50") != "1":
+    set_cfg("dup_mode", "auto")
+    set_cfg("dup_auto_percent", 50)
+    put_raw("dup_auto_50", "1")
 
 
 # ------------------------------------------------------------ activity log
@@ -1800,6 +1806,50 @@ def find_duplicate(r, days: int = 120):
         if s > best_s:
             best, best_s = c, s
     return best, best_s
+
+
+class _Draft(dict):
+    """A report that hasn't been sent yet, shaped like a bug_reports row for duplicate_score()."""
+    def keys(self):
+        return super().keys()
+
+
+_draft_seq = [0]
+
+
+def match_draft(title: str, text: str, area: Optional[str] = None, reporter_id: Optional[int] = None,
+                img_hashes: Optional[list] = None, limit: int = 3, min_score: int = 35) -> list:
+    """Before a report is sent: existing bugs it most likely is, best first: [(row, percent)].
+    Looks at open bugs, known issues and bugs fixed in the last 3 weeks – title, text in any language and screenshots."""
+    _draft_seq[0] -= 1
+    d = _Draft(id=_draft_seq[0], text=text or "", summary=(title or "").strip() or None, area=area, reporter_id=reporter_id)
+    try:
+        f = _features(d)
+        f["img"], f["img_n"] = list(img_hashes or []), 0
+        since = int(time.time()) - 120 * 86400
+        rows = db.execute(f"SELECT * FROM bug_reports WHERE duplicate_of IS NULL AND created_at>=? AND "
+                          f"(status IN ({','.join('?' * len(OPEN_STATUSES))}) OR (public=1 AND status<>'rejected' AND status<>'admin_rejected') "
+                          "OR (status='fixed' AND id IN (SELECT item_id FROM actions WHERE kind='bug' AND action='fixed' AND ts>=?))) "
+                          "ORDER BY id DESC LIMIT 500", (since, *OPEN_STATUSES, int(time.time()) - 21 * 86400)).fetchall()
+        out = []
+        for c in rows:
+            sc = duplicate_score(d, c)
+            if reporter_id and c["reporter_id"] == reporter_id:
+                sc = min(100, sc + 15)
+            if sc >= min_score:
+                out.append((c, sc))
+        ids = {c["id"] for c, _ in out}
+        out = [(c, sc) for c, sc in out if c["dup_suggest"] not in ids]   # a report already marked as a copy of another one shown
+        out.sort(key=lambda x: (-x[1], x[0]["id"]))                      # equal match: the oldest report is the original
+        return out[:limit]
+    finally:
+        _FEAT.pop(d["id"], None)
+
+
+def image_hash_bytes(data: bytes) -> Optional[int]:
+    """Fingerprint of an image that hasn't been saved yet (a screenshot in the report form)."""
+    h = _dhash(io.BytesIO(data))
+    return int(h, 16) if h and h != "-" else None
 
 
 def similar_reports(r, limit: int = 3, days: int = 180, min_score: int = 35) -> list:
