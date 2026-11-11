@@ -34,7 +34,7 @@ import hashlib
 import io
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import discord
 from discord import app_commands
@@ -668,7 +668,7 @@ class BugFormModal(discord.ui.Modal):
             except Exception:  # noqa: BLE001 – a screenshot we can't read just isn't compared
                 pass
         try:
-            en = await english_for_match(title, report["text"])
+            en, _ = await english_for_match(title, report["text"])
             matches = store.match_draft(title, report["text"], report["area"], interaction.user.id, hashes,
                                         english=en if en and en != "-" else None)
         except Exception as exc:  # noqa: BLE001 – never block a report because of the check
@@ -3641,31 +3641,35 @@ async def check_duplicate(r):
 MATCH_RESERVE = 100_000      # translation characters per month always kept free for staff pressing 🌐 Translate
 
 
-async def english_for_match(title: Optional[str], text: str) -> Optional[str]:
-    """English version of a report, only for the duplicate check (never posted). None when it's already English,
-    no Google key is set, or the month's translation allowance is nearly used. '-' = checked, it is English."""
+async def english_for_match(title: Optional[str], text: str) -> Tuple[Optional[str], str]:
+    """English version of a report, only for the duplicate check (never posted), and its language.
+    English: ('-', 'en'). None when no Google key is set or the month's translation allowance is nearly used."""
     body = store.clean_report(text or "")
     joined = "\n".join(x for x in ((title or "").strip(), body) if x)[:1500]
+    lang = store.detect_language(joined)
     if not joined.strip() or store.looks_english(joined):
-        return "-"
+        return "-", "en"
     if not translate.key() or translate.remaining() - len(joined) < MATCH_RESERVE:
-        return None
+        return None, lang
     try:
         out, src = await asyncio.wait_for(translate.text(joined, "en"), timeout=12)
     except Exception as exc:  # noqa: BLE001 – matching still works on the original words
         print(f"[match translate] {exc!r}")
-        return None
-    return "-" if translate.same_language(src, "en") else out[:4000]
+        return None, lang
+    src = (src or lang or "?").split("-")[0].lower()
+    return ("-" if translate.same_language(src, "en") else out[:4000]), src
 
 
 async def translate_for_match(r) -> bool:
-    """Store the English version of one bug for matching. True when something was stored."""
+    """Store the English version (and language) of one bug for matching. True when something was stored."""
     if r is None or r["match_en"] is not None or (r["text_en"] or ""):
         return False
-    en = await english_for_match(r["summary"], r["text"] or "")
+    en, lang = await english_for_match(r["summary"], r["text"] or "")
     if en is None:
+        if lang and lang != "?" and not r["match_lang"]:
+            set_bug(r["id"], match_lang=lang)
         return False
-    set_bug(r["id"], match_en=en)
+    set_bug(r["id"], match_en=en, match_lang=lang)
     return True
 
 

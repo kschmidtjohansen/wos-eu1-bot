@@ -1036,6 +1036,16 @@ function previewHtml() {
   </div>`;
 }
 const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['dups', 'Duplicates'], ['staff', 'Reminders & digest']];
+// Settings → Bug bot → Duplicates: which languages players report in.
+function langCard() {
+  const L = S.langs;
+  if (!L) return '';
+  const top = Math.max(1, ...L.languages.map(x => x.count));
+  return html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Languages in bug reports</h3><span class="w-hint">${L.ready} of ${L.total} can be compared in English</span></div>
+    <p class="w-hint" style="margin:0 0 10px">Guessed from every report (Google’s detection once a report has been translated). Reports in any language are translated for the duplicate check – no list to keep up to date.</p>
+    ${L.languages.length ? L.languages.map(x => html`<div class="w-arearow" style="cursor:default"><span>${x.name}</span><b>${x.count}</b><i class="w-stack" style="height:6px"><i style="width:${x.count / top * 100}%;background:var(--w-accent)"></i></i></div>`) : html`<div class="w-empty">No reports yet.</div>`}
+  </section>`;
+}
 function viewPanel() {
   const d = S.panelDraft, p = S.health.panel, sub = subOf(BUGBOT_SUBS);
   const head = html`<div class="w-pagehead"><h2>Bug bot</h2>
@@ -1044,7 +1054,7 @@ function viewPanel() {
   if (sub === 'suggestions') return html`${head}${fsec('suggestions')}${saveBar()}`;
   if (sub === 'website') return html`${head}${fsec('website')}${saveBar()}`;
   if (sub === 'staff') return html`${head}${fsec('reminders', 'digest')}${saveBar()}`;
-  if (sub === 'dups') return html`${head}${fsec('duplicates')}${saveBar()}`;
+  if (sub === 'dups') return html`${head}${fsec('duplicates')}${langCard()}${saveBar()}`;
   return html`${head}
     <div class="w-grid2">
       <section class="w-card w-pad">
@@ -2531,6 +2541,7 @@ const LOADERS = {
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
+  panel: async () => { S.langs = isMod() ? null : await call('GET', '/api/bugs/languages').catch(() => null); },
   insights: async () => { S.insights = await call('GET', '/api/insights'); },
   overview: async () => { if (isMod()) { const [i, m] = await Promise.all([call('GET', '/api/insights'), call('GET', '/api/mybugs')]); S.insights = i; S.mybugs = m; } },
   patch: async () => { const [pn, pu] = await Promise.all([call('GET', '/api/patchnotes'), isMod() ? null : call('GET', '/api/push').catch(() => null)]); S.patch = pn; S.push = pu; },
@@ -3659,6 +3670,7 @@ function makeMock() {
       if (p === '/api/access/unlock') { C.locked = false; }
       return JSON.parse(JSON.stringify(A));
     }
+    if (p === '/api/bugs/languages') return { total: 64, ready: 51, languages: [['English', 31], ['Indonesian', 9], ['Arabic', 7], ['Polish', 5], ['Hindi', 4], ['Filipino', 3], ['Turkish', 2], ['Unknown', 3]].map(x => ({ code: x[0].slice(0, 2).toLowerCase(), name: x[0], count: x[1] })) };
     if (p === '/api/mybugs') { const mine = bugs.slice(0, 7); const st = {}; mine.forEach(b => { st[b.status] = (st[b.status] || 0) + 1; });
       return { total: mine.length, week: 4, status_now: st, actions: { passed: 4, rejected: 2, replied: 1 },
         recent: mine.map((b, i) => Object.assign(briefBug(b), { status: b.status, created_at: b.created_at, my_action: ['passed', 'rejected', 'passed', 'replied', 'passed', 'rejected', 'passed'][i], my_ts: Math.floor(Date.now() / 1000) - i * 5400 })) }; }

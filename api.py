@@ -459,6 +459,11 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         return web.json_response({"items": [bug_dict(r) for r in rows], "total": total, "counts": counts})
 
     # ------------------------------------------------------------ AI duplicate check (admins)
+    @routes.get("/api/bugs/languages")
+    async def bug_languages(request):
+        """Which languages bug reports are written in, and how many are ready to be compared in English."""
+        return web.json_response(store.language_stats())
+
     @routes.get("/api/bugs/{id}/similar")
     async def similar(request):
         """Reports that look like this one – for one-tap 'Duplicate of #…' on the staff page."""

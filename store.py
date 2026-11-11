@@ -268,7 +268,7 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "reject_reason TEXT"), ("suggestions", "reject_reason TEXT"),
                      ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"), ("bug_reports", "dup_dismissed INTEGER"), ("bug_reports", "ai_title TEXT"), ("bug_reports", "ai_summary TEXT"),
                      ("bug_reports", "ai_checked INTEGER"), ("bug_reports", "ai_dup INTEGER"), ("bug_reports", "ai_conf INTEGER"),
-                     ("bug_reports", "ai_reason TEXT"), ("bug_reports", "match_en TEXT"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
+                     ("bug_reports", "ai_reason TEXT"), ("bug_reports", "match_en TEXT"), ("bug_reports", "match_lang TEXT"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
                      ("bug_reports", "mod_pinged INTEGER"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
@@ -1812,20 +1812,85 @@ def find_duplicate(r, days: int = 120):
     return best, best_s
 
 
-_EN_WORDS = set("""the and is it in to of my i when a on was not can't cant doesn't dont don't after with at be have this that
-for you are but get got its it's there they then from i'm im what why how no all your if or so up out just""".split())
+
+
+_LANG_NAMES = {"en": "English", "pl": "Polish", "id": "Indonesian", "de": "German", "fr": "French", "es": "Spanish",
+               "pt": "Portuguese", "tr": "Turkish", "it": "Italian", "nl": "Dutch", "tl": "Filipino", "vi": "Vietnamese",
+               "ro": "Romanian", "ar": "Arabic", "fa": "Persian", "ur": "Urdu", "hi": "Hindi", "bn": "Bengali", "ta": "Tamil",
+               "ru": "Russian", "uk": "Ukrainian", "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "th": "Thai", "he": "Hebrew",
+               "ms": "Malay", "sv": "Swedish", "da": "Danish", "no": "Norwegian", "cs": "Czech", "hu": "Hungarian", "el": "Greek",
+               "?": "Unknown"}
+_LANG_WORDS = {
+    "en": "the and is it in to of my i when was not can't cant doesn't don't after with this that for you are but get got there they from what why how",
+    "pl": "nie jest się że na do to co jak ale czy już mam mój moja mnie po gdy jest są był była ten ta",
+    "id": "dan yang di ke tidak saya ini itu ada untuk dengan tapi sudah bisa kalau aku gak nggak juga karena dari mau",
+    "de": "und ist nicht ich das die der mein meine wenn mit auf ein eine es zu kann nach aber",
+    "fr": "et est pas je le la les mon ma mes quand avec une un dans ne ce que qui pour sur",
+    "es": "y es no el la los mi mis cuando con una un en que por para se pero lo",
+    "pt": "e é não eu o a os meu minha quando com uma um em que por para se mas está",
+    "tr": "ve bir bu çok ama ile için ben benim değil ne var yok da de mi",
+    "it": "e è non il la mio mia quando con una un che per ma sono di",
+    "nl": "en is niet ik het de een mijn met als op van maar dat",
+    "tl": "ang ng mga sa ako ko hindi na at ay po ito yung kasi lang",
+    "vi": "và là không của tôi khi có được này một cho nhưng bị",
+    "ro": "și este nu eu meu mea când cu o un în care pentru dar",
+    "sv": "och är inte jag min mitt när med en ett på att det som",
+    "da": "og er ikke jeg min mit når med en et på at det som",
+}
+_LANG_SETS = {k: set(v.split()) for k, v in _LANG_WORDS.items()}
+
+
+def detect_language(text: str) -> str:
+    """Language of a report, guessed here for free: by alphabet, then by common words. '?' when unsure."""
+    t = (text or "").lower()
+    letters = [c for c in t if c.isalpha()]
+    if not letters:
+        return "?"
+    def share(lo, hi):
+        return sum(1 for c in letters if lo <= c <= hi) / len(letters)
+    for code, lo, hi in (("ar", "\u0600", "\u06ff"), ("hi", "\u0900", "\u097f"), ("bn", "\u0980", "\u09ff"),
+                         ("ta", "\u0b80", "\u0bff"), ("th", "\u0e00", "\u0e7f"), ("ko", "\uac00", "\ud7af"),
+                         ("ja", "\u3040", "\u30ff"), ("zh", "\u4e00", "\u9fff"), ("he", "\u0590", "\u05ff"),
+                         ("el", "\u0370", "\u03ff"), ("ru", "\u0400", "\u04ff")):
+        if share(lo, hi) > 0.3:
+            if code == "ru" and any(c in t for c in "іїєґ"):
+                return "uk"
+            if code == "ar" and any(c in t for c in "پچژگ"):
+                return "fa"
+            if code == "zh" and share("\u3040", "\u30ff") > 0.05:
+                return "ja"
+            return code
+    words = re.findall(r"[^\W\d_]+(?:'[a-z]+)?", t)
+    best, hits = "?", 0
+    for code, ws in _LANG_SETS.items():
+        n = sum(1 for w in words if w in ws)
+        if n > hits:
+            best, hits = code, n
+    if hits >= 2 or (hits == 1 and len(words) <= 4):
+        return best
+    return "?"
+
+
+def language_stats() -> dict:
+    """Which languages bug reports are written in (all reports), and how many are ready for cross-language matching."""
+    counts, total, matched = {}, 0, 0
+    for r in db.execute("SELECT text, summary, match_lang, match_en, text_en FROM bug_reports").fetchall():
+        total += 1
+        code = (r["match_lang"] or detect_language(((r["summary"] or "") + "\n" + clean_report(r["text"] or ""))[:800])).split("-")[0].lower()
+        if code == "tl" or code == "fil":
+            code = "tl"
+        counts[code] = counts.get(code, 0) + 1
+        if r["match_en"] or r["text_en"] or code == "en":
+            matched += 1
+    items = sorted(({"code": k, "name": _LANG_NAMES.get(k, k), "count": v} for k, v in counts.items()), key=lambda x: -x["count"])
+    return {"total": total, "ready": matched, "languages": items}
 
 
 def looks_english(text: str) -> bool:
     """Cheap guess so English reports never use the translation allowance."""
-    words = re.findall(r"[^\W\d_]+(?:'[a-z]+)?", (text or "").lower())
-    if not words:
+    if not any(c.isalpha() for c in text or ""):
         return True                                   # nothing to translate (numbers, links, emojis)
-    latin = sum(1 for w in words if w.isascii())
-    if latin < len(words) * 0.9:
-        return False
-    common = sum(1 for w in words if w in _EN_WORDS)
-    return common >= max(1, len(words) * 0.12)
+    return detect_language(text) == "en"
 
 
 def bugs_needing_translation(limit: int = 10) -> list:
