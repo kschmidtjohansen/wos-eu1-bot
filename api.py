@@ -403,7 +403,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
              "source": r["source"] or "discord", "public": bool(r["public"]),
              "fixed_version": r["fixed_version"] or "",
              "duplicates": [d["id"] for d in store.duplicates_of(r["id"])], "votes": store.vote_count(r["id"]),
-             "reason": r["reject_reason"] or "", "dup_suggest": r["dup_suggest"], "dup_score": r["dup_score"]}
+             "reason": r["reject_reason"] or "", "dup_suggest": r["dup_suggest"], "dup_score": r["dup_score"],
+             "ai_title": r["ai_title"] or "", "ai_reason": r["ai_reason"] or "", "ai_dup": r["ai_dup"], "ai_conf": r["ai_conf"],
+             "auto_closed": bool(r["auto_closed"]), "ai_summary": r["ai_summary"] or ""}
         if r["dup_suggest"]:
             o = store.get_bug(r["dup_suggest"])
             d["dup_title"] = store.bug_summary(o) if o else ""
@@ -457,11 +459,65 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                                                severity, request.get("actor_id") if mine else None, dups)
         return web.json_response({"items": [bug_dict(r) for r in rows], "total": total, "counts": counts})
 
+    # ------------------------------------------------------------ AI duplicate check (admins)
+    def ai_info():
+        import ai
+        n = store.db.execute("SELECT COUNT(*) FROM bug_reports WHERE ai_checked IS NOT NULL").fetchone()[0]
+        auto = store.db.execute("SELECT COUNT(*) FROM bug_reports WHERE auto_closed=1").fetchone()[0]
+        return {"key_set": bool(ai.key()), "enabled": ai.enabled(), "model": ai.model(), "default_model": ai.DEFAULT_MODEL,
+                "auto_close": store.get_raw("ai_auto_close") == "1", "auto_percent": int(store.get_raw("ai_auto_percent") or 90),
+                "usage": ai.usage(), "checked": n, "auto_closed": auto}
+
+    @routes.get("/api/ai")
+    async def ai_get(request):
+        return web.json_response(ai_info())
+
+    @routes.put("/api/ai")
+    async def ai_put(request):
+        d = await body_json(request)
+        if "key" in d:
+            k = str(d.get("key") or "").strip()
+            if k and not re.fullmatch(r"sk-ant-[\w-]{20,200}", k):
+                raise ApiError(400, "That doesn't look like an Anthropic API key (it starts with sk-ant-).")
+            store.put_raw("ai_key", k)
+        if "model" in d:
+            m = str(d.get("model") or "").strip()
+            if m and not re.fullmatch(r"[\w.-]{3,60}", m):
+                raise ApiError(400, "Unknown model name.")
+            store.put_raw("ai_model", m)
+        for k, raw in (("enabled", "ai_enabled"), ("auto_close", "ai_auto_close")):
+            if k in d:
+                store.put_raw(raw, "1" if d[k] else "0")
+        if "auto_percent" in d:
+            store.put_raw("ai_auto_percent", str(max(60, min(100, int(d["auto_percent"] or 90)))))
+        if "limit" in d:
+            store.put_raw("ai_monthly_limit", str(max(10, min(100000, int(d["limit"] or 2000)))))
+        store.log_event("settings", "Duplicates & AI settings changed", who_id(request), who(request))
+        return web.json_response(ai_info())
+
+    @routes.post("/api/ai/test")
+    async def ai_test(request):
+        """Ask the AI about one bug and show what it thinks – nothing is closed."""
+        import ai
+        d = await body_json(request)
+        r = bug_or_404(int(d.get("bug_id") or 0))
+        try:
+            v = await ai.analyse(r)
+        except ai.AIError as exc:
+            raise ApiError(400, str(exc))
+        o = store.get_bug(v["duplicate_of"]) if v["duplicate_of"] else None
+        return web.json_response({**v, "dup_title": store.bug_summary(o) if o else "", "info": ai_info()})
+
+    @routes.post("/api/ai/scan")
+    async def ai_scan(request):
+        n = await hooks["ai_backfill"](10)
+        return web.json_response({"checked": n, "info": ai_info()})
+
     @routes.get("/api/bugs/{id}/similar")
     async def similar(request):
         """Reports that look like this one – for one-tap 'Duplicate of #…' on the staff page."""
         r = bug_or_404(int_param(request, "id"))
-        return web.json_response({"items": [{**bug_dict(c), "score": pct, "snippet": (c["text"] or "")[:220]}
+        return web.json_response({"items": [{**bug_dict(c), "score": pct, "snippet": store.clean_report(c["text"])[:220]}
                                             for c, pct in store.similar_reports(r)]})
 
     @routes.get("/api/mybugs")
@@ -506,6 +562,11 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 r = await hooks["set_severity"](r, sev, who(request), who_id(request))
             except discord.HTTPException as exc:
                 raise ApiError(502, f"Discord refused: {exc.text or exc}")
+        if data.get("reopen"):               # "Not a duplicate" on a closed duplicate (also undoes an automatic close)
+            if not r["duplicate_of"]:
+                raise ApiError(400, "This bug isn't closed as a duplicate.")
+            await hooks["reopen_bug"](r, who(request), who_id(request))
+            return web.json_response(bug_dict(store.get_bug(r["id"]), full=True))
         if data.get("dup_dismiss"):          # "Not a duplicate" – the bot stops suggesting one for this bug
             store.set_bug(r["id"], dup_suggest=None, dup_score=None, dup_dismissed=1)
             store.log_event("bug", f"Bug #{r['id']}: {who(request)} said it is not a duplicate", who_id(request), who(request))

@@ -3,3 +3,4 @@ python-dotenv>=1.0
 aiohttp>=3.9
 pywebpush>=2.0
 Pillow>=10.0      # screenshot fingerprints for duplicate detection
+av>=12.0          # a few frames from bug-report videos (duplicate check)

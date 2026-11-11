@@ -47,6 +47,7 @@ from store import (cfg, db, get_bug, get_bug_by_admin_msg, get_bug_by_msg, get_r
 from store import record_action
 import texts
 import drive
+import ai
 import translate
 
 
@@ -1516,7 +1517,8 @@ class WosBot(discord.Client):
                          "set_bug_status": apply_bug_status, "send_reply": send_bug_reply,
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
-                         "set_severity": set_severity, "dup_dismissed": dup_dismissed, "run_backup": run_backup, "post_digest": post_digest,
+                         "set_severity": set_severity, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
+                         "ai_check": ai_check, "ai_backfill": ai_backfill, "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
                          "add_gift_code": add_gift_code, "end_gift_code": end_gift_code, "remove_gift_code": remove_gift_code,
@@ -3376,7 +3378,10 @@ async def translate_item(kind: str, r, target: str):
     text = r["text"] or ""
     if not worth_translating(text):
         return None, ""
-    return await translate.text(text, target)
+    out, src = await translate.text(text, target)
+    if target.lower().startswith("en") and out and not str(src).lower().startswith("en"):
+        (set_bug if kind == "bug" else set_suggestion)(r["id"], text_en=out[:4000])   # also helps the duplicate check
+    return out, src
 
 
 async def handle_translate_button(interaction: discord.Interaction):
@@ -3474,7 +3479,8 @@ class DupView(discord.ui.View):
 
 
 async def reopen_bug(r, who: str, actor_id=None):
-    set_bug(r["id"], status="new", duplicate_of=None, reject_reason=None, dup_suggest=None, mod_pinged=None)
+    set_bug(r["id"], status="new", duplicate_of=None, reject_reason=None, dup_suggest=None, mod_pinged=None,
+            dup_dismissed=1, auto_closed=None)          # "not a duplicate": never suggested or auto-closed again
     record_action("bug", r["id"], "reopened", actor_id, who)
     r = get_bug(r["id"])
     await sync_bug_messages(r, f"Reopened by {who}")
@@ -3548,10 +3554,74 @@ async def check_duplicate(r):
 
 async def safe_check_duplicate(bug_id: int):
     try:
-        return await check_duplicate(get_bug(bug_id))
+        res = await check_duplicate(get_bug(bug_id))
     except Exception as exc:  # noqa: BLE001 – the report itself is already safe
         print(f"[duplicates] {exc!r}")
+        res = None
+    if res != "auto" and ai.enabled():
+        asyncio.create_task(safe_task(ai_check(bug_id), "AI duplicate check"))   # in the background, a few seconds
+    return res
+
+
+def ai_auto() -> tuple:
+    """(auto-close on?, minimum confidence) for the AI."""
+    return get_raw("ai_auto_close") == "1", int(get_raw("ai_auto_percent") or 90)
+
+
+async def ai_check(bug_id: int, backfill: bool = False) -> Optional[str]:
+    """Let the AI read the report (any language, screenshots, video frames) and compare it with the existing bugs.
+    Sure duplicates are closed automatically when that's switched on; likely ones are flagged for the moderators."""
+    r = get_bug(bug_id)
+    if r is None or r["duplicate_of"] or r["status"] not in MOD_OPEN + ADMIN_OPEN:
         return None
+    try:
+        v = await ai.analyse(r)
+    except ai.AIError as exc:
+        log_event("system", f"AI check of bug #{bug_id} failed: {exc}", None, brand())
+        return None
+    r = get_bug(bug_id)
+    dup, conf = v["duplicate_of"], v["confidence"]
+    if not dup or r["duplicate_of"] or r["dup_dismissed"]:
+        return None
+    orig = get_bug(dup)
+    if orig is None:
+        return None
+    auto_on, need = ai_auto()
+    mod = chan("mod_channel_id")
+    if auto_on and conf >= need and r["status"] in MOD_OPEN:
+        reason = store.REJECT_PRESETS["duplicate"]
+        await apply_bug_status(r, "rejected", brand(), None, duplicate_of=dup, log_kind="bug", reason=reason)
+        set_bug(bug_id, auto_closed=1)
+        log_event("bug", f"Bug #{bug_id} closed automatically as a duplicate of #{dup} – AI {conf}% sure: {v['reason']}", None, brand())
+        if mod is not None and r["msg_id"]:
+            try:
+                await mod.get_partial_message(r["msg_id"]).edit(view=DupView("reopen"))
+            except discord.HTTPException:
+                pass
+        return "auto"
+    if conf >= 60 and (not r["dup_suggest"] or conf >= (r["dup_score"] or 0) or r["dup_suggest"] == dup):
+        set_bug(bug_id, dup_suggest=dup, dup_score=conf)
+        r = get_bug(bug_id)
+        if mod is not None and r["msg_id"] and r["status"] in MOD_OPEN:
+            try:
+                await mod.get_partial_message(r["msg_id"]).edit(embed=bug_embed(r), view=DupView("confirm", dup))
+            except discord.HTTPException:
+                pass
+        return "flag"
+    return None
+
+
+async def ai_backfill(n: int = 4) -> int:
+    """A few older open bugs per run that the AI hasn't seen yet (so the English summaries fill in slowly)."""
+    if not ai.enabled():
+        return 0
+    marks = ",".join("?" * len(MOD_OPEN + ADMIN_OPEN))
+    rows = store.db.execute(f"SELECT id FROM bug_reports WHERE ai_checked IS NULL AND duplicate_of IS NULL AND status IN ({marks}) "
+                            "ORDER BY id LIMIT ?", (*(MOD_OPEN + ADMIN_OPEN), n)).fetchall()
+    for row in rows:
+        await ai_check(row["id"], backfill=True)
+        await asyncio.sleep(3)
+    return len(rows)
 
 
 # ------------------------------------------------------------ ping moderators about untouched bugs
@@ -4983,6 +5053,7 @@ async def run_schedules(now=None):
     try:
         if await scan_duplicates():
             done.append("duplicates")
+        await ai_backfill()
     except Exception as exc:  # noqa: BLE001
         print(f"[duplicate scan] {exc!r}")
     if cfg("digest_enabled"):

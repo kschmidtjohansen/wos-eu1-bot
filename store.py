@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import io
 import sqlite3
 import time
 from pathlib import Path
@@ -265,7 +266,9 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "public INTEGER NOT NULL DEFAULT 0"),
                      ("bug_reports", "ip_hash TEXT"),
                      ("bug_reports", "reject_reason TEXT"), ("suggestions", "reject_reason TEXT"),
-                     ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"), ("bug_reports", "dup_dismissed INTEGER"), ("bug_files", "img_hash TEXT"),
+                     ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"), ("bug_reports", "dup_dismissed INTEGER"), ("bug_reports", "ai_title TEXT"), ("bug_reports", "ai_summary TEXT"),
+                     ("bug_reports", "ai_checked INTEGER"), ("bug_reports", "ai_dup INTEGER"), ("bug_reports", "ai_conf INTEGER"),
+                     ("bug_reports", "ai_reason TEXT"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
                      ("bug_reports", "mod_pinged INTEGER"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
@@ -1591,11 +1594,15 @@ _FEAT: dict = {}
 
 def _features(r) -> dict:
     """Cached per bug: title words, body words, title letter-triplets, screenshot fingerprints."""
-    key = (r["id"], len(r["text"] or ""), r["summary"] or "")
+    g = lambda k: r[k] if k in r.keys() else None
+    key = (r["id"], len(r["text"] or ""), r["summary"] or "", g("ai_title"), len(g("text_en") or ""))
     f = _FEAT.get(r["id"])
     if f is None or f["key"] != key:
         title = r["summary"] or bug_summary(r)
-        f = {"key": key, "title": _tokens(title), "body": _tokens((r["text"] or "")[:1500]), "tri": _trigrams(title),
+        en = english_text(r)                       # the AI's English summary or a moderator's translation, if any
+        f = {"key": key, "title": _tokens(title) | _tokens(g("ai_title") or ""),
+             "body": _tokens((r["text"] or "")[:1500]) | _tokens(en[:1500]),
+             "tri": _trigrams(title), "tri_en": _trigrams(g("ai_title") or ""),
              "norm": _norm(_template_re().sub(" ", (r["text"] or "").lower()))}
         _FEAT[r["id"]] = f
     if "img" not in f or f.get("img_n") != _img_count(r["id"]):
@@ -1636,6 +1643,8 @@ def duplicate_score(a, b) -> int:
     title = _wsim(fa["title"], fb["title"]) if len(fa["title"]) >= 1 and len(fb["title"]) >= 1 else 0.0
     body = _wsim(fa["title"] | fa["body"], fb["title"] | fb["body"])
     tri = len(fa["tri"] & fb["tri"]) / len(fa["tri"] | fb["tri"]) if fa["tri"] and fb["tri"] else 0.0
+    if fa["tri_en"] and fb["tri_en"]:                # English titles from the AI: reports in different languages
+        tri = max(tri, len(fa["tri_en"] & fb["tri_en"]) / len(fa["tri_en"] | fb["tri_en"]))
     score = max(title * 0.9, body * 1.05, 0.45 * title + 0.35 * body + 0.3 * tri, tri * 0.85 if tri > 0.55 else 0)
     if a["area"] and b["area"] and a["area"] != b["area"]:
         score *= 0.85
@@ -1655,24 +1664,71 @@ def duplicate_score(a, b) -> int:
 _IMG_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
 
 
+def clean_report(text: str) -> str:
+    """The player's own words without the ticket's questions."""
+    return " ".join(line.strip() for line in (text or "").splitlines()
+                    if line.strip() and line.strip().strip("*#>-: ").lower().rstrip("?:") not in _TEMPLATE_LINES)
+
+
+def english_text(r) -> str:
+    """English text for matching: the AI summary, a moderator's 🌐 translation, or a cached translation."""
+    g = lambda k: r[k] if k in r.keys() else None
+    parts = [g("ai_summary") or "", g("text_en") or ""]
+    if not parts[1] and r["text"]:
+        import hashlib
+        t = (r["text"] or "").strip()[:2000]
+        for code in ("en", "en-US", "en-GB"):
+            h = hashlib.sha1(f"{code}\0{t}".encode()).hexdigest()
+            try:
+                row = db.execute("SELECT out FROM translate_cache WHERE h=?", (h,)).fetchone()
+            except sqlite3.Error:
+                row = None
+            if row:
+                parts[1] = row["out"]
+                break
+    return " ".join(p for p in parts if p)
+
+
 def _img_count(bug_id: int) -> int:
     return db.execute("SELECT COUNT(*) FROM bug_files WHERE bug_id=?", (bug_id,)).fetchone()[0]
+
+
+_VID_EXT = (".mp4", ".mov", ".webm", ".mkv", ".m4v", ".avi")
 
 
 def image_hashes(bug_id: int) -> list:
     out = []
     for f in bug_files(bug_id):
-        if not f["filename"].lower().endswith(_IMG_EXT):
+        name = f["filename"].lower()
+        if not name.endswith(_IMG_EXT + _VID_EXT):
             continue
         h = f["img_hash"] if "img_hash" in f.keys() else None
         if not h:
-            h = _dhash(ATTACH_DIR / f["path"])
+            h = _dhash(ATTACH_DIR / f["path"]) if name.endswith(_IMG_EXT) else _video_hashes(ATTACH_DIR / f["path"])
             if h:
                 db.execute("UPDATE bug_files SET img_hash=? WHERE id=?", (h, f["id"]))
                 db.commit()
         if h and h != "-":
-            out.append(int(h, 16))
+            out += [int(x, 16) for x in h.split(",") if x]
     return out
+
+
+def _video_hashes(path) -> str:
+    """Fingerprints of 3 frames (start, middle, end) of a video, comma-separated."""
+    try:
+        import ai
+        frames = ai.video_frames(path)
+    except Exception:  # noqa: BLE001
+        frames = []
+    hs = []
+    for im in frames:
+        b = io.BytesIO()
+        im.save(b, "PNG")
+        b.seek(0)
+        h = _dhash(b)
+        if h and h != "-":
+            hs.append(h)
+    return ",".join(hs) or "-"
 
 
 def _dhash(path) -> Optional[str]:

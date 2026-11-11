@@ -409,6 +409,35 @@
 .w-knowntag{color:#7de3f4;font-weight:600}
 .w-knownbar{display:flex;gap:12px;align-items:center;margin:4px 0 14px;padding:12px 14px;border:1px solid var(--w-border);border-radius:14px;cursor:pointer;background:var(--w-surface-2)}
 .w-knownbar.on{border-color:rgba(125,227,244,.5);background:rgba(125,227,244,.08)}
+.w-report{margin:12px 0 6px;padding:14px 16px;border-radius:14px;background:var(--w-surface-2);border:1px solid var(--w-border);line-height:1.55;overflow-wrap:anywhere}
+.w-report .w-q{font-size:12px;font-weight:600;color:var(--w-muted);margin-top:2px}
+.w-report .w-gap{height:10px}
+.w-bugmeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:13px;color:var(--w-muted);margin:-4px 0 4px}
+.w-bugtools{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:2px 0 10px}
+.w-bugtools .w-tr{margin:0}
+.w-ai{margin:8px 0;padding:9px 12px;border-radius:12px;background:rgba(160,140,255,.08);border:1px solid rgba(160,140,255,.3);font-size:13.5px}
+.w-decide{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px;padding:12px;border-radius:14px;border:1px solid var(--w-border-strong);background:var(--w-surface-2)}
+.w-decide-text{flex:1;min-width:200px}
+.w-rejbox{margin:-4px 0 12px;padding:12px;border-radius:14px;border:1px solid rgba(229,83,75,.35);background:rgba(229,83,75,.05)}
+.w-fold{border-top:1px solid var(--w-border);padding:10px 0}
+.w-fold > summary{cursor:pointer;display:flex;align-items:baseline;gap:10px;list-style:none;padding:4px 0}
+.w-fold > summary::-webkit-details-marker{display:none}
+.w-fold > summary::before{content:'›';display:inline-block;width:10px;color:var(--w-muted);transition:transform .15s}
+.w-fold[open] > summary::before{transform:rotate(90deg)}
+.w-fold[open] > summary{margin-bottom:10px}
+.w-more summary{cursor:pointer;color:var(--w-muted);font-size:13.5px}
+.w-pipe .w-pipebar{display:flex;gap:3px;height:10px;border-radius:99px;overflow:hidden;margin:4px 0 12px}
+.w-pipebar i{display:block;min-width:4px}
+.p-new{background:#7de3f4}.p-adm{background:#a08cff}.p-inv{background:#ffc15e}.p-ok{background:#5be0a8}.p-bad{background:#6b7790}
+.w-pipeparts{display:flex;flex-wrap:wrap;gap:6px}
+.w-pipeparts button{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;border:1px solid var(--w-border);background:var(--w-surface-2);color:var(--w-text);font:inherit;cursor:pointer}
+.w-pipeparts button:hover{border-color:var(--w-border-strong)}
+.w-pipeparts b{font-size:17px}
+.w-pipeparts span{color:var(--w-muted);font-size:13px}
+.w-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.w-mysum{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin:0 0 10px;font-size:13.5px;color:var(--w-muted)}
+.w-mysum b{color:var(--w-text)}
+.w-mychip{display:inline-flex;align-items:center;gap:6px}
 .w-steps{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px}
 .w-steps code{font-size:12.5px;background:var(--w-surface-2);padding:2px 6px;border-radius:6px;overflow-wrap:anywhere}
 .w-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border-radius:14px;background:var(--w-bad-soft);border:1px solid color-mix(in srgb,var(--w-bad) 35%,transparent)}
@@ -899,34 +928,30 @@ const dirtyKeys = () => GROUP.filter(k => S.draft[k] !== S.settings[k]);
 function myWork() {
   const M = S.mybugs; if (!M || !M.status_now) return '';
   const n = (...k) => k.reduce((a, x) => a + (M.status_now[x] || 0), 0);
-  const tiles = [[M.total, 'Bugs you handled', ''], [M.week, 'This week', ''], [n('passed', 'being_investigated'), 'Now with admins', ''],
-    [n('fixed'), 'Fixed', 'ok'], [n('rejected', 'admin_rejected'), 'Rejected', 'bad'], [n('new', 'investigating'), 'Still open', 'warn']];
-  return html`<div class="w-tilegroup"><div class="w-group-title">Your bugs</div>
-    ${M.total ? html`<div class="w-tiles">${tiles.map(t => html`<div class="w-card w-tile ${t[2]}"><b>${t[0]}</b><span>${t[1]}</span></div>`)}</div>
-    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Handled by you</h3><button class="w-btn small" data-act="bugsMine">See all ${M.total}</button></div>
-      ${M.recent.map(b => html`<div class="w-bugrow" role="button" tabindex="0" data-act="bugOpen" data-id="${b.id}"><b>#${b.id}</b>
+  const chips = [[n('new', 'investigating'), 'still open', 'p-new'], [n('passed', 'being_investigated'), 'with admins', 'p-adm'], [n('fixed'), 'fixed', 'p-ok'], [n('rejected', 'admin_rejected'), 'rejected', 'p-bad']];
+  return html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Your bugs</h3>${M.total ? html`<button class="w-btn small" data-act="bugsMine">See all ${M.total}</button>` : ''}</div>
+    ${M.total ? html`<div class="w-mysum"><span><b>${M.total}</b> handled · <b>${M.week}</b> this week</span>${chips.filter(c => c[0]).map(c => html`<span class="w-mychip"><i class="w-dot ${c[2]}"></i>${c[0]} ${c[1]}</span>`)}</div>
+      ${M.recent.slice(0, 5).map(b => html`<div class="w-bugrow" role="button" tabindex="0" data-act="bugOpen" data-id="${b.id}"><b>#${b.id}</b>
         <span class="w-bugsum">${b.summary}<span class="w-hint" style="display:block">You: ${ACTION_LABEL[b.my_action] || b.my_action} · ${ago(b.my_ts)}</span></span>
-        ${bugBadge(b.status)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}</section>`
-      : html`<div class="w-card w-pad w-empty">You haven’t handled any bugs yet. When you pass, reject or reply to a bug – in Discord or here – it shows up here with where it is now.</div>`}</div>`;
+        ${bugBadge(b.status)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}`
+      : html`<div class="w-empty">You haven’t handled any bugs yet. When you pass, reject or reply to a bug – in Discord or here – it shows up here with where it is now.</div>`}</section>`;
 }
 // Bug stats on the moderators' dashboard (from /api/insights).
 function modStats() {
   const I = S.insights; if (!I || !I.weeks) return '';
-  const sum = k => I.weeks.reduce((a, w) => a + w[k], 0), areas = (I.areas || []).slice(0, 6), top = Math.max(1, ...areas.map(a => a.total));
-  return html`<div class="w-tilegroup"><div class="w-group-title">Bug stats</div><div class="w-tiles w-tiles4">
-      <div class="w-card w-tile"><b>${fmtHours(I.fix_hours)}</b><span>Average time to fix</span></div>
-      <div class="w-card w-tile"><b>${sum('reported')}</b><span>Reported, last ${I.weeks.length} weeks</span></div>
-      <div class="w-card w-tile ok"><b>${sum('fixed')}</b><span>Fixed, last ${I.weeks.length} weeks</span></div>
-      <div class="w-card w-tile"><b>${I.duplicates}</b><span>Closed as duplicates</span></div></div></div>
-    <div class="w-grid2">
-      <section class="w-card w-pad"><h3 class="w-h3">Reports per week</h3>${weeklyChart(I.weeks)}
-        <div class="w-legend"><span><i class="w-sw" style="background:var(--w-accent)"></i>Reported</span><span><i class="w-sw" style="background:var(--w-ok)"></i>Fixed</span></div></section>
-      <section class="w-card w-pad"><h3 class="w-h3">Bugs by area</h3>
-        ${areas.length ? areas.map(a => html`<button class="w-arearow" data-act="areaGo" data-v="${a.name}"><span>${a.name}</span><b>${a.total}</b>
-          <i class="w-stack" style="height:8px"><i style="width:${a.fixed / top * 100}%;background:var(--w-ok)"></i><i style="width:${a.open / top * 100}%;background:var(--w-accent)"></i></i></button>`)
-          : html`<div class="w-empty">No data yet.</div>`}
-        <div class="w-actions"><button class="w-btn small" data-act="nav" data-tab="insights">All bug stats</button></div></section>
-    </div>`;
+  const sum = k => I.weeks.reduce((a, w) => a + w[k], 0), areas = (I.areas || []).slice(0, 5), top = Math.max(1, ...areas.map(a => a.total));
+  return html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Bug stats</h3><button class="w-btn small" data-act="nav" data-tab="insights">All stats</button></div>
+    <div class="w-mysum"><span>Fixed in <b>${fmtHours(I.fix_hours)}</b> on average</span><span><b>${sum('reported')}</b> reported · <b>${sum('fixed')}</b> fixed in ${I.weeks.length} weeks</span><span><b>${I.duplicates}</b> duplicates closed</span></div>
+    <div class="w-grid2" style="margin-top:6px"><div>${weeklyChart(I.weeks)}<div class="w-legend"><span><i class="w-sw" style="background:var(--w-accent)"></i>Reported</span><span><i class="w-sw" style="background:var(--w-ok)"></i>Fixed</span></div></div>
+      <div>${areas.length ? areas.map(a => html`<button class="w-arearow" data-act="areaGo" data-v="${a.name}"><span>${a.name}</span><b>${a.total}</b>
+          <i class="w-stack" style="height:6px"><i style="width:${a.fixed / top * 100}%;background:var(--w-ok)"></i><i style="width:${a.open / top * 100}%;background:var(--w-accent)"></i></i></button>`) : html`<div class="w-empty">No data yet.</div>`}</div></div></section>`;
+}
+// One line instead of a grid of tiles: where everything is, each part opens that list.
+function pipeline(title, parts) {
+  const total = parts.reduce((a, p) => a + p[0], 0) || 1;
+  return html`<section class="w-card w-pad w-pipe"><div class="w-sec-head"><h3 class="w-h3">${title}</h3><span class="w-hint">${parts.reduce((a, p) => a + p[0], 0)} in total</span></div>
+    <div class="w-pipebar" aria-hidden="true">${parts.filter(p => p[0]).map(p => html`<i class="${p[3]}" style="flex:${p[0] / total}"></i>`)}</div>
+    <div class="w-pipeparts">${parts.map(p => html`<button data-act="gotoList" data-tab="${p[4]}" data-s="${p[2]}"><i class="w-dot ${p[3]}"></i><b>${p[0]}</b><span>${p[1]}</span></button>`)}</div></section>`;
 }
 function viewOverview() {
   const o = S.overview, st = o.stats, h = S.health;
@@ -971,7 +996,7 @@ function viewOverview() {
       <section class="w-card w-week">
         <div><div class="w-sub">Bug reports, last 7 days</div><div class="w-big" data-tick="${st.last7}">${st.last7}</div></div>
         <div class="w-wks">
-          <div class="w-wk"><span>Members</span><b>${o.guild.members != null ? Number(o.guild.members).toLocaleString('en') : '–'}</b></div>
+          ${isMod() ? html`<div class="w-wk"><span>Possible duplicates</span><b>${st.bugs.dups || 0}</b></div>` : html`<div class="w-wk"><span>Members</span><b>${o.guild.members != null ? Number(o.guild.members).toLocaleString('en') : '–'}</b></div>`}
           <div class="w-wk"><span>Open info tickets</span><b>${st.open_tickets}</b></div>
           <div class="w-wk"><span>Bugs fixed so far</span><b>${B.fixed}</b></div>
           ${isMod() ? html`<div class="w-wk"><span>Being investigated</span><b>${B.investigating}</b></div>` : html`<div class="w-wk"><span>Ideas accepted</span><b>${G.accepted}</b></div>`}
@@ -979,23 +1004,23 @@ function viewOverview() {
       </section>
     </div>
     ${isMod() ? myWork() : ''}
-    <div class="w-tilegroup"><div class="w-group-title">${isMod() ? 'All bug reports' : 'Bug reports'}</div><div class="w-tiles">${bugTiles.map(tile)}</div></div>
-    ${isMod() ? modStats() : ''}
-    ${isMod() ? '' : html`<div class="w-tilegroup"><div class="w-group-title">Suggestions</div><div class="w-tiles w-tiles4">${sugTiles.map(tile)}</div></div>`}
+    ${pipeline(isMod() ? 'All bug reports' : 'Bug reports', [[B.awaiting, 'New', 'new', 'p-new', 'bugs'], [B.with_admins, 'With admins', 'passed', 'p-adm', 'bugs'],
+      [B.investigating, 'Being fixed', 'being_investigated', 'p-inv', 'bugs'], [B.fixed, 'Fixed', 'fixed', 'p-ok', 'bugs'], [B.rejected, 'Rejected', 'rejected', 'p-bad', 'bugs']])}
+    ${isMod() ? modStats() : pipeline('Suggestions', [[G.pending, 'Waiting', 'new', 'p-new', 'suggestions'], [G.accepted, 'Accepted', 'accepted', 'p-ok', 'suggestions'], [G.rejected, 'Rejected', 'rejected', 'p-bad', 'suggestions']])}
     ${isMod() ? '' : html`<section class="w-card w-pad" id="setup">
-      <div class="w-sec-head"><h3 class="w-h3">Setup checklist</h3><span class="w-badge ${issues ? 'warn' : 'ok'}">${issues ? issues + ' to fix' : 'All set'}</span></div>
-      ${rows.map(r => html`<div class="w-check">
+      <div class="w-sec-head"><h3 class="w-h3">Setup</h3><span class="w-badge ${issues ? 'warn' : 'ok'}">${issues ? issues + ' to fix' : 'All ' + rows.length + ' ready'}</span></div>
+      ${rows.filter(r => r.state !== 'ok').map(r => html`<div class="w-check">
         <div class="w-check-ic ${r.state}">${icon(sIc[r.state])}</div>
         <div><div class="w-check-label">${r.label}</div><div class="w-check-detail">${r.detail}</div></div>
-        ${r.state !== 'ok' && r.go ? html`<button class="w-btn small" data-act="goto" data-tab="${r.go}">Fix</button>` : ''}
+        ${r.go ? html`<button class="w-btn small" data-act="goto" data-tab="${r.go}">Fix</button>` : ''}
       </div>`)}
+      <details class="w-fold"><summary><b>${issues ? 'Everything else' : 'Show all'}</b><span class="w-hint">${rows.filter(r => r.state === 'ok').length} ready</span></summary>
+        ${rows.filter(r => r.state === 'ok').map(r => html`<div class="w-check"><div class="w-check-ic ok">${icon('check')}</div><div><div class="w-check-label">${r.label}</div><div class="w-check-detail">${r.detail}</div></div></div>`)}</details>
     </section>`}
-    <section class="w-card w-pad">
-      <div class="w-sec-head"><h3 class="w-h3">${isMod() ? 'Recent bug activity' : 'Recent activity'}</h3>
-        ${isMod() ? '' : html`<button class="w-btn small" data-act="goto" data-tab="log">View all</button>`}</div>
-      ${(() => { const rec = isMod() ? o.recent.filter(e => ['bug', 'ticket', 'moderation', 'admin'].includes(e.kind) && /bug/i.test(e.message)) : o.recent;
-        return rec.length ? rec.map(logRow) : html`<div class="w-empty">Nothing has happened yet.</div>`; })()}
-    </section>`;
+    ${isMod() ? '' : html`<section class="w-card w-pad">
+      <div class="w-sec-head"><h3 class="w-h3">Recent activity</h3><button class="w-btn small" data-act="goto" data-tab="log">View all</button></div>
+      ${o.recent.length ? o.recent.slice(0, 6).map(logRow) : html`<div class="w-empty">Nothing has happened yet.</div>`}
+    </section>`}`;
 }
 
 function previewHtml() {
@@ -1010,7 +1035,37 @@ function previewHtml() {
     <div class="w-dp-reacts"><span class="w-dp-btn pri">🐛 Report a bug</span><span class="w-dp-btn">💡 Suggest an idea</span></div>
   </div>`;
 }
-const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['staff', 'Reminders & digest']];
+const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['dups', 'Duplicates & AI'], ['staff', 'Reminders & digest']];
+// Settings → Bug bot → Duplicates & AI. The key is never sent back; only whether one is saved.
+function aiCard() {
+  const A = S.ai;
+  if (!A) return html`<section class="w-card w-pad"><div class="w-empty">Loading…</div></section>`;
+  const u = A.usage, cost = ((u.in_tokens * 1 + u.out_tokens * 5) / 1e6).toFixed(2), T = S.aiTest;
+  return html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">AI duplicate check</h3>
+      <span class="w-badge ${A.enabled ? 'ok' : 'todo'}">${A.enabled ? 'On' : A.key_set ? 'Off' : 'Needs a key'}</span></div>
+    <p class="w-hint" style="margin:0 0 12px">Claude reads each new report – text in any language, screenshots and frames from videos – and compares it with open and recently fixed bugs.
+      It only keeps a short English summary for matching; nothing is translated or posted. Costs about $0.002–0.01 per report on your Anthropic account.</p>
+    <div class="w-row"><div><div class="w-row-label">Anthropic API key</div><div class="w-row-desc">Create one at console.anthropic.com → API keys. ${A.key_set ? 'A key is saved – type a new one to replace it.' : ''}</div></div>
+      <div style="display:flex;gap:6px"><input class="w-input" type="password" id="ai-key" autocomplete="off" placeholder="${A.key_set ? '•••••••• saved' : 'sk-ant-…'}" style="max-width:220px">
+      <button class="w-btn" data-act="aiSave" data-f="key">Save key</button></div></div>
+    <div class="w-row"><div><div class="w-row-label">Use the AI</div><div class="w-row-desc">Checks every new bug report in the background.</div></div>
+      <button class="w-btn ${A.enabled ? '' : 'primary'}" data-act="aiSave" data-f="enabled" ${A.key_set ? '' : 'disabled'}>${A.enabled ? 'Turn off' : 'Turn on'}</button></div>
+    <div class="w-row"><div><div class="w-row-label">Close duplicates automatically ${A.auto_close ? html`<span class="w-badge ok">On</span>` : ''}</div><div class="w-row-desc">Only new reports nobody has handled yet. The player is told which bug it matches, and anyone can press “Not a duplicate” to reopen it. Below this, the bug is only marked for moderators.</div></div>
+      <div style="display:flex;gap:8px;align-items:center"><input class="w-input" type="number" id="ai-pct" min="60" max="100" value="${A.auto_percent}" style="width:72px" aria-label="Minimum certainty"><span class="w-hint">% sure</span>
+      <button class="w-btn ${A.auto_close ? '' : 'primary'}" data-act="aiSave" data-f="auto_close" ${A.enabled ? '' : 'disabled'}>${A.auto_close ? 'Turn off' : 'Turn on'}</button></div></div>
+    <div class="w-row"><div><div class="w-row-label">Monthly limit</div><div class="w-row-desc">The AI stops for the rest of the month after this many checks. The free check keeps working.</div></div>
+      <div style="display:flex;gap:6px;align-items:center"><input class="w-input" type="number" id="ai-limit" min="10" max="100000" value="${u.limit}" style="width:90px" aria-label="Monthly limit"><span class="w-hint">checks</span></div></div>
+    <div class="w-row"><div><div class="w-row-label">Model</div><div class="w-row-desc">Leave empty for ${A.default_model}.</div></div>
+      <div style="display:flex;gap:6px"><input class="w-input" id="ai-model" value="${A.model === A.default_model ? '' : A.model}" placeholder="${A.default_model}" style="max-width:200px">
+      <button class="w-btn" data-act="aiSave" data-f="numbers">Save</button></div></div>
+    <div class="w-mysum" style="margin-top:12px"><span>This month: <b>${u.calls}</b> of ${u.limit} checks · about <b>$${cost}</b></span><span><b>${A.checked}</b> bugs checked</span><span><b>${A.auto_closed}</b> closed automatically</span></div>
+    <div class="w-actions"><input class="w-input" type="number" id="ai-bug" placeholder="Bug #" style="width:90px" aria-label="Bug number">
+      <button class="w-btn" data-act="aiTest" ${A.key_set ? '' : 'disabled'}>Test on this bug</button>
+      <button class="w-btn" data-act="aiScan" ${A.enabled ? '' : 'disabled'}>Check open bugs now</button></div>
+    ${T ? html`<div class="w-ai" style="margin-top:10px">${T.duplicate_of ? html`Bug #${T.bug} looks like a duplicate of <b>#${T.duplicate_of}</b> ${T.dup_title} (${T.confidence}% sure)` : html`Bug #${T.bug}: no duplicate found`}
+      <span class="w-hint" style="display:block">${T.title} – ${T.reason}</span></div>` : ''}
+  </section>`;
+}
 function viewPanel() {
   const d = S.panelDraft, p = S.health.panel, sub = subOf(BUGBOT_SUBS);
   const head = html`<div class="w-pagehead"><h2>Bug bot</h2>
@@ -1019,6 +1074,7 @@ function viewPanel() {
   if (sub === 'suggestions') return html`${head}${fsec('suggestions')}${saveBar()}`;
   if (sub === 'website') return html`${head}${fsec('website')}${saveBar()}`;
   if (sub === 'staff') return html`${head}${fsec('reminders', 'digest')}${saveBar()}`;
+  if (sub === 'dups') return html`${head}${aiCard()}${fsec('duplicates')}${saveBar()}`;
   return html`${head}
     <div class="w-grid2">
       <section class="w-card w-pad">
@@ -1095,6 +1151,12 @@ function withSettings(view, names, label) {
 
 // Settings, grouped by feature – each page shows the groups that belong to it (admins only).
 const FSEC = {
+  duplicates: () => html`
+    <section class="w-card w-pad"><div class="w-group-title">Built-in duplicate check (free)</div>
+      <p class="w-hint" style="margin:0 0 8px">Compares words in every language (using the English text when a report was translated), titles, screenshots and video frames.</p>
+      ${selectRow('dup_mode', 'Duplicate check', 'Each new report is compared with the open bugs. Auto = clear duplicates are closed by themselves (the player is told which bug it matches, and moderators can reopen it). Flag = only marked for the moderators. Off = no check.', ['auto', 'flag', 'off'])}
+      ${numberRow('dup_auto_percent', 'Close automatically from', 'How similar a report must be to close it by itself. Lower matches are only marked for the moderators.', 50, 100, '% match')}
+    </section>`,
   bugReports: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Bug reports</div>
       ${toggleRow('bugs_enabled', 'Bug reports (🐛)', 'When off, players who press “Report a bug” are told that reports are closed.')}
@@ -1102,8 +1164,6 @@ const FSEC = {
       ${numberRow('report_cooldown_minutes', 'Cooldown between reports', 'How long a player must wait after submitting a bug before sending another. 0 = no limit.', 0, 1440, 'minutes')}
       ${toggleRow('delete_ticket_on_close', 'Delete tickets after submitting', 'Off = the finished ticket thread is archived and locked instead of deleted.')}
       ${toggleRow('ticket_details_required', 'Require area and title', 'Players must pick an area and write a short title before they can submit.')}
-      ${selectRow('dup_mode', 'Duplicate check', 'Each new report is compared with the open bugs. Auto = clear duplicates are closed by themselves (the player is told which bug it matches, and moderators can reopen it). Flag = only marked for the moderators. Off = no check.', ['auto', 'flag', 'off'])}
-      ${numberRow('dup_auto_percent', 'Close automatically from', 'How similar a report must be to close it by itself. Lower matches are only marked for the moderators.', 50, 100, '% match')}
       ${numberRow('mod_ping_hours', 'Tag moderators after', 'When nobody has reacted to a new bug for this long, the moderator role is tagged once. 0 = off.', 0, 72, 'hours')}
       ${textRow('game_version', 'Current game version', 'Filled in on new reports, and written on a bug as “fixed in” when it is marked fixed.', 'V5 · 1.33.9', 30)}
       <div class="w-row"><div><div class="w-row-label">Areas</div><div class="w-row-desc">The pick-list players see (one per line, max 25). Used for filters and insights.</div></div>
@@ -1401,7 +1461,7 @@ function bugList() {
   if (!B.items.length) return html`<div class="w-empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`;
   return html`${B.items.map(b => html`<div class="w-bugrow${B.selecting ? ' sel' : ''}" role="button" tabindex="0" data-act="${B.selecting ? 'bugPick' : 'bugOpen'}" data-id="${b.id}" data-sev="${b.severity || ''}"${B.selecting ? html` aria-pressed="${String(B.sel.includes(b.id))}"` : ''}>
     <b>${B.selecting ? (B.sel.includes(b.id) ? '☑' : '☐') : ''} #${b.id}</b>
-    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}${b.public ? html` · <span class="w-knowntag">📌 Known issue</span>` : ''}</div>
+    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? (b.auto_closed ? ' · 🤖 closed automatically as duplicate of #' : ' · duplicate of #') + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}${b.public ? html` · <span class="w-knowntag">📌 Known issue</span>` : ''}</div>
       ${dupHint(b) ? html`<div class="w-duphint">🔁 Looks like <b>#${b.dup_suggest}</b> ${b.dup_title ? '“' + b.dup_title.slice(0, 60) + '”' : ''} · ${b.dup_score}% match
         ${B.selecting ? '' : html`<button class="w-btn small" data-act="dupMerge" data-id="${b.id}" data-orig="${b.dup_suggest}">Merge into #${b.dup_suggest}</button>`}</div>` : ''}</div>
     ${bugBadge(b.status)}${B.selecting ? html`<span></span>` : quickBtns(b)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}`;
@@ -1496,57 +1556,72 @@ function trBox(kind, id) {
     ${r ? html`<div class="w-trout"><small>${r.same ? 'Already in ' + (TR_LANGS.find(l => l[0] === r.target) || ['', r.target])[1] + ' – nothing to translate.' : '🌐 Translated from ' + (r.source_name || r.source || '?')}</small>${r.same ? '' : r.text}</div>` : ''}`;
 }
 
+// The ticket's own questions – shown small and grey so the player's answers stand out.
+const TEMPLATE_Q = /^(what is the bug|do you know why it is happening|what is the correct way the feature should work|na czym polega błąd|czy wiesz, dlaczego się pojawia|jak ta funkcja powinna działać prawidłowo)\??:?$/i;
+function reportText(t) {
+  return html`<div class="w-report">${String(t || '').split('\n').map(line => TEMPLATE_Q.test(line.trim().replace(/[*#>]/g, '').trim()) ? html`<div class="w-q">${line.replace(/[*#>]/g, '').trim()}</div>` : line.trim() ? html`<div>${line}</div>` : html`<div class="w-gap"></div>`)}</div>`;
+}
+function bugActions(b) {
+  if (b.duplicate_of) return html`<div class="w-decide"><div class="w-decide-text">${b.auto_closed ? '🤖 Closed automatically' : 'Closed'} as a duplicate of <button class="w-linkbtn" data-act="bugOpen" data-id="${b.duplicate_of}">#${b.duplicate_of}</button></div>
+    <button class="w-btn" data-act="bugReopen">↩️ Not a duplicate – reopen</button></div>`;
+  const modOpen = ['new', 'investigating'].includes(b.status), adminOpen = ['passed', 'being_investigated'].includes(b.status);
+  const btns = modOpen ? [['passed', '✅ Pass to admins', 'primary']] : adminOpen && !isMod() ? [['being_investigated', '🔍 Being investigated', ''], ['fixed', '✔️ Mark fixed', 'primary']].filter(x => x[0] !== b.status) : [];
+  const rej = modOpen ? 'rejected' : adminOpen && !isMod() ? 'admin_rejected' : null;
+  if (!btns.length && !rej) return isMod() ? '' : html`<details class="w-more"><summary>Change status</summary><div class="w-inline" style="margin-top:8px">${STATUS_BTNS.filter(x => x[0] !== b.status).map(x => html`<button class="w-btn small" data-act="bugSet" data-s="${x[0]}">${x[1]}</button>`)}</div></details>`;
+  return html`<div class="w-decide">${btns.map(x => html`<button class="w-btn ${x[2]}" data-act="bugSet" data-s="${x[0]}">${x[1]}</button>`)}
+      ${rej ? html`<button class="w-btn" data-act="rejToggle" aria-expanded="${String(!!S.rejOpen)}">❌ Reject…</button>` : ''}</div>
+    ${rej && S.rejOpen ? html`<div class="w-rejbox"><label class="w-label" for="m-reason">Why? <span class="w-hint">– the player gets this in their DM</span></label>
+      ${reasonBox('m-reason', BUG_REASON_KEYS, b.reason)}
+      <div class="w-inline" style="margin-top:10px"><button class="w-btn danger" data-act="bugSet" data-s="${rej}">Reject #${b.id}</button><div class="w-spacer"></div>
+        <span class="w-hint">or duplicate of</span><input class="w-input" id="m-dup" inputmode="numeric" placeholder="#" aria-label="Original bug number" style="max-width:90px" value="${b.dup_suggest || ''}"><button class="w-btn small" data-act="bugDup">Close as duplicate</button></div></div>` : ''}`;
+}
 function bugModal() {
   const b = S.detail; if (!b) return '';
-  const replies = S.replies || [];
+  const replies = S.replies || [], closed = b.duplicate_of || ['rejected', 'admin_rejected'].includes(b.status);
+  const who = b.reporter || (b.source === 'web' ? (b.chief_name || 'a player') + ' (website)' : 'unknown');
   return html`<div class="w-modal" id="wmodal" data-act="modalBg"><div class="w-modal-card" role="dialog" aria-modal="true" aria-label="Bug #${b.id}">
-    <div class="w-modal-head"><h3>Bug #${b.id}</h3>${bugBadge(b.status)}${b.votes ? html`<span class="w-badge info" title="Players who picked “I have this too”">👥 ${b.votes} affected</span>` : ''}<button class="w-btn small" data-act="closeModal" id="m-close">Close</button></div>
-    <div class="w-sub" style="margin-bottom:10px">Reported by <b>${b.reporter || (b.source === 'web' ? (b.chief_name || 'a player') + ' (website)' : 'unknown')}</b> · ${full(b.created_at)}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}${b.announced ? ' · announced in patch notes' : ''}</div>
-    <div class="w-pre">${b.text}</div>
-    ${trBox('bugs', b.id)}
-    ${(b.chief_name || b.uid || b.contact) ? html`<div class="w-sub" style="margin-top:8px">In-game: <b>${b.chief_name || '–'}</b> · UID <b>${b.uid || '–'}</b>${b.contact ? ' · Contact: ' + b.contact : ''}${b.linked && b.linked.length ? ' · Discord: ' + b.linked.map(l => l.name).join(', ') : ''}</div>` : ''}
+    <div class="w-modal-head"><h3><span class="w-hint" style="font-size:15px">#${b.id}</span> ${b.summary}</h3><button class="w-btn small" data-act="closeModal" id="m-close">Close</button></div>
+    <div class="w-bugmeta">${bugBadge(b.status)}${b.public ? html`<span class="w-knowntag">📌 Known issue</span>` : ''}${b.votes ? html`<span class="w-badge info" title="Players who picked “I have this too”">👥 ${b.votes} affected</span>` : ''}
+      <span>${who} · ${ago(b.created_at)}</span>${b.area ? html`<span>${b.area}</span>` : ''}${b.version ? html`<span>${b.version}</span>` : ''}${b.severity ? html`<span>${SEV[b.severity]}</span>` : ''}
+      ${(b.chief_name || b.uid) ? html`<span>Chief <b>${b.chief_name || '–'}</b> · UID ${b.uid || '–'}</span>` : ''}</div>
+    ${reportText(b.text)}
     ${b.files && b.files.length ? html`<div class="w-files" id="m-files">${b.files.map(f => html`<button class="w-file" data-act="openFile" data-fid="${f.id}" data-kind="${f.kind}" title="${f.name}">${f.kind === 'video' ? icon('play') : html`<img alt="${f.name}" data-fid="${f.id}">`}</button>`)}</div>` : ''}
-    ${b.extra ? html`<div class="w-sub" style="margin-top:8px">Attachment links:</div><div class="w-pre">${b.extra}</div>` : ''}
-    <div class="w-inline" style="margin-top:10px">${b.mod_url ? html`<a class="w-btn small" href="${b.mod_url}" target="_blank" rel="noopener">Open in mod channel</a>` : ''}
-      ${b.admin_url ? html`<a class="w-btn small" href="${b.admin_url}" target="_blank" rel="noopener">Open in admin channel</a>` : ''}</div>
+    ${b.extra ? html`<div class="w-pre" style="margin-top:8px">${b.extra}</div>` : ''}
+    ${b.ai_summary ? html`<div class="w-ai">🤖 <b>${b.ai_title}</b> – ${b.ai_summary}</div>` : ''}
+    <div class="w-bugtools">${trBox('bugs', b.id)}${b.mod_url ? html`<a class="w-linkbtn" href="${b.mod_url}" target="_blank" rel="noopener">Mod channel ↗</a>` : ''}${b.admin_url ? html`<a class="w-linkbtn" href="${b.admin_url}" target="_blank" rel="noopener">Admin channel ↗</a>` : ''}</div>
 
-    ${b.duplicate_of || ['rejected', 'admin_rejected'].includes(b.status) ? '' : html`<label class="w-knownbar ${b.public ? 'on' : ''}"><span class="w-switch"><input type="checkbox" data-act="bugKnownModal" ${b.public ? 'checked' : ''}><span></span></span>
-      <span><b>📌 Known issue</b><span class="w-hint" style="display:block">${b.public ? 'Players see it on the website and the Known issues board, and can say “I have this too”.' : 'Turn on to show it on the website and the Known issues board (title, area and status only).'}</span></span></label>`}
-    <div class="w-sect"><span class="w-label">Details</span>
+    ${bugActions(b)}
+    ${similarBox(b)}
+    ${closed ? '' : html`<label class="w-knownbar ${b.public ? 'on' : ''}"><span class="w-switch"><input type="checkbox" data-act="bugKnownModal" ${b.public ? 'checked' : ''}><span></span></span>
+      <span><b>📌 Known issue</b><span class="w-hint" style="display:block">${b.public ? 'Players see it on the website and the Known issues board, and can say “I have this too”.' : 'Show it on the website and the Known issues board (title, area and status only).'}</span></span></label>`}
+
+    <details class="w-fold"><summary><b>Details & title</b><span class="w-hint">${[b.area || 'no area', b.severity ? SEV[b.severity] : 'no severity', b.version || 'no version', b.fixed_version ? 'fixed in ' + b.fixed_version : ''].filter(Boolean).join(' · ')}</span></summary>
       <div class="w-form2"><div class="w-field"><label class="w-label" for="m-area">Area</label><select class="w-select" id="m-area"><option value="">–</option>${areaList().map(a => html`<option ${b.area === a ? 'selected' : ''}>${a}</option>`)}</select></div>
         <div class="w-field"><label class="w-label" for="m-sev">Severity</label><select class="w-select" id="m-sev"><option value="">–</option>${['critical', 'major', 'minor'].map(a => html`<option value="${a}" ${b.severity === a ? 'selected' : ''}>${SEV[a]}</option>`)}</select></div>
         <div class="w-field"><label class="w-label" for="m-ver">Reported in version</label><input class="w-input" id="m-ver" maxlength="30" value="${b.version}"></div>
         <div class="w-field"><label class="w-label" for="m-fix">Fixed in version</label><input class="w-input" id="m-fix" maxlength="30" value="${b.fixed_version}" placeholder="set when marked fixed"></div></div>
-      <button class="w-btn" data-act="bugDetails">Save details</button></div>
+      <div class="w-actions" style="justify-content:flex-start"><button class="w-btn" data-act="bugDetails">Save details</button></div>
+      <label class="w-label" for="m-sum" style="margin-top:12px;display:block">Short title <span class="w-hint">– used in patch notes and lists</span></label>
+      <div class="w-inline"><input class="w-input" id="m-sum" maxlength="100" value="${b.summary}"><button class="w-btn" data-act="bugSummary">Save title</button></div></details>
 
-    <div class="w-sect"><label class="w-label" for="m-sum">Short title (used in patch notes and lists)</label>
-      <div class="w-inline"><input class="w-input" id="m-sum" maxlength="100" value="${b.summary}"><button class="w-btn" data-act="bugSummary">Save title</button></div></div>
-
-    <div class="w-sect"><span class="w-label">Change status</span>
-      ${similarBox(b)}
-      <div class="w-inline">${STATUS_BTNS.filter(s => s[0] !== b.status && (!isMod() || ['passed', 'rejected'].includes(s[0]))).map(s => html`<button class="w-btn small" data-act="bugSet" data-s="${s[0]}">${s[1]}</button>`)}</div>
-      <div class="w-hint" style="margin-top:6px">Updates the Discord messages and tells the reporter (if DMs are on).</div>
-      <label class="w-label" for="m-reason" style="display:block;margin-top:14px">Reason for the player <span class="w-hint">– sent when you reject or close as a duplicate</span></label>
-      ${reasonBox('m-reason', BUG_REASON_KEYS, b.reason)}
-      <div class="w-inline" style="margin-top:12px"><input class="w-input" id="m-dup" inputmode="numeric" placeholder="Duplicate of bug number, e.g. 41" aria-label="Original bug number" value="${b.dup_suggest && !b.duplicate_of ? b.dup_suggest : ''}"><button class="w-btn small" data-act="bugDup">Close as duplicate</button></div></div>
-
-    <div class="w-sect"><label class="w-label" for="m-reply">Message the reporter</label>
+    <details class="w-fold"><summary><b>Message the reporter</b><span class="w-hint">sent by DM</span></summary>
       <div class="w-inline" style="margin-bottom:8px"><select class="w-select" id="m-canned" data-act-change="canned" aria-label="Ready-made reply">
         <option value="">Ready-made reply…</option>${replies.map(r => html`<option value="${r.id}">${r.title}</option>`)}</select></div>
       <textarea class="w-textarea" id="m-reply" style="min-height:90px" maxlength="1500" placeholder="Write a message – it is sent to the reporter by DM. {bug} becomes the bug number."></textarea>
-      <div class="w-actions"><button class="w-btn primary" data-act="bugReply">${icon('send')} Send by DM</button></div></div>
+      <div class="w-actions"><button class="w-btn primary" data-act="bugReply">${icon('send')} Send by DM</button></div></details>
 
-    <div class="w-sect"><span class="w-label">History</span>
-      <div class="w-hist">${b.history.length ? b.history.map(h => html`<div><b>${ACTION_LABEL[h.action] || h.action}</b> · ${h.actor} · ${full(h.ts)}</div>`) : html`<div>No actions recorded yet.</div>`}</div></div>
+    <details class="w-fold"><summary><b>History</b><span class="w-hint">${b.history.length} ${b.history.length === 1 ? 'action' : 'actions'}</span></summary>
+      <div class="w-hist">${b.history.length ? b.history.map(h => html`<div><b>${ACTION_LABEL[h.action] || h.action}</b> · ${h.actor} · ${full(h.ts)}</div>`) : html`<div>No actions recorded yet.</div>`}</div></details>
 
-    ${isMod() ? '' : html`<div class="w-sect w-danger"><span class="w-label">Delete this bug</span>
-      <p class="w-hint" style="margin-bottom:8px">Removes the report, its screenshots and history for good – for test reports and spam. To close a real bug, use Reject instead.</p>
+    ${isMod() ? '' : html`<details class="w-fold w-danger"><summary><b>Delete this bug</b><span class="w-hint">for test reports and spam</span></summary>
+      <p class="w-hint" style="margin-bottom:8px">Removes the report, its screenshots and history for good. To close a real bug, use Reject instead.</p>
       <div class="w-inline"><label class="w-inline w-hint" style="gap:6px"><input type="checkbox" id="m-deldiscord" checked> Also delete its messages and info ticket in Discord</label>
-        <div class="w-spacer"></div><button class="w-btn danger" data-act="bugDelete">Delete bug #${b.id}</button></div></div>`}
+        <div class="w-spacer"></div><button class="w-btn danger" data-act="bugDelete">Delete bug #${b.id}</button></div></details>`}
   </div></div>`;
 }
 async function openBug(id) {
   if (!S.replies) { try { S.replies = isMod() ? [] : (await call('GET', '/api/replies')).items; } catch (e) { S.replies = []; } }
+  if (S.detail && S.detail.id !== id) S.rejOpen = false;
   S.detail = await call('GET', '/api/bugs/' + id); S.similar = null; showModal();
   if (!S.detail.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(S.detail.status)) (async () => {   // in the background
     try {
@@ -1576,6 +1651,7 @@ function similarBox(b) {
       <div class="w-simtext"><div><b>#${x.id}</b> ${x.summary} ${bugBadge(x.status)}</div><div class="w-hint">${x.reporter || 'Unknown'} · ${ago(x.created_at)}${x.area ? ' · ' + x.area : ''}</div>
         <div class="w-simsnip">${x.snippet}</div></div>
       <div class="w-simacts"><button class="w-btn small primary" data-act="dupMergeModal" data-orig="${x.id}">Duplicate of #${x.id}</button><button class="w-linkbtn" data-act="bugOpen" data-id="${x.id}">Open</button></div></div>`)}
+    ${b.ai_dup && b.ai_reason ? html`<div class="w-ai" style="margin-top:8px">🤖 AI, ${b.ai_conf}% sure it’s #${b.ai_dup}: ${b.ai_reason}</div>` : ''}
     <div class="w-hint">“Duplicate of” closes this report, tells the player it’s already known, and links it to the original – they get a message when the original is fixed.</div></div>`;
 }
 const fileUrls = {};
@@ -1598,7 +1674,7 @@ function showModal() {
   loadThumbs();
   const c = $('#m-close'); if (c) c.focus();
 }
-function closeModal() { S.detail = null; const m = $('#wmodal'); if (m) m.remove(); }
+function closeModal() { S.detail = null; S.rejOpen = false; const m = $('#wmodal'); if (m) m.remove(); }
 function refreshOverviewSoon() { setTimeout(() => { if (S.tab !== 'overview') call('GET', '/api/overview').then(o => { S.overview = o; refreshNavCount(); }).catch(() => {}); }, 300); }
 async function changeBug(body, okMsg, btn) {
   busy(btn, true, 'Working…');
@@ -2487,6 +2563,7 @@ const LOADERS = {
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
+  panel: async () => { S.ai = isMod() ? null : await call('GET', '/api/ai').catch(() => null); },
   insights: async () => { S.insights = await call('GET', '/api/insights'); },
   overview: async () => { if (isMod()) { const [i, m] = await Promise.all([call('GET', '/api/insights'), call('GET', '/api/mybugs')]); S.insights = i; S.mybugs = m; } },
   patch: async () => { const [pn, pu] = await Promise.all([call('GET', '/api/patchnotes'), isMod() ? null : call('GET', '/api/push').catch(() => null)]); S.patch = pn; S.push = pu; },
@@ -2804,6 +2881,16 @@ root.addEventListener('click', async e => {
     if (act === 'nav' || act === 'goto') { S.tab = el.dataset.tab; if (el.dataset.sub) { S.sub = S.sub || {}; S.sub[S.tab] = el.dataset.sub; } renderTab(); }
     else if (act === 'hub') { const h = HUBS.find(x => x[0] === el.dataset.hub); S.hubLast = S.hubLast || {}; const kids = hubKids(h);
       S.tab = kids.includes(S.hubLast[h[0]]) ? S.hubLast[h[0]] : kids[0]; renderTab(); }
+    else if (act === 'aiSave') { const f = el.dataset.f, b = {};
+      if (f === 'key') { b.key = document.getElementById('ai-key').value.trim(); if (!b.key) return toast('Paste the key first.', 'err'); b.enabled = true; }
+      else if (f === 'enabled') b.enabled = !S.ai.enabled;
+      else if (f === 'auto_close') { b.auto_close = !S.ai.auto_close; b.auto_percent = +document.getElementById('ai-pct').value; }
+      else { b.model = document.getElementById('ai-model').value.trim(); b.limit = +document.getElementById('ai-limit').value; b.auto_percent = +document.getElementById('ai-pct').value; }
+      try { S.ai = await call('PUT', '/api/ai', b); toast('Saved'); renderMain(); } catch (e) { toast(e.message, 'err'); } }
+    else if (act === 'aiTest') { const id = +document.getElementById('ai-bug').value; if (!id) return toast('Type a bug number.', 'err'); el.disabled = true;
+      try { const r = await call('POST', '/api/ai/test', { bug_id: id }); S.aiTest = Object.assign(r, { bug: id }); S.ai = r.info; renderMain(); } catch (e) { toast(e.message, 'err'); el.disabled = false; } }
+    else if (act === 'aiScan') { el.disabled = true;
+      try { const r = await call('POST', '/api/ai/scan', {}); S.ai = r.info; toast(r.checked ? r.checked + ' bugs checked' : 'Nothing left to check'); renderMain(); } catch (e) { toast(e.message, 'err'); el.disabled = false; } }
     else if (act === 'sub') { S.sub = S.sub || {}; S.sub[S.tab] = el.dataset.v; renderMain(); updateSaveBar(); }
     else if (act === 'sheet') openSheet();
     else if (act === 'caseSearch') { S.cases.q = $('#cs-q').value.trim(); loadTab('warnings'); }
@@ -3103,7 +3190,7 @@ root.addEventListener('click', async e => {
       } catch (err) { busy(el, false); delete el.dataset.armed; toast(err.message, 'err'); }
     }
     else if (act === 'bugQuick' && ['rejected', 'admin_rejected'].includes(el.dataset.s)) {
-      e.stopPropagation(); await openBug(parseInt(el.dataset.id, 10));          // closing needs a reason: open the bug
+      e.stopPropagation(); S.rejOpen = true; await openBug(parseInt(el.dataset.id, 10));          // closing needs a reason: open the bug
       const t = $('#m-reason'); if (t) { t.scrollIntoView({ block: 'center' }); t.focus(); }
       toast('Write why you close it – the player sees the reason.');
     }
@@ -3158,8 +3245,11 @@ root.addEventListener('click', async e => {
       } catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'bugSummary') changeBug({ summary: $('#m-sum').value }, 'Title saved.', el);
+    else if (act === 'rejToggle') { S.rejOpen = !S.rejOpen; showModal(); if (S.rejOpen) $('#m-reason').focus(); }
+    else if (act === 'bugReopen') changeBug({ reopen: true }, 'Reopened – it is open again for the moderators.', el);
     else if (act === 'bugSet') {
       const closing = ['rejected', 'admin_rejected'].includes(el.dataset.s), reason = closing ? $('#m-reason').value.trim() : '';
+      if (closing && !$('#m-reason')) { S.rejOpen = true; showModal(); $('#m-reason').focus(); return; }
       if (closing && !reason && !el.dataset.armed) { el.dataset.armed = '1'; const t = el.textContent; el.textContent = 'No reason – click again';
         $('#m-reason').focus(); setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = t; } }, 4000); return; }
       changeBug(Object.assign({ status: el.dataset.s }, reason ? { reason } : {}), closing && reason ? 'Closed – the reason was sent to the player.' : 'Status changed.', el);
@@ -3612,6 +3702,11 @@ function makeMock() {
       if (p === '/api/access/unlock') { C.locked = false; }
       return JSON.parse(JSON.stringify(A));
     }
+    if (p.startsWith('/api/ai')) { const A = (window.__mockAi = window.__mockAi || { key_set: false, enabled: false, model: 'claude-haiku-5-5', default_model: 'claude-haiku-5-5', auto_close: false, auto_percent: 90, usage: { month: '2026-11', calls: 37, in_tokens: 210000, out_tokens: 9000, limit: 2000 }, checked: 37, auto_closed: 5 });
+      if (p === '/api/ai' && method === 'PUT') { if (body.key) A.key_set = true; ['enabled', 'auto_close', 'auto_percent', 'model'].forEach(k => { if (k in body && body[k] !== '') A[k] = body[k]; }); if (body.limit) A.usage.limit = body.limit; }
+      if (p === '/api/ai/test') return { title: 'Game freezes on the alliance screen', summary: '', duplicate_of: 12, confidence: 92, reason: 'Same freeze, same screen, same screenshot.', dup_title: 'Alliance screen freezes', info: A };
+      if (p === '/api/ai/scan') return { checked: 3, info: A };
+      return JSON.parse(JSON.stringify(A)); }
     if (p === '/api/mybugs') { const mine = bugs.slice(0, 7); const st = {}; mine.forEach(b => { st[b.status] = (st[b.status] || 0) + 1; });
       return { total: mine.length, week: 4, status_now: st, actions: { passed: 4, rejected: 2, replied: 1 },
         recent: mine.map((b, i) => Object.assign(briefBug(b), { status: b.status, created_at: b.created_at, my_action: ['passed', 'rejected', 'passed', 'replied', 'passed', 'rejected', 'passed'][i], my_ts: Math.floor(Date.now() / 1000) - i * 5400 })) }; }
