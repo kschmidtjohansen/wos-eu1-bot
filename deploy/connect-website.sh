@@ -183,6 +183,8 @@ if [[ "$WEB" == nginx ]]; then
     echo "location /public/ { proxy_pass http://127.0.0.1:$LOCAL_PORT; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header CF-Connecting-IP \"\"; client_max_body_size 26m; proxy_read_timeout 60s; }"
     echo "location /api/    { proxy_pass http://127.0.0.1:$LOCAL_PORT; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header CF-Connecting-IP \"\"; client_max_body_size 5m; }"
     echo "location = /bugs  { return 301 /bugs/; }"
+    echo "location = / { return 302 /bugs/; }"
+    echo "location ~ ^/(index|codes|known-issues|report|changelog|my|appeal)\\.html\$ { return 301 /bugs/\$1.html; }"
     echo "location ^~ /bugs/ { alias $WWW/bugs/; index index.html; }"
     echo "location = /staff { return 301 /staff/; }"
     if ((STAFF_AUTH)); then
@@ -228,6 +230,8 @@ elif [[ "$WEB" == apache ]]; then
     echo "RequestHeader unset CF-Connecting-IP"
     echo "<Location /public/>"; echo "  LimitRequestBody 27262976"; echo "</Location>"
     echo "RedirectMatch 301 ^/(bugs|staff)\$ /\$1/"
+    echo "RedirectMatch 302 ^/\$ /bugs/"
+    echo "RedirectMatch 301 ^/(index|codes|known-issues|report|changelog|my|appeal)\\.html\$ /bugs/\$1.html"
     echo "Alias /bugs/ $WWW/bugs/"
     echo "Alias /staff/ $WWW/staff/"
     echo "<Directory $WWW>"; echo "  Require all granted"; echo "  DirectoryIndex index.html"; echo "</Directory>"

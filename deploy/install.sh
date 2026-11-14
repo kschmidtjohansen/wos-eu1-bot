@@ -173,6 +173,25 @@ if [[ -f /etc/nginx/snippets/wos-bot.conf ]] && ! grep -q 'no-cache' /etc/nginx/
   sed -i 's|location ^~ /staff/ { alias \([^;]*\); index index.html;|location ^~ /staff/ { alias \1; index index.html; add_header Cache-Control "no-cache";|' /etc/nginx/snippets/wos-bot.conf
   if nginx -t >/dev/null 2>&1; then systemctl reload nginx; else cp -p /tmp/wos-bot.conf.bak /etc/nginx/snippets/wos-bot.conf; fi
 fi
+# The server's own address (http://IP/ and http://IP/index.html …) opens the players' website instead of "404 Not Found"
+if [[ -f /etc/nginx/snippets/wos-bot.conf ]] && ! grep -q 'return 302 /bugs/' /etc/nginx/snippets/wos-bot.conf; then
+  cp -p /etc/nginx/snippets/wos-bot.conf /tmp/wos-bot.conf.bak
+  {
+    echo 'location = / { return 302 /bugs/; }'
+    echo 'location ~ ^/(index|codes|known-issues|report|changelog|my|appeal)\.html$ { return 301 /bugs/$1.html; }'
+  } >> /etc/nginx/snippets/wos-bot.conf
+  if nginx -t >/dev/null 2>&1; then systemctl reload nginx; ok "The server address now opens the players' website (/bugs/)"
+  else cp -p /tmp/wos-bot.conf.bak /etc/nginx/snippets/wos-bot.conf; systemctl reload nginx 2>/dev/null || true
+    warn "Couldn't send the server address to the website – your site already has its own front page, left as it was"; fi
+fi
+if [[ -f /etc/apache2/conf-available/wos-bot.conf ]] && ! grep -q 'RedirectMatch 302' /etc/apache2/conf-available/wos-bot.conf; then
+  cp -p /etc/apache2/conf-available/wos-bot.conf /tmp/wos-bot-apache.bak
+  {
+    echo 'RedirectMatch 302 ^/$ /bugs/'
+    echo 'RedirectMatch 301 ^/(index|codes|known-issues|report|changelog|my|appeal)\.html$ /bugs/$1.html'
+  } >> /etc/apache2/conf-available/wos-bot.conf
+  if apache2ctl configtest >/dev/null 2>&1; then systemctl reload apache2; else cp -p /tmp/wos-bot-apache.bak /etc/apache2/conf-available/wos-bot.conf; fi
+fi
 if [[ -f /etc/wos-staff.htpasswd ]]; then          # the old extra username + password in front of /staff/ – removed
   for f in /etc/nginx/snippets/wos-bot.conf /etc/apache2/conf-available/wos-bot.conf; do
     [[ -f $f ]] || continue
