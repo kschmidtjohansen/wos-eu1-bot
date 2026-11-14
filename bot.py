@@ -5530,9 +5530,9 @@ async def file_msg_report(reporter, message: discord.Message, reason: str) -> tu
 
 async def tell_appeal(user_id: int):
     """After a timeout / before a ban: tell the player where they can appeal (if the website address is set)."""
-    url = site_url()
+    url = store.site_base()
     if url and cfg("appeals_enabled"):
-        await dm(user_id, T("dm.appeal_hint", lang_for(user_id), url=url.rstrip("/") + "/appeal.html"))
+        await dm(user_id, T("dm.appeal_hint", lang_for(user_id), url=url + "appeal.html"))
 
 
 async def timeout_member(member, minutes: int, reason: Optional[str], mod_id, mod_name: str) -> int:

@@ -2334,10 +2334,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             return None
 
     def appeal_page(name: str = "appeal.html") -> str:
-        base = (store.cfg("giftcodes_site_url") or "").strip()
-        if base.lower().startswith(("http://", "https://")):
-            return base.rstrip("/") + "/" + name
-        return "/bugs/" + name
+        return (store.site_base() or "/") + name
 
     def player_login(prefix: str):
         c = oauth_conf()

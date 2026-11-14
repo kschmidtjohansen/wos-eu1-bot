@@ -1319,7 +1319,7 @@ const FSEC = {
       ${toggleRow('giftcodes_list', 'Keep an “Active gift codes” list in the channel', 'One list in the gift-codes channel shows every active code in code format. Codes join it when their “New” time is over, and leave it when they expire.')}
       ${numberRow('giftcodes_new_hours', 'New codes stay on their own for', 'New codes get their own announcement in Discord and the “New” section on the website for this long. Then they move into the list with the other codes.', 1, 168, 'hours')}
       ${toggleRow('giftcodes_delete_expired', 'Delete expired codes here too', 'Expired codes always disappear from Discord and the website. On = they are also deleted from this dashboard. Off = they stay under “Expired” here as history.')}
-      ${textRow('giftcodes_site_url', 'Website gift-codes page', 'Optional. The address of the Gift codes page on your website – Discord gets an “All codes on the website” button.', 'http://…/bugs/codes.html', 300)}
+      ${textRow('giftcodes_site_url', 'Website gift-codes page', 'Optional. The address of the Gift codes page on your website – Discord gets an “All codes on the website” button.', 'http://…/codes.html', 300)}
     </section>`,
   backups: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Screenshots & backups</div>
@@ -3621,8 +3621,9 @@ root.addEventListener('click', async e => {
       catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'devLinkNew') { busy(el, true, '…');
       try { const r = await call('POST', '/api/devpage/link'); S.devpage = { active: true, created: r.created };
-        const base = (S.settings.giftcodes_site_url || '').trim() || new URL('../bugs/', location.href).href;
-        S.devLink = base.replace(/\/?$/, '/') + 'dev.html#k=' + r.token; renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+        let base = (S.settings.giftcodes_site_url || '').trim().split(/[?#]/)[0];
+        base = /^https?:\/\//i.test(base) ? base.replace(/\/[^/]+\.html?$/i, '').replace(/\/?$/, '/') : new URL('../', location.href).href;
+        S.devLink = base + 'dev.html#k=' + r.token; renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'devLinkOff') { busy(el, true, '…');
       try { S.devpage = await call('DELETE', '/api/devpage/link'); S.devLink = null; toast('The developers’ page is off – the old link no longer works.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'devCopy') { const i = document.getElementById('dev-link'); try { await navigator.clipboard.writeText(i.value); toast('Link copied.'); } catch (e) { i.select(); toast('Press Ctrl+C to copy.'); } }

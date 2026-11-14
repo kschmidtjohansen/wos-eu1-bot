@@ -2697,6 +2697,17 @@ def T(key: str, lang: Optional[str] = None, **kw) -> str:
     return key
 
 
+def site_base() -> Optional[str]:
+    """The website's folder address, from the gift-codes page setting (http://IP/codes.html → http://IP/). None if not set."""
+    u = (cfg("giftcodes_site_url") or "").strip()
+    if not u.lower().startswith(("http://", "https://")):
+        return None
+    u = u.split("#")[0].split("?")[0]
+    if re.search(r"/[^/]+\.html?$", u):
+        u = u.rsplit("/", 1)[0]
+    return u.rstrip("/") + "/"
+
+
 def site_texts(lang: str) -> dict:
     """The website's texts in one language, without the "web." prefix: the admins' version, the built-in one, then the
     machine translation. Texts that have none are left out – the page falls back to its own English."""
