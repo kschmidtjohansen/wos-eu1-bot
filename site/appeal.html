@@ -1,0 +1,107 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Appeal – WOS EU1</title><meta name="theme-color" content="#060c17"><meta name="robots" content="noindex">
+<meta name="description" content="Ask the WOS EU1 team to look at a timeout or ban again.">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<style>
+.ap{max-width:680px}
+.ap .card + .card{margin-top:14px}
+.what{display:flex;gap:14px;align-items:flex-start}
+.what .ic{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none;background:rgba(255,107,129,.12);color:var(--bad);font-size:20px}
+.what p{margin:2px 0 0;color:var(--muted)}
+.what .why{color:var(--text);overflow-wrap:anywhere}
+.state{display:inline-block;font-size:13px;font-weight:700;padding:4px 12px;border-radius:999px;margin-bottom:10px}
+.state.open{color:var(--warn);background:rgba(255,193,94,.12)}
+.state.accepted{color:var(--ok);background:rgba(91,224,168,.12)}
+.state.declined{color:var(--muted);background:var(--glass-2)}
+.said{margin:10px 0 0;padding:12px 14px;border-radius:14px;background:rgba(4,10,20,.4);border:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:18px;font-size:14px;color:var(--muted)}
+.foot button{border:0;background:none;color:var(--ice);font:inherit;cursor:pointer;padding:0}
+.rules{margin:12px 0 0;padding-left:20px;color:var(--muted);display:grid;gap:6px}
+</style></head><body>
+<main id="main" class="ap">
+  <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
+  <div id="box" aria-live="polite"><div class="skel"></div><div class="skel"></div></div>
+</main>
+<script src="config.js"></script><script src="app.js"></script>
+<script>
+const S = {
+ en: { h1: 'Appeal', lead: 'Timed out or banned and think it was a mistake? Tell the team your side. A person reads every appeal.',
+  loginH: 'First, show us who you are', loginT: 'Log in with the Discord account that was timed out or banned. We only see your name – nothing is posted for you.',
+  login: 'Log in with Discord', off: 'Appeals are closed right now.', noLogin: 'Appeals aren’t set up on this server yet. Ask a moderator on Discord.',
+  hi: 'Logged in as', out: 'Log out', none: 'You’re in the clear', noneT: 'This account isn’t timed out or banned right now, so there is nothing to appeal.',
+  ban: 'You are banned from the server', timeout: 'You are timed out on the server', until: 'until', why: 'Reason given:', noWhy: 'No reason was recorded.',
+  label: 'Your appeal', ph: 'What happened, and why should the team look at it again? Stick to what happened – no need to apologise three times.',
+  r1: 'You can send one appeal for this timeout or ban, so take a minute.', r2: 'A moderator or admin decides. You’ll get a Discord message, and the answer shows here too.',
+  send: 'Send appeal', sending: 'Sending…', len: 'Write at least 20 characters.',
+  open: 'Waiting for the team', accepted: 'Accepted', declined: 'Declined', sent: 'You sent this appeal', youSaid: 'What you wrote',
+  openT: 'The team has your appeal. There’s nothing more to do – check back here or wait for a Discord message.',
+  acceptedBan: 'Your ban was removed. You can join the server again.', acceptedTimeout: 'Your timeout was removed.',
+  declinedT: 'The team read your appeal and decided to keep it as it is.', note: 'Note from the team:', err: 'Could not load this page. Try again in a moment.' },
+ pl: { h1: 'Odwołanie', lead: 'Masz wyciszenie lub bana i uważasz, że to pomyłka? Opowiedz zespołowi swoją wersję. Każde odwołanie czyta człowiek.',
+  loginH: 'Najpierw pokaż, kim jesteś', loginT: 'Zaloguj się kontem Discord, które zostało wyciszone lub zbanowane. Widzimy tylko Twoją nazwę – nic nie jest publikowane w Twoim imieniu.',
+  login: 'Zaloguj się przez Discord', off: 'Odwołania są teraz wyłączone.', noLogin: 'Odwołania nie są jeszcze skonfigurowane na tym serwerze. Zapytaj moderatora na Discordzie.',
+  hi: 'Zalogowano jako', out: 'Wyloguj', none: 'Wszystko w porządku', noneT: 'To konto nie ma teraz wyciszenia ani bana, więc nie ma od czego się odwoływać.',
+  ban: 'Masz bana na serwerze', timeout: 'Masz wyciszenie na serwerze', until: 'do', why: 'Podany powód:', noWhy: 'Nie zapisano powodu.',
+  label: 'Twoje odwołanie', ph: 'Co się stało i dlaczego zespół powinien spojrzeć na to jeszcze raz? Trzymaj się faktów.',
+  r1: 'Możesz wysłać jedno odwołanie od tego wyciszenia lub bana, więc poświęć chwilę.', r2: 'Decyduje moderator lub administrator. Dostaniesz wiadomość na Discordzie, a odpowiedź pojawi się też tutaj.',
+  send: 'Wyślij odwołanie', sending: 'Wysyłanie…', len: 'Napisz co najmniej 20 znaków.',
+  open: 'Czeka na zespół', accepted: 'Przyjęte', declined: 'Odrzucone', sent: 'Wysłano', youSaid: 'Co napisałeś',
+  openT: 'Zespół ma Twoje odwołanie. Nie musisz nic więcej robić – zajrzyj tu później lub poczekaj na wiadomość na Discordzie.',
+  acceptedBan: 'Twój ban został zdjęty. Możesz ponownie dołączyć do serwera.', acceptedTimeout: 'Twoje wyciszenie zostało zdjęte.',
+  declinedT: 'Zespół przeczytał Twoje odwołanie i postanowił nic nie zmieniać.', note: 'Notatka od zespołu:', err: 'Nie udało się wczytać strony. Spróbuj za chwilę.' } };
+let me = null, error = null, busy = false, flash = '';
+const $ = id => document.getElementById(id), el = (...a) => WOS.el(...a), t = k => WOS.t(k);
+const base = ((window.WOS_CONFIG || {}).API_BASE || '').replace(/\/+$/, '');
+const when = ts => new Date(ts * 1000).toLocaleString(WOS.lang === 'pl' ? 'pl-PL' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+function foot() {
+  const b = el('button', { type: 'button' }, t('out'));
+  b.onclick = async () => { try { await WOS.api('/public/appeal/logout', { method: 'POST' }); } catch (e) { /* ignore */ } me = { logged_in: false, enabled: true, login: true }; draw(); };
+  return el('div', { class: 'foot' }, el('span', {}, t('hi') + ' ', el('b', {}, me.name)), b);
+}
+function caseCard(c) {
+  return el('div', { class: 'card' }, el('div', { class: 'what' }, el('span', { class: 'ic', 'aria-hidden': 'true' }, c.kind === 'ban' ? '⛔' : '🔇'),
+    el('div', {}, el('h3', {}, t(c.kind) + (c.until ? ' ' + t('until') + ' ' + when(c.until) : '')),
+      el('p', {}, c.reason ? [t('why') + ' ', el('span', { class: 'why' }, c.reason)] : t('noWhy')))));
+}
+function appealCard(a) {
+  const text = a.status === 'open' ? t('openT') : a.status === 'accepted' ? t(a.kind === 'ban' ? 'acceptedBan' : 'acceptedTimeout') : t('declinedT');
+  return el('div', { class: 'card' }, el('span', { class: 'state ' + a.status }, t(a.status)), el('p', { style: 'margin:0' }, text),
+    ...(a.note ? [el('p', { style: 'margin:10px 0 0' }, el('b', {}, t('note') + ' '), a.note)] : []),
+    el('p', { class: 'muted', style: 'margin:14px 0 0;font-size:14px' }, t('youSaid') + ' · ' + when(a.ts)), el('div', { class: 'said' }, a.text));
+}
+function draw() {
+  const box = $('box'); box.replaceChildren();
+  if (error) return box.append(el('div', { class: 'card empty' }, t('err')));
+  if (!me) return;
+  if (!me.enabled) return box.append(el('div', { class: 'card empty' }, t('off')));
+  if (!me.logged_in) {
+    if (!me.login) return box.append(el('div', { class: 'card empty' }, t('noLogin')));
+    return box.append(el('div', { class: 'card' }, el('h3', {}, t('loginH')), el('p', { class: 'muted', style: 'margin:4px 0 16px' }, t('loginT')),
+      el('a', { class: 'btn pri', href: base + '/api/auth/appeal' }, t('login'))));
+  }
+  if (me.case) box.append(caseCard(me.case));
+  if (me.appeal) box.append(appealCard(me.appeal));
+  else if (me.case) {
+    const ta = el('textarea', { id: 'txt', maxlength: '1500', placeholder: t('ph'), 'aria-describedby': 'cnt' }), cnt = el('span', { id: 'cnt' }, '0 / 1500');
+    const msg = el('div', { class: 'msg err', role: 'alert', hidden: '' }), btn = el('button', { class: 'btn pri', type: 'submit' }, t('send'));
+    ta.oninput = () => { cnt.textContent = ta.value.length + ' / 1500'; };
+    const form = el('form', { class: 'card' }, el('label', { for: 'txt', style: 'margin-top:0' }, t('label')), ta, el('div', { class: 'hint' }, el('span', {}, ''), cnt),
+      el('ul', { class: 'rules' }, el('li', {}, t('r1')), el('li', {}, t('r2'))), msg, el('div', { class: 'btns', style: 'margin-top:16px' }, btn));
+    form.onsubmit = async e => {
+      e.preventDefault(); msg.hidden = true;
+      if (ta.value.trim().length < 20) { msg.textContent = t('len'); msg.hidden = false; ta.focus(); return; }
+      btn.disabled = true; btn.textContent = t('sending');
+      try { me = await WOS.api('/public/appeal', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'wos' }, body: JSON.stringify({ text: ta.value.trim() }) }); draw(); }
+      catch (err) { msg.textContent = err.message; msg.hidden = false; btn.disabled = false; btn.textContent = t('send'); }
+    };
+    box.append(form);
+  } else box.append(el('div', { class: 'card' }, el('h3', {}, t('none')), el('p', { class: 'muted', style: 'margin:4px 0 0' }, t('noneT'))));
+  box.append(foot());
+}
+WOS.init(S).then(async () => {
+  try { me = await WOS.api('/public/appeal/me', { credentials: 'same-origin' }); } catch (e) { error = true; }
+  WOS.onLang.push(draw); draw();
+});
+</script></body></html>

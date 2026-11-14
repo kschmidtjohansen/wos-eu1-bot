@@ -54,12 +54,13 @@ CHANNEL_NEEDS = {
     "backup_channel_id": ("Backup channel", _BASE + ["attach_files"]),
     "digest_channel_id": ("Weekly digest channel", _BASE),
     "devlist_channel_id": ("Developers' list channel", _BASE + ["attach_files"]),
+    "alerts_channel_id": ("Staff alerts channel", _BASE + ["manage_messages"]),
     "giftcodes_channel_id": ("Gift codes channel", _BASE + ["read_message_history"]),
     "board_channel_id": ("Known issues board channel", _BASE + ["read_message_history"]),
     "log_channel_id": ("Bot log channel", list(_BASE)),
     "invites_channel_id": ("Invite log channel", list(_BASE)),
 }
-OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id", "devlist_channel_id",
+OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id", "devlist_channel_id", "alerts_channel_id",
                      "giftcodes_channel_id", "board_channel_id", "log_channel_id", "invites_channel_id")
 # accepted suggestions are only posted here; moderators decide in the mod channel
 
@@ -121,11 +122,13 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             print(f"[dashboard api] {request.method} {request.path} failed: {exc!r}")
             return web.json_response({"error": "Something went wrong in the bot. Check its console."}, status=500)
 
-    AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console"}
+    AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console", "/api/auth/appeal"}
     # Moderators get the bug dashboard only: read bugs and stats, handle bugs. Nothing that changes the bot.
     MOD_READ = [r"/api/overview", r"/api/health", r"/api/channels", r"/api/settings", r"/api/bot", r"/api/status", r"/api/insights",
-                r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles"]
-    MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/translate")]
+                r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles",
+                r"/api/queue", r"/api/reports", r"/api/appeals"]
+    MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/translate"),
+                 ("POST", r"/api/reports/\d+"), ("POST", r"/api/appeals/\d+"), ("POST", r"/api/raid"), ("POST", r"/api/spikes")]
     SECRET_SETTING = re.compile(r"(header|secret|token|key|webhook|url)", re.I)
     DEFAULT_STAFF_ROLES = {"admin": ["Admin", "Boss", "Developer"], "mod": ["Senior Moderator", "Moderator"]}
 
@@ -262,7 +265,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             optional = key in OPTIONAL_CHANNELS
             enabled = {"welcome_channel_id": bool(store.cfg("welcome_enabled")),
                        "patchnotes_channel_id": bool(cid), "backup_channel_id": bool(cid),
-                       "digest_channel_id": bool(cid), "devlist_channel_id": bool(cid)}.get(key, True)
+                       "digest_channel_id": bool(cid), "devlist_channel_id": bool(cid), "alerts_channel_id": bool(cid)}.get(key, True)
             chans.append({"key": key, "label": label, "optional": optional,
                           "enabled": enabled,
                           "configured": bool(cid), "found": ch is not None,
@@ -405,7 +408,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
              "fixed_version": r["fixed_version"] or "",
              "duplicates": [d["id"] for d in store.duplicates_of(r["id"])], "votes": store.vote_count(r["id"]),
              "reason": r["reject_reason"] or "", "dup_suggest": r["dup_suggest"], "dup_score": r["dup_score"],
-             "auto_closed": bool(r["auto_closed"])}
+             "auto_closed": bool(r["auto_closed"]),
+             "dev": {"state": r["dev_state"] or "", "note": r["dev_note"] or "", "version": r["dev_version"] or "", "ts": r["dev_ts"]}}
         if r["dup_suggest"]:
             o = store.get_bug(r["dup_suggest"])
             d["dup_title"] = store.bug_summary(o) if o else ""
@@ -629,6 +633,13 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             async with s.get(f"{DISCORD_API}/users/@me", headers={"Authorization": "Bearer " + tok["access_token"]}) as r:
                 user = await r.json(content_type=None)
         uid = int(user["id"])
+        if state.startswith("a."):                          # a player logging in to send an appeal – never a dashboard session
+            name = (user.get("global_name") or user.get("username") or str(uid))[:60]
+            resp = web.HTTPFound(appeal_page())
+            resp.set_cookie(APPEAL_COOKIE, appeal_sign(uid, name, int(time.time()) + 3600), max_age=3600, httponly=True,
+                            samesite="Lax", path="/", secure=c["redirect"].startswith("https://"))
+            resp.del_cookie("wos_state", path="/api/auth/")
+            raise resp
         role = await staff_role(uid)
         if role is None:
             store.log_event("system", f"Dashboard login refused for {user.get('global_name') or user.get('username')} (not staff)", uid,
@@ -1714,6 +1725,108 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(502, f"Discord refused: {exc.text or exc}")
         return web.json_response({"ok": True, "channel": ch.name})
 
+    # ------------------------------------------------ developer page (admin side)
+    @routes.get("/api/devpage")
+    async def devpage_info(request):
+        created = store.get_raw("devpage_created")
+        return web.json_response({"active": bool(store.get_raw("devpage_hash")), "created": int(created) if created else None})
+
+    @routes.post("/api/devpage/link")
+    async def devpage_link(request):
+        """Makes a new link. The secret part is shown this once and never stored readable; an older link stops working."""
+        token = store.dev_link_new()
+        store.log_event("settings", f"{who(request)} made a new link to the developers' page (older links stop working)", who_id(request), who(request))
+        return web.json_response({"token": token, "active": True, "created": int(store.get_raw("devpage_created"))})
+
+    @routes.delete("/api/devpage/link")
+    async def devpage_off(request):
+        store.dev_link_off()
+        store.log_event("settings", f"{who(request)} switched off the developers' page", who_id(request), who(request))
+        return web.json_response({"active": False, "created": None})
+
+    # ------------------------------------------------ staff queue: reported messages, appeals, raid mode, spikes
+    def report_dict(r):
+        cases_ = store.cases_for(r["target_id"], 8)
+        return {"id": r["id"], "ts": r["ts"], "status": r["status"], "content": r["content"] or "", "channel": r["channel_name"] or "",
+                "url": f"https://discord.com/channels/{guild_id}/{r['channel_id']}/{r['message_id']}",
+                "target_id": str(r["target_id"]), "target": person(r["target_id"], r["target_name"]) or r["target_name"] or "?",
+                "on_server": get_guild().get_member(r["target_id"]) is not None,
+                "reporters": [{"name": person(int(x["id"]), x["name"]) or x["name"], "reason": x["reason"], "ts": x["ts"]} for x in json.loads(r["reporters"])],
+                "attachments": json.loads(r["attachments"]), "context": json.loads(r["context"]),
+                "warnings": store.active_warnings(r["target_id"]), "cases": [case_dict(c) for c in cases_],
+                "action": r["action"] or "", "handled_by": r["handled_name"] or "", "handled_ts": r["handled_ts"]}
+
+    def appeal_dict(a):
+        return {"id": a["id"], "ts": a["ts"], "status": a["status"], "kind": a["kind"], "text": a["text"],
+                "user_id": str(a["user_id"]), "user": person(a["user_id"], a["user_name"]) or a["user_name"] or "?",
+                "case_reason": a["case_reason"] or "", "case_ts": a["case_ts"], "note": a["note"] or "",
+                "handled_by": a["handled_name"] or "", "handled_ts": a["handled_ts"],
+                "warnings": store.active_warnings(a["user_id"]), "cases": [case_dict(c) for c in store.cases_for(a["user_id"], 8)]}
+
+    def raid_dict():
+        st = store.raid_state()
+        return {"active": st["active"], "since": st["since"], "by": st["by"] or "", "ended": st["ended"], "joined": len(st["joins"]),
+                "gate": '"member_role"' in (store.get_raw("access") or "")}
+
+    @routes.get("/api/queue")
+    async def queue(request):
+        """Everything waiting for staff besides bugs: counts, raid mode and report spikes (for the overview and the menu)."""
+        return web.json_response(dict(store.open_counts(), raid=raid_dict(), spikes=hooks["active_spikes"]()))
+
+    @routes.get("/api/reports")
+    async def reports(request):
+        status = "open" if request.query.get("status", "open") == "open" else "done"
+        return web.json_response({"items": [report_dict(r) for r in store.msg_reports(status)], "open": store.open_counts()["reports"]})
+
+    @routes.post("/api/reports/{id}")
+    async def report_act(request):
+        r = store.get_msg_report(int_param(request, "id"))
+        if r is None:
+            raise ApiError(404, "Report not found.")
+        d = await body_json(request)
+        try:
+            minutes = max(1, min(40320, int(d.get("minutes") or 60)))
+        except (TypeError, ValueError):
+            raise ApiError(400, "Minutes must be a number.")
+        r = await hooks["act_on_report"](r, str(d.get("action") or ""), who_id(request), who(request), str(d.get("reason") or ""), minutes)
+        return web.json_response(report_dict(r))
+
+    @routes.get("/api/appeals")
+    async def appeals(request):
+        status = "open" if request.query.get("status", "open") == "open" else "done"
+        return web.json_response({"items": [appeal_dict(a) for a in store.appeals(status)], "open": store.open_counts()["appeals"]})
+
+    @routes.post("/api/appeals/{id}")
+    async def appeal_decide(request):
+        a = store.get_appeal(int_param(request, "id"))
+        if a is None:
+            raise ApiError(404, "Appeal not found.")
+        d = await body_json(request)
+        a = await hooks["decide_appeal"](a, bool(d.get("accept")), str(d.get("note") or ""), who_id(request), who(request),
+                                         request.get("role") == "admin")
+        return web.json_response(appeal_dict(a))
+
+    @routes.post("/api/raid")
+    async def raid_set(request):
+        d = await body_json(request)
+        if d.get("active"):
+            await hooks["start_raid"](who(request), who_id(request))
+        else:
+            await hooks["lift_raid"](who(request), who_id(request))
+        return web.json_response(raid_dict())
+
+    @routes.post("/api/spikes")
+    async def spike_act(request):
+        d = await body_json(request)
+        if d.get("known"):
+            r = bug_or_404(int(d["known"]))
+            if r["duplicate_of"] or r["status"] in ("rejected", "admin_rejected"):
+                raise ApiError(400, "That bug is closed.")
+            await hooks["make_known"](r, who(request), who_id(request))
+        if d.get("dismiss"):
+            hooks["spike_dismiss"](str(d["dismiss"]))
+        return web.json_response({"spikes": hooks["active_spikes"]()})
+
     # --------------------------------------------- automatic website pauses
     @routes.get("/api/webblocks")
     async def web_blocks(request):
@@ -1959,6 +2072,159 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                                              "new": store.gift_code_state(r, now) == "new"}
                                             for r in store.active_gift_codes(now)]},
                                  headers={"Cache-Control": "max-age=30"})
+
+    # ------------------------------------------------ developers' page (secret link, no login)
+    def dev_auth(request):
+        ip = client_ip(request)
+        now = time.time()
+        failures[ip] = [t for t in failures[ip] if now - t < 300]
+        if len(failures[ip]) >= 10:
+            raise ApiError(429, "Too many wrong links. Wait a few minutes.")
+        if not store.dev_link_ok(request.headers.get("X-Dev-Key", "")):
+            failures[ip].append(now)
+            raise ApiError(401, "This link doesn't work any more. Ask the server team for a new one.")
+
+    def dev_bug(it):
+        r = it["r"]
+        return {"id": r["id"], "reported": r["created_at"], "passed": it["passed_at"], "status": r["status"],
+                "area": r["area"] or "", "version": r["game_version"] or "", "title": store.bug_summary(r),
+                "text": "\n".join(x for x in (store.clean_report(ln) for ln in (r["text"] or "").splitlines()) if x),
+                "english": store.dev_english(r), "duplicates": len(it["dups"]), "affected": it["affected"],
+                "chief": r["chief_name"] or "", "uid": r["player_uid"] or "", "severity": r["severity"] or "",
+                "files": [{"id": f["id"], "name": f["filename"],
+                           "kind": "video" if f["filename"].lower().endswith(MEDIA_VIDEO) else "image"} for f in store.bug_files(r["id"])],
+                "dev": {"state": r["dev_state"] or "", "note": r["dev_note"] or "", "version": r["dev_version"] or r["fixed_version"] or "",
+                        "ts": r["dev_ts"]}}
+
+    @routes.get("/public/dev/list")
+    async def dev_list(request):
+        dev_auth(request)
+        items = store.dev_list()
+        since = int(time.time()) - 14 * 86400
+        done = store.db.execute("SELECT * FROM bug_reports WHERE status='fixed' AND dev_state='fixed' AND dev_ts>=? ORDER BY dev_ts DESC LIMIT 50",
+                                (since,)).fetchall()
+        return web.json_response({"server": get_guild().name, "version": store.cfg("game_version") or "", "now": int(time.time()),
+                                  "open": [dev_bug(it) for it in items],
+                                  "done": [dev_bug({"r": r, "passed_at": r["dev_ts"], "dups": [], "affected": 1}) for r in done]},
+                                 headers={"Cache-Control": "no-store"})
+
+    @routes.put("/public/dev/bugs/{id}")
+    async def dev_answer(request):
+        dev_auth(request)
+        r = bug_or_404(int_param(request, "id"))
+        d = await body_json(request)
+        state = str(d.get("state") or "") or None
+        r = await hooks["dev_update"](r, state, clean(d.get("version"), 30), clean(d.get("note"), 600))
+        return web.json_response({"ok": True, "status": r["status"], "dev": {"state": r["dev_state"] or "", "note": r["dev_note"] or "",
+                                                                              "version": r["dev_version"] or "", "ts": r["dev_ts"]}})
+
+    @routes.get("/public/dev/files/{id}/{fid}")
+    async def dev_file(request):
+        dev_auth(request)
+        row = store.get_file(int_param(request, "fid"))
+        b = store.get_bug(int_param(request, "id"))
+        if row is None or b is None or row["bug_id"] != b["id"] or b["status"] not in ("passed", "being_investigated", "fixed"):
+            raise ApiError(404, "File not found.")
+        try:
+            path = store.file_path(row)
+        except ValueError:
+            raise ApiError(404, "File not found.")
+        if not path.is_file():
+            raise ApiError(404, "The file is no longer kept.")
+        return web.FileResponse(path, headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox",
+                                               "Content-Type": MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+                                               "Cache-Control": "private, max-age=3600"})
+
+    # ------------------------------------------------ appeals (players log in with Discord, one appeal per ban / timeout)
+    APPEAL_COOKIE = "wos_appeal"
+    appeal_hits = defaultdict(list)
+
+    def appeal_sign(uid: int, name: str, exp: int) -> str:
+        import base64
+        body = f"{uid}.{exp}.{base64.urlsafe_b64encode(name.encode()).decode()}"
+        return body + "." + hmac.new(api_key.encode(), ("appeal:" + body).encode(), "sha256").hexdigest()
+
+    def appeal_user(request):
+        import base64
+        raw = request.cookies.get(APPEAL_COOKIE, "")
+        try:
+            uid, exp, name, sig = raw.split(".")
+            body = f"{uid}.{exp}.{name}"
+            if not hmac.compare_digest(sig, hmac.new(api_key.encode(), ("appeal:" + body).encode(), "sha256").hexdigest()):
+                return None
+            if int(exp) < time.time():
+                return None
+            return int(uid), base64.urlsafe_b64decode(name.encode()).decode()
+        except Exception:  # noqa: BLE001
+            return None
+
+    def appeal_page() -> str:
+        base = (store.cfg("giftcodes_site_url") or "").strip()
+        if base.lower().startswith(("http://", "https://")):
+            return base.rstrip("/") + "/appeal.html"
+        return "/bugs/appeal.html"
+
+    @routes.get("/api/auth/appeal")
+    async def appeal_login(request):
+        c = oauth_conf()
+        if not (c["secret"] and c["redirect"]) or not store.cfg("appeals_enabled"):
+            raise ApiError(404, "Appeals are not available right now.")
+        import secrets
+        from urllib.parse import urlencode
+        state = "a." + secrets.token_urlsafe(24)
+        now = time.time()
+        for k in [k for k, t in pending_logins.items() if now - t > 600]:
+            pending_logins.pop(k, None)
+        pending_logins[state] = now
+        url = "https://discord.com/oauth2/authorize?" + urlencode({"client_id": client_id(), "response_type": "code",
+              "scope": "identify", "redirect_uri": c["redirect"], "state": state})
+        resp = web.HTTPFound(url)
+        resp.set_cookie("wos_state", state, max_age=600, httponly=True, samesite="Lax", path="/api/auth/",
+                        secure=c["redirect"].startswith("https://"))
+        raise resp
+
+    async def appeal_me_payload(user):
+        if user is None:
+            return {"logged_in": False, "enabled": bool(store.cfg("appeals_enabled")), "login": bool(oauth_conf()["secret"])}
+        uid, name = user
+        info = await hooks["appeal_case"](uid)
+        out = {"logged_in": True, "enabled": bool(store.cfg("appeals_enabled")), "name": name, "case": None, "appeal": None}
+        a = None
+        if info is not None:
+            c = info["case"]
+            out["case"] = {"kind": info["kind"], "reason": info["reason"] or "", "until": info["until"], "ts": c["ts"] if c else None}
+            a = store.appeal_for(uid, info["kind"], c["id"] if c else None)
+        else:                                               # nothing active any more: show how the last appeal ended
+            a = store.db.execute("SELECT * FROM appeals WHERE user_id=? ORDER BY id DESC LIMIT 1", (uid,)).fetchone()
+        if a is not None:
+            out["appeal"] = {"status": a["status"], "ts": a["ts"], "text": a["text"], "note": a["note"] or "", "kind": a["kind"]}
+        return out
+
+    @routes.get("/public/appeal/me")
+    async def appeal_me(request):
+        return web.json_response(await appeal_me_payload(appeal_user(request)), headers={"Cache-Control": "no-store"})
+
+    @routes.post("/public/appeal")
+    async def appeal_send(request):
+        user = appeal_user(request)
+        if user is None:
+            raise ApiError(401, "Please log in with Discord first.")
+        if request.headers.get("X-Requested-With") != "wos":
+            raise ApiError(403, "Missing request header.")
+        now = time.time()
+        appeal_hits[user[0]] = [t for t in appeal_hits[user[0]] if now - t < 600]
+        if len(appeal_hits[user[0]]) >= 5:
+            raise ApiError(429, "Too many tries. Wait a few minutes.")
+        appeal_hits[user[0]].append(now)
+        d = await body_json(request)
+        await hooks["submit_appeal"](user[0], user[1], clean(d.get("text"), 1500))
+        return web.json_response(await appeal_me_payload(user))
+
+    @routes.post("/public/appeal/logout")
+    async def appeal_logout(request):
+        resp = web.json_response({"ok": True})
+        resp.del_cookie(APPEAL_COOKIE, path="/")
+        return resp
 
     app = web.Application(middlewares=[cors_mw, error_mw, auth_mw], client_max_size=MAX_TOTAL + 1024 * 1024)
     app.add_routes(routes)

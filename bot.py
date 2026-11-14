@@ -1373,6 +1373,7 @@ PLAYER_COMMANDS = [
     ("/language", "Choose the language the bot uses with you"),
     ("/members", "How many members the server has"),
     ("Translate", "Long-press (phone) or right-click any message → Apps → Translate, to read it in your language"),
+    ("Report to moderators", "Long-press or right-click a message that breaks the rules → Apps → Report to moderators. Only the moderators see who reported it"),
 ]
 
 
@@ -1582,7 +1583,9 @@ class WosBot(discord.Client):
                          "set_bug_status": apply_bug_status, "send_reply": send_bug_reply,
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
-                         "set_severity": set_severity, "post_dev_list": post_dev_list, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
+                         "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
+                         "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
+                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
                          "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
@@ -1648,6 +1651,13 @@ class WosBot(discord.Client):
                 await handle_gate(interaction)
             except Exception as exc:  # noqa: BLE001
                 print(f"[device question] {exc!r}")
+        for prefix, fn, label in (("spike:", handle_spike_button, "spike alert"), ("mr:", handle_msg_report_button, "message report"),
+                                  ("ap:", handle_appeal_button, "appeal"), ("raid:", handle_raid_button, "raid mode")):
+            if cid.startswith(prefix):
+                try:
+                    await fn(interaction)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[{label}] {exc!r}")
         if cid.startswith("rm:"):
             try:
                 await handle_role_menu(interaction)
@@ -1664,10 +1674,17 @@ class WosBot(discord.Client):
         if member.guild.id != GUILD_ID or member.bot:
             return
         store.record_members(member.guild.member_count, joined=1)
+        held = False
+        try:
+            held = await raid_join(member)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[raid mode] {exc!r}")
         try:
             await track_join(member)
         except Exception as exc:  # noqa: BLE001 – never block the welcome over invites
             print(f"[invites] {exc!r}")
+        if held:
+            return                                           # raid mode: no welcome until staff lift it
         try:
             if await send_welcome(member):
                 log_event("welcome", f"Welcomed {member.display_name}", member.id, member.display_name)
@@ -3845,6 +3862,10 @@ async def translate_for_match(r) -> bool:
 
 async def safe_check_duplicate(bug_id: int):
     try:
+        await check_spike(get_bug(bug_id))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[spike alert] {exc!r}")
+    try:
         await translate_for_match(get_bug(bug_id))
     except Exception as exc:  # noqa: BLE001
         print(f"[match translate] {exc!r}")
@@ -4760,6 +4781,8 @@ async def handle_gate(interaction: discord.Interaction):
     member, g = interaction.user, interaction.guild
     if g is None or not hasattr(member, "roles") or not a.get("member_role"):
         return await interaction.response.send_message("This isn't set up yet – please ask a moderator.", ephemeral=True)
+    if store.raid_state()["active"] and g.get_role(int(a["member_role"])) not in member.roles:
+        return await interaction.response.send_message(T("raid.wait", ilang(interaction)), ephemeral=True)
     pick = interaction.data.get("custom_id", "").split(":")[1]
     want, other = (a.get("ios_role"), a.get("android_role")) if pick == "ios" else (a.get("android_role"), a.get("ios_role"))
     add = [r for r in (g.get_role(int(want)) if want else None, g.get_role(int(a["member_role"]))) if r and r not in member.roles]
@@ -4939,6 +4962,7 @@ async def warn_member(member, reason: str, mod_id, mod_name: str, auto: bool = F
     if b_at and n >= b_at:
         try:
             await dm_t(member.id, "dm.banned", reason=f"{n} warnings")
+            await tell_appeal(member.id)
             await member.ban(reason=f"{n} warnings – last: {reason}"[:500], delete_message_seconds=0)
             store.add_case(member.id, member.display_name, "ban", f"Automatic: {n} warnings", None, brand(), auto=True)
             out["action"] = "ban"
@@ -4950,6 +4974,7 @@ async def warn_member(member, reason: str, mod_id, mod_name: str, auto: bool = F
             await member.timeout(timedelta(minutes=minutes), reason=f"{n} warnings – last: {reason}"[:500])
             store.add_case(member.id, member.display_name, "timeout", f"Automatic: {n} warnings", None, brand(), minutes=minutes, auto=True)
             out["action"] = "timeout"
+            await tell_appeal(member.id)
         except discord.HTTPException:
             out["action"] = "timeout_failed"
     if out["action"] != "ban":
@@ -5014,13 +5039,12 @@ async def pardon_cmd(interaction: discord.Interaction, case: int):
 async def timeout_cmd(interaction: discord.Interaction, member: discord.Member, minutes: app_commands.Range[int, 1, 40320], reason: Optional[str] = None):
     if not is_mod(interaction.user) or is_mod(member):
         return await interaction.response.send_message("Moderators only – and not on staff.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
     try:
-        await member.timeout(timedelta(minutes=minutes), reason=(reason or "")[:500] or None)
+        c = await timeout_member(member, minutes, reason, interaction.user.id, interaction.user.display_name)
     except discord.HTTPException:
-        return await interaction.response.send_message("I couldn't – give me the “Moderate Members” permission and put my role above theirs.", ephemeral=True)
-    c = store.add_case(member.id, member.display_name, "timeout", reason, interaction.user.id, interaction.user.display_name, minutes=minutes)
-    log_event("mod", f"{member.display_name} timed out for {minutes} min by {interaction.user.display_name}: {reason or '–'}", interaction.user.id, interaction.user.display_name)
-    await interaction.response.send_message(f"🔇 {member.mention} timed out for {minutes} min – case #{c}.", ephemeral=True)
+        return await interaction.followup.send("I couldn't – give me the “Moderate Members” permission and put my role above theirs.", ephemeral=True)
+    await interaction.followup.send(f"🔇 {member.mention} timed out for {minutes} min – case #{c}.", ephemeral=True)
 
 
 @bot.tree.command(name="ban", description="Ban a member (admins)", guild=_GUILD)
@@ -5029,6 +5053,7 @@ async def ban_cmd(interaction: discord.Interaction, member: discord.Member, reas
     if not is_admin(interaction.user) or is_mod(member):
         return await interaction.response.send_message("Admins only – and not on staff.", ephemeral=True)
     await dm_t(member.id, "dm.banned", reason=reason)
+    await tell_appeal(member.id)
     try:
         await member.ban(reason=reason[:500], delete_message_seconds=0)
     except discord.HTTPException:
@@ -5265,6 +5290,547 @@ async def run_timers(now: Optional[int] = None) -> int:
     return n
 
 
+# =============================================================== staff alerts, developer page, spike alert,
+# message reports, appeals, raid mode
+def alert_chan(fallback: str = "mod_channel_id"):
+    """Where staff alerts go: the alerts channel if one is chosen, otherwise the mod / admin channel."""
+    return chan("alerts_channel_id") or chan(fallback)
+
+
+_ROLE_PING = discord.AllowedMentions(roles=True, users=False, everyone=False)
+
+
+# --------------------------------------------------------------- developer page
+async def dev_update(r, state: Optional[str], version: Optional[str] = None, note: Optional[str] = None):
+    """The developers answered on their page: working on it / fixed in version X / need more info (or cleared).
+    The bug's status follows, the player hears about it as usual, and questions go to the staff."""
+    who = "Developers"
+    version, note = (version or "").strip()[:30] or None, (note or "").strip()[:600] or None
+    if state not in (None, *store.DEV_STATES):
+        raise ValueError("Unknown answer.")
+    if r["duplicate_of"] or r["status"] not in ("passed", "being_investigated", "fixed"):
+        raise ValueError(f"Bug #{r['id']} is not with the admins any more.")
+    if state == "need_info" and not note:
+        raise ValueError("Write what you need to know.")
+    set_bug(r["id"], dev_state=state, dev_note=note, dev_version=version if state == "fixed" else None, dev_ts=int(time.time()))
+    if state == "working" and r["status"] == "passed":
+        await apply_bug_status(r, "being_investigated", who, log_kind="bug")
+    elif state == "fixed":
+        if r["status"] != "fixed":
+            await apply_bug_status(r, "fixed", who, log_kind="bug")
+        if version:
+            set_bug(r["id"], fixed_version=version)
+    r = get_bug(r["id"])
+    if state == "need_info":
+        log_event("bug", f"Developers need more info on bug #{r['id']}: “{note[:160]}”", None, who)
+        ch = chan("admin_channel_id")
+        if ch is not None:
+            try:
+                ref = ch.get_partial_message(r["admin_msg_id"]) if r["admin_msg_id"] else None
+                await ch.send(f"💬 **The developers need more info on bug #{r['id']}** – {store.bug_summary(r)[:80]}\n>>> {note}",
+                              reference=ref, mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+            except discord.HTTPException:
+                pass
+    elif state is None:
+        log_event("bug", f"Developers cleared their answer on bug #{r['id']}", None, who)
+    try:
+        await sync_bug_messages(r)
+    except discord.HTTPException:
+        pass
+    return r
+
+
+# --------------------------------------------------------------- spike alert
+SPIKE_QUIET = 3 * 3600          # one alert per area in this many seconds
+
+
+def spike_root(rows):
+    """The bug a burst of reports is about: the one most of them were closed as duplicates of, else the oldest open one."""
+    counts = {}
+    for x in rows:
+        if x["duplicate_of"]:
+            counts[x["duplicate_of"]] = counts.get(x["duplicate_of"], 0) + 1
+    if counts:
+        best = get_bug(max(counts, key=lambda k: (counts[k], -k)))
+        if best is not None and not best["duplicate_of"] and best["status"] not in ("rejected", "admin_rejected"):
+            return best
+    return next((x for x in rows if not x["duplicate_of"] and x["status"] not in ("rejected", "admin_rejected")), None)
+
+
+def spike_view(bug_id: Optional[int], key: str) -> discord.ui.View:
+    v = discord.ui.View(timeout=None)
+    if bug_id:
+        v.add_item(discord.ui.Button(label=f"Post #{bug_id} as a known issue", emoji="📌", style=discord.ButtonStyle.primary,
+                                     custom_id=f"spike:known:{bug_id}"))
+    v.add_item(discord.ui.Button(label="Dismiss", style=discord.ButtonStyle.secondary, custom_id=f"spike:ok:{key[:60]}"))
+    return v
+
+
+async def check_spike(r) -> bool:
+    """Called for every new report: many reports about one area in a short time → alert the admins once."""
+    if not cfg("spike_enabled") or r is None:
+        return False
+    area = r["area"] or ""
+    minutes = cfg("spike_minutes")
+    rows = store.spike_bugs(area or None, minutes)
+    if len(rows) < cfg("spike_count"):
+        return False
+    key, now, st = area or "-", int(time.time()), store.spike_state()
+    last = st.get(key)
+    if last and now - last["ts"] < SPIKE_QUIET:
+        last["count"] = len(rows)
+        put_raw("spike_state", json.dumps(st))
+        return False
+    root = spike_root(rows)
+    known = bool(root and root["public"])
+    name = area or "no area chosen"
+    lines = [f"🚨 **{len(rows)} bug reports about “{name}” in the last {minutes} minutes** – something may be broken."]
+    for x in rows[-6:]:
+        lines.append(f"• #{x['id']} {store.bug_summary(x)[:70]}" + (f" *(duplicate of #{x['duplicate_of']})*" if x["duplicate_of"] else ""))
+    if root is not None:
+        lines.append(f"\nBug **#{root['id']}** is already on the known issues list." if known else
+                     f"\nPost bug **#{root['id']}** as a known issue so players see it before they report.")
+    msg_id = None
+    ch = alert_chan("admin_channel_id")
+    if ch is not None:
+        try:
+            m = await ch.send(_cap(f"<@&{ADMIN_ROLE_ID}> " + "\n".join(lines)),
+                              view=spike_view(root["id"] if root is not None and not known else None, key), allowed_mentions=_ROLE_PING)
+            msg_id = m.id
+        except discord.HTTPException:
+            pass
+    st[key] = {"ts": now, "count": len(rows), "bug": root["id"] if root is not None else None, "area": area, "msg": msg_id}
+    put_raw("spike_state", json.dumps(st))
+    log_event("bug", f"Spike: {len(rows)} reports about “{name}” in {minutes} minutes", None, brand())
+    return True
+
+
+async def make_known(r, who: str, who_id=None) -> bool:
+    """Put a bug on the known issues list (website + board). False if it already was."""
+    if r["public"]:
+        return False
+    set_bug(r["id"], public=1)
+    log_event("bug", f"Bug #{r['id']} marked as a known issue by {who}", who_id, who)
+    await safe_refresh_board()
+    return True
+
+
+def spike_dismiss(key: str):
+    st = store.spike_state()
+    if key in st:
+        st[key]["dismissed"] = True
+        put_raw("spike_state", json.dumps(st))
+
+
+def active_spikes() -> list:
+    now = int(time.time())
+    return [{"key": k, "area": v.get("area") or "", "count": v.get("count"), "bug": v.get("bug"), "ts": v["ts"],
+             "known": bool(v.get("bug") and (get_bug(v["bug"]) or {"public": 0})["public"])}
+            for k, v in store.spike_state().items() if now - v["ts"] < SPIKE_QUIET and not v.get("dismissed")]
+
+
+async def handle_spike_button(interaction: discord.Interaction):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Only staff can do this.", ephemeral=True)
+    _, what, arg = interaction.data["custom_id"].split(":", 2)
+    who = interaction.user.display_name
+    if what == "known":
+        r = get_bug(int(arg))
+        if r is None or r["duplicate_of"] or r["status"] in ("rejected", "admin_rejected"):
+            return await interaction.response.send_message("That bug is closed now.", ephemeral=True)
+        await interaction.response.defer()
+        await make_known(r, who, interaction.user.id)
+        note = f"\n📌 Bug #{r['id']} posted as a known issue by {who}."
+    else:
+        await interaction.response.defer()
+        spike_dismiss(arg)
+        note = f"\n✔️ Dismissed by {who}."
+    try:
+        await interaction.message.edit(content=_cap(interaction.message.content + note), view=None)
+    except discord.HTTPException:
+        pass
+
+
+# --------------------------------------------------------------- message reports
+REPORT_LIMIT, REPORT_WINDOW = 5, 600      # reports per player per 10 minutes
+
+
+def msg_report_embed(r) -> discord.Embed:
+    people = json.loads(r["reporters"])
+    e = discord.Embed(title=f"🚩 Reported message #{r['id']}", color=0xED4245 if r["status"] == "open" else 0x6B7790,
+                      description=(r["content"] or "*(no text)*")[:1800])
+    e.add_field(name="Written by", value=f"<@{r['target_id']}> · {store.active_warnings(r['target_id'])} active warning(s)", inline=True)
+    e.add_field(name="Where", value=f"<#{r['channel_id']}> · [jump](https://discord.com/channels/{GUILD_ID}/{r['channel_id']}/{r['message_id']})", inline=True)
+    e.add_field(name=f"Reported by {len(people)}", inline=False,
+                value="\n".join(f"<@{p['id']}>" + (f" – {p['reason']}" if p["reason"] else "") for p in people[:6])[:1000])
+    files = json.loads(r["attachments"])
+    if files:
+        e.add_field(name="Attachments", value="\n".join(files[:4])[:1000], inline=False)
+    if r["status"] != "open":
+        e.set_footer(text=f"{r['action']} – {r['handled_name']}")
+    return e
+
+
+def msg_report_view(rid: int) -> discord.ui.View:
+    v = discord.ui.View(timeout=None)
+    for label, emoji, act, style in (("Delete", "🗑️", "delete", discord.ButtonStyle.secondary),
+                                     ("Delete + warn", "⚠️", "warn", discord.ButtonStyle.danger),
+                                     ("Delete + timeout 1 h", "🔇", "timeout", discord.ButtonStyle.danger),
+                                     ("Nothing wrong", "✅", "dismiss", discord.ButtonStyle.secondary)):
+        v.add_item(discord.ui.Button(label=label, emoji=emoji, style=style, custom_id=f"mr:{act}:{rid}"))
+    return v
+
+
+async def file_msg_report(reporter, message: discord.Message, reason: str) -> tuple:
+    """Put a chat message in the moderators' queue. Returns (row, is_new)."""
+    context = []
+    try:
+        async for m in message.channel.history(limit=4, before=message):
+            context.append({"name": m.author.display_name[:40], "text": (m.content or "")[:300], "ts": int(m.created_at.timestamp())})
+    except discord.HTTPException:
+        pass
+    context.reverse()
+    r, new = store.add_msg_report(reporter.id, reporter.display_name, reason, message.author.id, message.author.display_name,
+                                  message.channel.id, getattr(message.channel, "name", ""), message.id, message.content,
+                                  [a.url for a in message.attachments], context)
+    ch = alert_chan("mod_channel_id")
+    if ch is not None:
+        try:
+            if new:
+                m = await ch.send(embed=msg_report_embed(r), view=msg_report_view(r["id"]), allowed_mentions=discord.AllowedMentions.none())
+                db.execute("UPDATE msg_reports SET alert_msg_id=? WHERE id=?", (m.id, r["id"]))
+                db.commit()
+            elif r["alert_msg_id"]:
+                await ch.get_partial_message(r["alert_msg_id"]).edit(embed=msg_report_embed(r))
+        except discord.HTTPException:
+            pass
+    if new:
+        log_event("mod", f"{reporter.display_name} reported a message by {message.author.display_name} in #{getattr(message.channel, 'name', '?')}",
+                  reporter.id, reporter.display_name)
+    return store.get_msg_report(r["id"]), new
+
+
+async def tell_appeal(user_id: int):
+    """After a timeout / before a ban: tell the player where they can appeal (if the website address is set)."""
+    url = site_url()
+    if url and cfg("appeals_enabled"):
+        await dm(user_id, T("dm.appeal_hint", lang_for(user_id), url=url.rstrip("/") + "/appeal.html"))
+
+
+async def timeout_member(member, minutes: int, reason: Optional[str], mod_id, mod_name: str) -> int:
+    """Time a member out, keep the case, tell them (with the appeal link). Raises discord.HTTPException."""
+    await member.timeout(timedelta(minutes=minutes), reason=(reason or "")[:500] or None)
+    c = store.add_case(member.id, member.display_name, "timeout", reason, mod_id, mod_name, minutes=minutes)
+    log_event("mod", f"{member.display_name} timed out for {minutes} min by {mod_name}: {reason or '–'}", mod_id, mod_name)
+    await dm_t(member.id, "dm.timeout", reason=reason, minutes=minutes)
+    await tell_appeal(member.id)
+    return c
+
+
+async def act_on_report(r, action: str, by_id, by_name: str, reason: Optional[str] = None, minutes: int = 60):
+    """A moderator decides on a reported message: delete | warn | timeout | dismiss (warn and timeout also delete it)."""
+    if r["status"] != "open":
+        raise ValueError("Someone already handled this report.")
+    if action not in ("delete", "warn", "timeout", "dismiss"):
+        raise ValueError("Unknown action.")
+    g = bot.get_guild(GUILD_ID)
+    did = []
+    if action != "dismiss":
+        ch = g.get_channel_or_thread(r["channel_id"]) if g else None
+        try:
+            if ch is not None:
+                await ch.get_partial_message(r["message_id"]).delete()
+                did.append("message deleted")
+        except discord.NotFound:
+            did.append("message was already gone")
+        except discord.HTTPException:
+            did.append("couldn't delete the message (permissions)")
+    if action in ("warn", "timeout"):
+        member = g.get_member(r["target_id"]) if g else None
+        why = (reason or "").strip()[:300] or f"Reported message in #{r['channel_name'] or 'chat'}"
+        if member is None:
+            did.append("the member has left")
+        elif is_mod(member) or member.bot:
+            did.append("staff can't be warned here")
+        elif action == "warn":
+            out = await warn_member(member, why, by_id, by_name)
+            did.append(f"warned ({out['warnings']} active)" + {"timeout": " → timed out", "ban": " → banned"}.get(out["action"], ""))
+        else:
+            try:
+                await timeout_member(member, minutes, why, by_id, by_name)
+                did.append(f"timed out for {minutes} min")
+            except discord.HTTPException:
+                did.append("couldn't time out (permissions)")
+    summary = "Nothing wrong" if action == "dismiss" else ", ".join(did).capitalize()
+    r = store.close_msg_report(r["id"], "dismissed" if action == "dismiss" else "actioned", summary, by_id, by_name)
+    log_event("mod", f"Reported message #{r['id']} ({r['target_name']}): {summary.lower()} – {by_name}", by_id, by_name)
+    ch = alert_chan("mod_channel_id")
+    if ch is not None and r["alert_msg_id"]:
+        try:
+            await ch.get_partial_message(r["alert_msg_id"]).edit(embed=msg_report_embed(r), view=None)
+        except discord.HTTPException:
+            pass
+    return r
+
+
+async def handle_msg_report_button(interaction: discord.Interaction):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Only moderators can do this.", ephemeral=True)
+    _, action, rid = interaction.data["custom_id"].split(":")
+    r = store.get_msg_report(int(rid))
+    if r is None:
+        return await interaction.response.send_message("I can't find this report any more.", ephemeral=True)
+    await interaction.response.defer()
+    try:
+        await act_on_report(r, action, interaction.user.id, interaction.user.display_name)
+    except ValueError as exc:
+        await interaction.followup.send(str(exc), ephemeral=True)
+
+
+class ReportMsgModal(discord.ui.Modal):
+    def __init__(self, message: discord.Message, lg):
+        super().__init__(title=T("report.title", lg)[:45])
+        self.message, self.lg = message, lg
+        self.why = discord.ui.TextInput(label=T("report.label", lg)[:45], required=False, max_length=300,
+                                        style=discord.TextStyle.paragraph)
+        self.add_item(self.why)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        _, new = await file_msg_report(interaction.user, self.message, str(self.why.value or "").strip())
+        await interaction.followup.send(T("report.thanks" if new else "report.again", self.lg), ephemeral=True)
+
+
+@bot.tree.context_menu(name="Report to moderators", guild=_GUILD)
+async def report_message_menu(interaction: discord.Interaction, message: discord.Message):
+    lg = ilang(interaction)
+    problem = ("report.off" if not cfg("msg_reports_enabled") else
+               "report.self" if message.author.id == interaction.user.id else
+               "report.bot" if message.author.bot else
+               "report.limit" if store.reports_by(interaction.user.id, REPORT_WINDOW) >= REPORT_LIMIT else None)
+    if problem:
+        return await interaction.response.send_message(T(problem, lg), ephemeral=True)
+    await interaction.response.send_modal(ReportMsgModal(message, lg))
+
+
+# --------------------------------------------------------------- appeals
+async def appeal_case(user_id: int) -> Optional[dict]:
+    """What this player can appeal right now: an active timeout or a ban. None if neither."""
+    g = bot.get_guild(GUILD_ID)
+    if g is None:
+        return None
+    m = g.get_member(user_id)
+    if m is not None:
+        until = getattr(m, "timed_out_until", None)
+        if until is not None and until.timestamp() > time.time():
+            c = store.last_case(user_id, "timeout")
+            return {"kind": "timeout", "case": c, "reason": c["reason"] if c else None, "until": int(until.timestamp())}
+        return None
+    try:
+        ban = await g.fetch_ban(discord.Object(id=user_id))
+    except discord.HTTPException:
+        return None
+    c = store.last_case(user_id, "ban")
+    return {"kind": "ban", "case": c, "reason": (c["reason"] if c else None) or ban.reason, "until": None}
+
+
+def appeal_embed(a) -> discord.Embed:
+    e = discord.Embed(title=f"📨 Appeal #{a['id']} – {a['kind']}", description=a["text"][:3500],
+                      color={"open": 0xFFC15E, "accepted": 0x5BE0A8}.get(a["status"], 0x6B7790))
+    e.add_field(name="From", value=f"<@{a['user_id']}> ({a['user_name']})", inline=True)
+    e.add_field(name="Punished for", value=(a["case_reason"] or "no reason recorded")[:300], inline=True)
+    if a["status"] != "open":
+        e.set_footer(text=f"{a['status'].capitalize()} by {a['handled_name']}" + (f" – {a['note']}" if a["note"] else ""))
+    return e
+
+
+def appeal_view(a) -> discord.ui.View:
+    v = discord.ui.View(timeout=None)
+    v.add_item(discord.ui.Button(label="Accept – remove the " + a["kind"], emoji="✅", style=discord.ButtonStyle.success, custom_id=f"ap:yes:{a['id']}"))
+    v.add_item(discord.ui.Button(label="Decline", emoji="✖️", style=discord.ButtonStyle.secondary, custom_id=f"ap:no:{a['id']}"))
+    return v
+
+
+async def submit_appeal(user_id: int, user_name: str, text: str):
+    """From the website. One appeal per timeout / ban."""
+    if not cfg("appeals_enabled"):
+        raise ValueError("Appeals are switched off right now.")
+    text = (text or "").strip()
+    if not 20 <= len(text) <= 1500:
+        raise ValueError("Write between 20 and 1500 characters.")
+    info = await appeal_case(user_id)
+    if info is None:
+        raise ValueError("You are not banned or timed out right now.")
+    c = info["case"]
+    if store.appeal_for(user_id, info["kind"], c["id"] if c else None) is not None:
+        raise ValueError("You already sent an appeal for this.")
+    if c is None and info["reason"]:
+        c = {"id": None, "reason": info["reason"], "ts": None}
+    aid = store.add_appeal(user_id, user_name, info["kind"], c, text)
+    a = store.get_appeal(aid)
+    log_event("mod", f"{user_name} sent an appeal against their {info['kind']}", user_id, user_name)
+    ch = alert_chan("mod_channel_id")
+    if ch is not None:
+        try:
+            m = await ch.send(embed=appeal_embed(a), view=appeal_view(a), allowed_mentions=discord.AllowedMentions.none())
+            put_raw(f"appeal_msg_{aid}", str(m.id))
+        except discord.HTTPException:
+            pass
+    return a
+
+
+async def decide_appeal(a, accept: bool, note: Optional[str], by_id, by_name: str, admin: bool):
+    if a["status"] != "open":
+        raise ValueError("Someone already decided this appeal.")
+    if a["kind"] == "ban" and not admin:
+        raise ValueError("Only admins can decide on a ban appeal.")
+    g = bot.get_guild(GUILD_ID)
+    if accept:
+        try:
+            if a["kind"] == "ban":
+                await g.unban(discord.Object(id=a["user_id"]), reason=f"Appeal #{a['id']} accepted by {by_name}"[:500])
+                store.add_case(a["user_id"], a["user_name"], "unban", f"Appeal #{a['id']} accepted", by_id, by_name)
+            else:
+                m = g.get_member(a["user_id"])
+                if m is not None:
+                    await m.timeout(None, reason=f"Appeal #{a['id']} accepted by {by_name}"[:500])
+                store.add_case(a["user_id"], a["user_name"], "pardon", f"Timeout removed – appeal #{a['id']} accepted", by_id, by_name)
+        except discord.NotFound:
+            pass                                             # already unbanned by hand
+        except discord.HTTPException:
+            raise ValueError("Discord refused – the bot needs “Ban Members” / “Moderate Members” and a role above theirs.")
+    a = store.decide_appeal(a["id"], "accepted" if accept else "declined", note, by_id, by_name)
+    log_event("mod", f"Appeal #{a['id']} from {a['user_name']} ({a['kind']}) {a['status']} by {by_name}"
+              + (f" – “{a['note'][:120]}”" if a["note"] else ""), by_id, by_name)
+    key = ("dm.appeal_unbanned" if a["kind"] == "ban" else "dm.appeal_untimeout") if accept else "dm.appeal_declined"
+    await dm_t(a["user_id"], key, reason=a["note"])
+    ch, mid = alert_chan("mod_channel_id"), get_raw(f"appeal_msg_{a['id']}")
+    if ch is not None and mid:
+        try:
+            await ch.get_partial_message(int(mid)).edit(embed=appeal_embed(a), view=None)
+        except discord.HTTPException:
+            pass
+    return a
+
+
+async def handle_appeal_button(interaction: discord.Interaction):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Only staff can do this.", ephemeral=True)
+    _, what, aid = interaction.data["custom_id"].split(":")
+    a = store.get_appeal(int(aid))
+    if a is None:
+        return await interaction.response.send_message("I can't find this appeal any more.", ephemeral=True)
+    await interaction.response.defer()
+    try:
+        await decide_appeal(a, what == "yes", None, interaction.user.id, interaction.user.display_name, is_admin(interaction.user))
+    except ValueError as exc:
+        await interaction.followup.send(str(exc), ephemeral=True)
+
+
+# --------------------------------------------------------------- raid mode
+_recent_joins: list = []          # (ts, member_id)
+
+
+def raid_view() -> discord.ui.View:
+    v = discord.ui.View(timeout=None)
+    v.add_item(discord.ui.Button(label="Lift raid mode", emoji="✅", style=discord.ButtonStyle.success, custom_id="raid:lift"))
+    return v
+
+
+async def start_raid(by: str, by_id=None, joins=None, auto: bool = False) -> dict:
+    st = store.raid_state()
+    if st["active"]:
+        return st
+    joins = [str(x) for x in (joins or [])][-500:]
+    gate = bool(access_cfg().get("member_role"))
+    text = (f"🛡️ **Raid mode is ON** – {len(joins)} accounts joined within {cfg('raid_minutes')} minutes." if auto
+            else f"🛡️ **Raid mode switched ON by {by}.**")
+    text += ("\nNew members can't get past the device question and aren't welcomed until someone lifts it." if gate else
+             "\nNew members aren't welcomed until someone lifts it. (Set up the device question under Members to also keep them out of the channels.)")
+    alert = None
+    ch = alert_chan("mod_channel_id")
+    if ch is not None:
+        try:
+            m = await ch.send(f"<@&{MOD_ROLE_ID}> {text}", view=raid_view(), allowed_mentions=_ROLE_PING)
+            alert = m.id
+        except discord.HTTPException:
+            pass
+    st = {"active": True, "since": int(time.time()), "by": by, "joins": joins, "ended": None, "alert": alert}
+    store.save_raid(st)
+    log_event("mod", f"Raid mode ON – {len(joins)} joins in {cfg('raid_minutes')} min" if auto else f"Raid mode switched on by {by}", by_id, by)
+    return store.raid_state()
+
+
+async def lift_raid(by: str, by_id=None) -> dict:
+    st = store.raid_state()
+    if not st["active"]:
+        return st
+    st.update(active=False, ended=int(time.time()))
+    store.save_raid(st)
+    _recent_joins.clear()
+    log_event("mod", f"Raid mode lifted by {by} – {len(st['joins'])} joined while it was on", by_id, by)
+    ch = alert_chan("mod_channel_id")
+    if ch is not None and st.get("alert"):
+        try:
+            await ch.get_partial_message(st["alert"]).edit(
+                content=f"🛡️ Raid mode was on for {max(1, (st['ended'] - st['since']) // 60)} min – lifted by {by}. "
+                        f"{len(st['joins'])} joined meanwhile; they can answer the device question now.", view=None)
+        except discord.HTTPException:
+            pass
+    return store.raid_state()
+
+
+async def raid_join(member) -> bool:
+    """Called for every join. True while raid mode is on (the new member is held at the door)."""
+    st = store.raid_state()
+    if st["active"]:
+        st["joins"] = (st["joins"] + [str(member.id)])[-500:]
+        store.save_raid(st)
+        return True
+    if not cfg("raid_enabled"):
+        return False
+    now = time.time()
+    _recent_joins.append((now, member.id))
+    window = cfg("raid_minutes") * 60
+    _recent_joins[:] = [x for x in _recent_joins if now - x[0] <= window][-500:]
+    if len(_recent_joins) >= cfg("raid_joins"):
+        await start_raid(brand(), None, [x[1] for x in _recent_joins], auto=True)
+        return True
+    return False
+
+
+async def raid_tick():
+    """Lift raid mode by itself when that is switched on and the joins have calmed down."""
+    st = store.raid_state()
+    mins = cfg("raid_auto_lift_minutes")
+    if st["active"] and mins and time.time() - st["since"] >= mins * 60:
+        await lift_raid(f"{brand()} (after {mins} min)")
+
+
+@bot.tree.command(name="raid", description="Switch raid mode on or off (moderators)", guild=_GUILD)
+@app_commands.describe(mode="on = hold new members at the door · off = let them in again")
+@app_commands.choices(mode=[app_commands.Choice(name="on", value="on"), app_commands.Choice(name="off", value="off")])
+@app_commands.guild_only()
+async def raid_cmd(interaction: discord.Interaction, mode: app_commands.Choice[str]):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+    who = interaction.user.display_name
+    if mode.value == "on":
+        await start_raid(who, interaction.user.id)
+        await interaction.followup.send("🛡️ Raid mode is on. New members wait at the door until you use `/raid off`.", ephemeral=True)
+    else:
+        st = await lift_raid(who, interaction.user.id)
+        await interaction.followup.send(f"✅ Raid mode is off. {len(st['joins'])} joined while it was on.", ephemeral=True)
+
+
+async def handle_raid_button(interaction: discord.Interaction):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Only staff can do this.", ephemeral=True)
+    await interaction.response.defer()
+    await lift_raid(interaction.user.display_name, interaction.user.id)
+
+
 async def community_tick():
     """Every minute: finish giveaways and post timed messages."""
     for g in store.due_giveaways():
@@ -5274,6 +5840,10 @@ async def community_tick():
             store.db.execute("UPDATE giveaways SET ended=1 WHERE id=?", (g["id"],)); store.db.commit()
             log_event("system", f"Giveaway #{g['id']} could not be drawn: {exc}", None, brand())
     await run_timers()
+    try:
+        await raid_tick()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[raid mode] {exc!r}")
 
 
 async def run_schedules(now=None):

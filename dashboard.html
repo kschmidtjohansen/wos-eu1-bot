@@ -407,6 +407,7 @@
 .w-qbtn.w-known{filter:grayscale(1);opacity:.55}
 .w-qbtn.w-known[aria-pressed="true"]{filter:none;opacity:1;border-color:rgba(125,227,244,.6);background:rgba(125,227,244,.12)}
 .w-knowntag{color:#7de3f4;font-weight:600}
+.w-devtag{font-weight:600;color:var(--w-muted)}.w-devtag.need_info{color:var(--w-warn)}.w-devtag.fixed{color:var(--w-ok)}
 .w-knownbar{display:flex;gap:12px;align-items:center;margin:4px 0 14px;padding:12px 14px;border:1px solid var(--w-border);border-radius:14px;cursor:pointer;background:var(--w-surface-2)}
 .w-knownbar.on{border-color:rgba(125,227,244,.5);background:rgba(125,227,244,.08)}
 .w-report{margin:12px 0 6px;padding:14px 16px;border-radius:14px;background:var(--w-surface-2);border:1px solid var(--w-border);line-height:1.55;overflow-wrap:anywhere}
@@ -426,6 +427,30 @@
 .w-fold[open] > summary::before{transform:rotate(90deg)}
 .w-fold[open] > summary{margin-bottom:10px}
 .w-more summary{cursor:pointer;color:var(--w-muted);font-size:13.5px}
+.w-alertrow{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:14px 18px;margin-bottom:12px;border-left:3px solid var(--w-accent)}
+.w-alertrow.bad{border-left-color:var(--w-bad,#ff6b7a);background:linear-gradient(90deg,rgba(255,107,122,.10),transparent 70%)}
+.w-alertrow.warn{border-left-color:var(--w-warn);background:linear-gradient(90deg,var(--w-warn-soft),transparent 70%)}
+.w-alertrow>.w-ic{width:22px;height:22px;flex:none}
+.w-alertrow>div{flex:1 1 260px;min-width:0}
+.w-alertrow>div b{display:block}
+.w-alertrow>div span{color:var(--w-muted);font-size:13.5px}
+.w-qcard{padding:14px 0;border-top:1px solid var(--w-border)}
+.w-qcard:first-of-type{border-top:0;padding-top:4px}
+.w-qhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.w-qhead .w-linkbtn{margin-left:auto}
+.w-ctx{margin:8px 0 0;padding-left:12px;border-left:2px solid var(--w-border);color:var(--w-muted);font-size:13px}
+.w-ctx p{margin:2px 0;overflow-wrap:anywhere}
+.w-flagged{margin:8px 0 0;padding:10px 12px;border-radius:10px;background:rgba(255,107,122,.08);border:1px solid rgba(255,107,122,.25);white-space:pre-wrap;overflow-wrap:anywhere}
+.w-flagged.calm{background:var(--w-surface-2);border-color:var(--w-border)}
+.w-caseline{display:flex;gap:10px;align-items:baseline;font-size:13px;padding:4px 0}
+.w-caseline span:nth-child(2){flex:1;min-width:0;overflow-wrap:anywhere}
+.w-caseline time{color:var(--w-muted);white-space:nowrap}
+.w-devline{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:8px 12px;border-radius:10px;margin:2px 0 8px;background:var(--w-surface-2);border:1px solid var(--w-border);font-size:13.5px}
+.w-devline.need_info{border-color:var(--w-warn);background:var(--w-warn-soft)}
+.w-devline span{flex:1 1 200px;overflow-wrap:anywhere}
+.w-devline time{color:var(--w-muted);font-size:12.5px}
+.w-linkbox{display:flex;gap:8px}
+.w-linkbox .w-input{flex:1;min-width:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
 .w-pipe .w-pipebar{display:flex;gap:3px;height:10px;border-radius:99px;overflow:hidden;margin:4px 0 12px}
 .w-pipebar i{display:block;min-width:4px}
 .p-new{background:#7de3f4}.p-adm{background:#a08cff}.p-inv{background:#ffc15e}.p-ok{background:#5be0a8}.p-bad{background:#6b7790}
@@ -788,7 +813,7 @@ const S = {
 };
 const NAV = [
   ['overview', 'Overview', 'grid', 'Daily work'], ['bugs', 'Bugs', 'bug', 'Daily work'], ['suggestions', 'Suggestions', 'bulb', 'Daily work'],
-  ['codes', 'Gift codes', 'gift', 'Daily work'], ['players', 'Players', 'users', 'Daily work'], ['warnings', 'Warnings', 'alert', 'Daily work'], ['mod', 'Moderation', 'shield', 'Daily work'],
+  ['codes', 'Gift codes', 'gift', 'Daily work'], ['players', 'Players', 'users', 'Daily work'], ['queue', 'Reports & appeals', 'shield', 'Daily work'], ['warnings', 'Warnings', 'alert', 'Daily work'], ['mod', 'Moderation', 'shield', 'Daily work'],
   ['welcome', 'Welcome', 'userplus', 'Community'], ['access', 'Access & languages', 'globe', 'Community'], ['rolemenus', 'Role menus', 'tag', 'Community'],
   ['giveaways', 'Giveaways', 'party', 'Community'], ['timers', 'Timed messages', 'clock', 'Community'], ['invites', 'Invites', 'userplus', 'Community'],
   ['info', 'Info channel', 'list', 'Posts'], ['patch', 'Patch notes & posts', 'wrench', 'Posts'],
@@ -801,11 +826,11 @@ const NAV = [
 const HUBS = [
   ['overview', 'Overview', 'grid', ['overview']], ['bugs', 'Bugs', 'bug', ['bugs']], ['suggestions', 'Suggestions', 'bulb', ['suggestions']],
   ['codes', 'Gift codes', 'gift', ['codes']], ['players', 'Players', 'users', ['players']], '|',
-  ['moderation', 'Moderation', 'shield', ['warnings', 'mod']], ['members', 'Members', 'userplus', ['welcome', 'access', 'rolemenus', 'invites']],
+  ['moderation', 'Moderation', 'shield', ['queue', 'warnings', 'mod']], ['members', 'Members', 'userplus', ['welcome', 'access', 'rolemenus', 'invites']],
   ['events', 'Events', 'party', ['giveaways', 'timers']], ['posts', 'Posts', 'list', ['info', 'patch']], '|',
   ['stats', 'Stats', 'chart', ['insights', 'moderators', 'status', 'log']], ['setup', 'Settings', 'wrench', ['panel', 'channels', 'translations', 'bot', 'data']]
 ];
-const HUB_LABEL = { warnings: 'Warnings', mod: 'Auto-mod & replies', welcome: 'Welcome', access: 'Access & languages', rolemenus: 'Role menus', invites: 'Invites',
+const HUB_LABEL = { queue: 'Reports & appeals', warnings: 'Warnings', mod: 'Auto-mod & replies', welcome: 'Welcome', access: 'Access & languages', rolemenus: 'Role menus', invites: 'Invites',
   giveaways: 'Giveaways', timers: 'Timed messages', info: 'Info channel', patch: 'Patch notes & posts', insights: 'Insights', moderators: 'Moderators',
   status: 'Server status', log: 'Activity log', panel: 'Bug bot', channels: 'Channels', translations: 'Translations', bot: 'Bot profile', data: 'Data & backups' };
 const allowed = t => !isMod() || MOD_TABS.includes(t);
@@ -820,10 +845,10 @@ function hubTabs() {
 function sideNav(o) {
   const list = HUBS.filter(h => h === '|' || hubKids(h).length);
   return list.map((h, i) => h === '|' ? (i && list[i - 1] !== '|' && i < list.length - 1 ? html`<hr class="w-navsep" role="presentation">` : '')
-    : html`<button role="tab" data-act="hub" data-hub="${h[0]}" ${h[3].length === 1 ? html`data-tab="${h[3][0]}"` : ''} aria-selected="${String(hubOf(S.tab)[0] === h[0])}">${icon(h[2])}<span>${hubName(h)}</span>${h[0] === 'bugs' && o.stats.bugs.awaiting ? html`<em class="w-count">${o.stats.bugs.awaiting}</em>` : ''}</button>`);
+    : html`<button role="tab" data-act="hub" data-hub="${h[0]}" ${h[3].length === 1 ? html`data-tab="${h[3][0]}"` : ''} aria-selected="${String(hubOf(S.tab)[0] === h[0])}">${icon(h[2])}<span>${hubName(h)}</span>${h[0] === 'bugs' && o.stats.bugs.awaiting ? html`<em class="w-count">${o.stats.bugs.awaiting}</em>` : ''}${h[0] === 'moderation' && S.queue && (S.queue.reports + S.queue.appeals) ? html`<em class="w-count">${S.queue.reports + S.queue.appeals}</em>` : ''}</button>`);
 }
 window.wosdGo = t => { S.tab = t; renderTab(); };
-const MOD_TABS = ['overview', 'bugs', 'insights', 'moderators', 'status'];   // moderator view: bugs + stats, nothing that changes the bot
+const MOD_TABS = ['overview', 'bugs', 'queue', 'insights', 'moderators', 'status'];   // moderator view: bugs + stats, nothing that changes the bot
 const isMod = () => !!(S.user && S.user.role !== 'admin');
 const CHANNELS = [
   ['report_channel_id', 'Bug report channel', 'Where the panel message lives and where players open their private tickets.'],
@@ -834,6 +859,7 @@ const CHANNELS = [
   ['backup_channel_id', 'Backup channel', 'Optional. A copy of the database is posted here every day. It contains player data – make it admin-only.'],
   ['digest_channel_id', 'Weekly digest channel', 'Optional. Where the Monday summary is posted. Empty = the admin channel.'],
   ['devlist_channel_id', 'Developers\u2019 list channel', 'Optional. Every day the bot posts an Excel file here with the bugs passed to the admins that are still open (no duplicates) – ready to send to the developers. The bot needs “Attach Files”.'],
+  ['alerts_channel_id', 'Staff alerts channel', 'Optional. Reported messages, appeals, raid mode and spike alerts are posted here with buttons. Empty = the mod channel (spike alerts: the admin channel). Keep it staff-only.'],
   ['giftcodes_channel_id', 'Gift codes channel', 'Optional. New gift codes are announced here. Give the bot “Mention @everyone” if you ping @everyone or @here.'],
   ['log_channel_id', 'Bot log channel', 'Optional, keep it staff-only. Everything the bot does is posted here too – who did what, and when (shown in each reader’s own time). Choose what to post on the Channels page below the list.'],
   ['invites_channel_id', 'Invite log channel', 'Optional. Posts “Mira joined – invited by Jonas (12 invites)” and who left. Works like an invite-tracker bot, so you can remove that one.'],
@@ -847,7 +873,7 @@ const FEATURE_KEYS = ['warn_timeout_at', 'warn_timeout_minutes', 'warn_ban_at', 
   'reminders_enabled', 'reminder_mod_hours', 'reminder_admin_hours', 'reminder_critical_hours',
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
-  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'devlist_enabled', 'devlist_hour', 'devlist_files', 'update_notice_enabled',
+  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'devlist_enabled', 'devlist_hour', 'devlist_files', 'spike_enabled', 'spike_count', 'spike_minutes', 'msg_reports_enabled', 'appeals_enabled', 'raid_enabled', 'raid_joins', 'raid_minutes', 'raid_auto_lift_minutes', 'update_notice_enabled',
   'report_style', 'info_remind_hours', 'info_close_hours', 'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'giftcodes_delete_expired', 'giftcodes_list', 'giftcodes_site_url', 'drive_enabled', 'drive_every_days', 'drive_keep'];
 const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'];
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
@@ -986,6 +1012,7 @@ function viewOverview() {
   const waiting = todo.reduce((a, t) => a + t[0], 0);
   return html`
     <div class="w-pagehead"><h2>${isMod() ? 'Bug dashboard' : 'Overview'}</h2><p>${isMod() ? 'Bug reports waiting for you, and how the team is doing.' : 'What needs a person right now, and how the server is doing.'}</p></div>
+    ${alertStrip()}
     <div class="w-bento">
       <section class="w-card w-hero">${waiting ? html`<i class="w-beam" aria-hidden="true"></i>` : ''}
         <h3>${waiting ? 'Needs you now' : 'All clear'}</h3>
@@ -1036,7 +1063,7 @@ function previewHtml() {
     <div class="w-dp-reacts"><span class="w-dp-btn pri">🐛 Report a bug</span><span class="w-dp-btn">💡 Suggest an idea</span></div>
   </div>`;
 }
-const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['dups', 'Duplicates'], ['staff', 'Developers & digest']];
+const BUGBOT_SUBS = [['panel', 'Panel message'], ['reports', 'Bug reports'], ['suggestions', 'Suggestions'], ['website', 'Website'], ['dups', 'Duplicates'], ['devs', 'Developers'], ['staff', 'Alerts & digest']];
 // Settings → Bug bot → Duplicates: which languages players report in.
 function langCard() {
   const L = S.langs;
@@ -1054,7 +1081,8 @@ function viewPanel() {
   if (sub === 'reports') return html`${head}${fsec('bugReports', 'modMessages')}${saveBar()}`;
   if (sub === 'suggestions') return html`${head}${fsec('suggestions')}${saveBar()}`;
   if (sub === 'website') return html`${head}${fsec('website')}${saveBar()}`;
-  if (sub === 'staff') return html`${head}${fsec('devlist', 'reminders', 'digest')}${saveBar()}`;
+  if (sub === 'devs') return html`${head}${devPageCard()}${fsec('devlist')}${saveBar()}`;
+  if (sub === 'staff') return html`${head}${fsec('spike', 'reminders', 'digest')}${saveBar()}`;
   if (sub === 'dups') return html`${head}${fsec('duplicates')}${langCard()}${saveBar()}`;
   return html`${head}
     <div class="w-grid2">
@@ -1178,6 +1206,23 @@ const FSEC = {
       ${numberRow('reminder_mod_hours', 'Moderators: remind after', 'New bugs and suggestions nobody has handled yet.', 1, 720, 'hours')}
       ${numberRow('reminder_admin_hours', 'Admins: remind after', 'Bugs passed on that are still not fixed or rejected.', 1, 720, 'hours')}
       ${numberRow('reminder_critical_hours', 'Critical bugs: remind after', '🚨 Critical bugs are reminded much sooner.', 1, 72, 'hours')}
+    </section>`,
+  spike: () => html`
+    <section class="w-card w-pad"><div class="w-group-title">Spike alert</div>
+      ${toggleRow('spike_enabled', 'Alert the admins when reports pile up', 'Many reports about the same area in a short time usually means something broke. The admins get a ping with a button that posts the bug as a known issue – players then see it before they report. One alert per area every 3 hours.')}
+      ${numberRow('spike_count', 'Reports', 'How many reports about one area…', 3, 50, 'reports')}
+      ${numberRow('spike_minutes', 'Within', '…within this many minutes.', 10, 720, 'minutes')}
+    </section>`,
+  staffq: () => html`
+    <section class="w-card w-pad"><div class="w-group-title">Reported messages & appeals</div>
+      ${toggleRow('msg_reports_enabled', 'Players can report chat messages', 'Right-click (or long-press) a message → Apps → “Report to moderators”. It lands here and in the staff alerts channel with the messages before it and the writer’s warnings.')}
+      ${toggleRow('appeals_enabled', 'Players can appeal', 'A timed-out or banned player logs in with Discord on the website’s Appeal page and can send one appeal per timeout or ban. They get the link by DM when they are punished (needs the website address under Gift codes). Moderators decide on timeouts, admins on bans.')}
+    </section>
+    <section class="w-card w-pad"><div class="w-group-title">Raid mode</div>
+      ${toggleRow('raid_enabled', 'Switch on by itself', 'When many accounts join within minutes, new members are held at the device question, nobody is welcomed and staff get a ping – until someone lifts it.')}
+      ${numberRow('raid_joins', 'Joins', 'This many new members…', 3, 200, 'joins')}
+      ${numberRow('raid_minutes', 'Within', '…within this many minutes.', 1, 60, 'minutes')}
+      ${numberRow('raid_auto_lift_minutes', 'Lift by itself after', '0 = stays on until a person lifts it.', 0, 1440, 'minutes')}
     </section>`,
   devlist: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Daily list for the developers</div>
@@ -1449,7 +1494,7 @@ function bugList() {
   if (!B.items.length) return html`<div class="w-empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`;
   return html`${B.items.map(b => html`<div class="w-bugrow${B.selecting ? ' sel' : ''}" role="button" tabindex="0" data-act="${B.selecting ? 'bugPick' : 'bugOpen'}" data-id="${b.id}" data-sev="${b.severity || ''}"${B.selecting ? html` aria-pressed="${String(B.sel.includes(b.id))}"` : ''}>
     <b>${B.selecting ? (B.sel.includes(b.id) ? '☑' : '☐') : ''} #${b.id}</b>
-    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? (b.auto_closed ? ' · closed automatically as duplicate of #' : ' · duplicate of #') + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}${b.public ? html` · <span class="w-knowntag">📌 Known issue</span>` : ''}</div>
+    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? (b.auto_closed ? ' · closed automatically as duplicate of #' : ' · duplicate of #') + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}${b.public ? html` · <span class="w-knowntag">📌 Known issue</span>` : ''}${b.dev && b.dev.state ? html` · <span class="w-devtag ${b.dev.state}">${{ working: '🛠️ Developers working on it', fixed: '✔️ Fixed by developers', need_info: '💬 Developers need info' }[b.dev.state]}</span>` : ''}</div>
       ${dupHint(b) ? html`<div class="w-duphint">🔁 Looks like <b>#${b.dup_suggest}</b> ${b.dup_title ? '“' + b.dup_title.slice(0, 60) + '”' : ''} · ${b.dup_score}% match
         ${B.selecting ? '' : html`<button class="w-btn small" data-act="dupMerge" data-id="${b.id}" data-orig="${b.dup_suggest}">Merge into #${b.dup_suggest}</button>`}</div>` : ''}</div>
     ${bugBadge(b.status)}${B.selecting ? html`<span></span>` : quickBtns(b)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}`;
@@ -1572,6 +1617,7 @@ function bugModal() {
     <div class="w-bugmeta">${bugBadge(b.status)}${b.public ? html`<span class="w-knowntag">📌 Known issue</span>` : ''}${b.votes ? html`<span class="w-badge info" title="Players who picked “I have this too”">👥 ${b.votes} affected</span>` : ''}
       <span>${who} · ${ago(b.created_at)}</span>${b.area ? html`<span>${b.area}</span>` : ''}${b.version ? html`<span>${b.version}</span>` : ''}${b.severity ? html`<span>${SEV[b.severity]}</span>` : ''}
       ${(b.chief_name || b.uid) ? html`<span>Chief <b>${b.chief_name || '–'}</b> · UID ${b.uid || '–'}</span>` : ''}</div>
+    ${devLine(b)}
     ${reportText(b.text)}
     ${b.files && b.files.length ? html`<div class="w-files" id="m-files">${b.files.map(f => html`<button class="w-file" data-act="openFile" data-fid="${f.id}" data-kind="${f.kind}" title="${f.name}">${f.kind === 'video' ? icon('play') : html`<img alt="${f.name}" data-fid="${f.id}">`}</button>`)}</div>` : ''}
     ${b.extra ? html`<div class="w-pre" style="margin-top:8px">${b.extra}</div>` : ''}
@@ -1828,6 +1874,91 @@ const roleOptions = (sel, onlyAssignable) => html`<option value="">— None —<
 const chanSelect = (id, sel) => html`<select class="w-select" id="${id}">${channelOptions(sel ? String(sel) : '')}</select>`;
 const CASE_BADGE = { warn: ['warn', '⚠️ Warning'], timeout: ['info', '🔇 Timeout'], ban: ['bad', '⛔ Ban'], kick: ['bad', '👢 Kick'], pardon: ['ok', '🕊️ Pardon'], unban: ['ok', '♻️ Unban'] };
 
+/* ------------------------------------------------ staff queue: reported messages, appeals, raid mode */
+const DEV_LABEL = { working: '🛠️ Developers are working on it', fixed: '✔️ Fixed by the developers', need_info: '💬 Developers need more info' };
+function devLine(b) {
+  const d = b.dev; if (!d || !d.state) return '';
+  return html`<div class="w-devline ${d.state}"><b>${DEV_LABEL[d.state]}${d.state === 'fixed' && d.version ? ' in ' + d.version : ''}</b>${d.note ? html`<span>“${d.note}”</span>` : ''}<time title="${full(d.ts)}">${ago(d.ts)}</time></div>`;
+}
+function alertStrip() {
+  const Q = S.queue; if (!Q) return '';
+  const out = [];
+  if (Q.raid.active) out.push(html`<section class="w-card w-alertrow bad">${icon('shield')}<div><b>Raid mode is on</b>
+    <span>Since ${ago(Q.raid.since)} · ${Q.raid.joined} joined meanwhile. New members ${Q.raid.gate ? 'can’t get past the device question' : 'aren’t welcomed'} until someone lifts it.</span></div>
+    <button class="w-btn primary" data-act="raidSet" data-on="0">Lift raid mode</button></section>`);
+  (Q.spikes || []).forEach(s => out.push(html`<section class="w-card w-alertrow warn">${icon('alert')}<div><b>${s.count} reports about “${s.area || 'no area'}” in a short time</b>
+    <span>${s.bug ? (s.known ? 'Bug #' + s.bug + ' is on the known issues list.' : 'Post bug #' + s.bug + ' as a known issue so players see it before they report.') : 'Something may be broken.'}</span></div>
+    ${s.bug && !s.known ? html`<button class="w-btn primary" data-act="spikeKnown" data-id="${s.bug}">Post as known issue</button>` : ''}
+    ${s.bug ? html`<button class="w-btn" data-act="bugOpen" data-id="${s.bug}">Open #${s.bug}</button>` : ''}<button class="w-btn" data-act="spikeDismiss" data-key="${s.key}">Dismiss</button></section>`));
+  if (Q.reports || Q.appeals) out.push(html`<section class="w-card w-alertrow">${icon('shield')}<div><b>${[Q.reports ? Q.reports + ' reported message' + (Q.reports === 1 ? '' : 's') : '', Q.appeals ? Q.appeals + ' appeal' + (Q.appeals === 1 ? '' : 's') : ''].filter(Boolean).join(' and ')} waiting</b>
+    <span>Players flagged a chat message, or asked for a timeout or ban to be looked at again.</span></div><button class="w-btn primary" data-act="nav" data-tab="queue">Open the queue</button></section>`);
+  return out;
+}
+function caseMini(x) {
+  return x.cases && x.cases.length ? html`<details class="w-fold"><summary><b>History</b><span class="w-hint">${x.warnings} active warning${x.warnings === 1 ? '' : 's'} · ${x.cases.length} case${x.cases.length === 1 ? '' : 's'}</span></summary>
+    ${x.cases.map(c => html`<div class="w-caseline"><span class="w-badge ${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][0] : 'todo'}">${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][1] : c.kind}</span><span>${c.reason || '–'}</span><time title="${full(c.ts)}">${ago(c.ts)}</time></div>`)}</details>`
+    : html`<p class="w-hint" style="margin:6px 0 0">No earlier warnings or cases.</p>`;
+}
+function reportCard(r) {
+  const open = r.status === 'open';
+  return html`<article class="w-qcard" data-rid="${r.id}">
+    <div class="w-qhead"><b>${r.target}</b><span class="w-hint">in #${r.channel} · ${ago(r.ts)}</span>${r.warnings ? html`<span class="w-badge warn">⚠️ ${r.warnings} active</span>` : ''}
+      <a class="w-linkbtn" href="${r.url}" target="_blank" rel="noopener">Open in Discord ↗</a></div>
+    ${r.context.length ? html`<div class="w-ctx">${r.context.map(c => html`<p><b>${c.name}</b> ${c.text || '…'}</p>`)}</div>` : ''}
+    <blockquote class="w-flagged">${r.content || '(no text)'}${r.attachments.length ? html`<span class="w-hint" style="display:block">${r.attachments.length} attachment${r.attachments.length === 1 ? '' : 's'} – open in Discord to see</span>` : ''}</blockquote>
+    <p class="w-hint" style="margin:6px 0">Reported by ${r.reporters.map(p => p.name + (p.reason ? ' (“' + p.reason + '”)' : '')).join(', ')}</p>
+    ${caseMini(r)}
+    ${open ? html`<div class="w-decide"><button class="w-btn" data-act="repAct" data-a="delete" data-id="${r.id}">🗑️ Delete message</button>
+        <button class="w-btn danger" data-act="repAct" data-a="warn" data-id="${r.id}" ${r.on_server ? '' : 'disabled'}>⚠️ Delete + warn</button>
+        <button class="w-btn danger" data-act="repAct" data-a="timeout" data-id="${r.id}" ${r.on_server ? '' : 'disabled'}>🔇 Delete + timeout</button>
+        <select class="w-select" id="rep-min-${r.id}" aria-label="Timeout length" style="width:auto"><option value="60">1 hour</option><option value="720">12 hours</option><option value="1440">1 day</option><option value="10080">1 week</option></select>
+        <button class="w-btn" data-act="repAct" data-a="dismiss" data-id="${r.id}">✅ Nothing wrong</button></div>
+      <input class="w-input" id="rep-why-${r.id}" maxlength="300" placeholder="Reason the member sees (optional) – default: “Reported message in #${r.channel}”" style="margin-top:8px" aria-label="Reason">`
+      : html`<p class="w-sub" style="margin-top:8px"><b>${r.action}</b> – ${r.handled_by}, ${ago(r.handled_ts)}</p>`}
+  </article>`;
+}
+function appealCard(a) {
+  const open = a.status === 'open', mine = a.kind !== 'ban' || !isMod();
+  return html`<article class="w-qcard">
+    <div class="w-qhead"><b>${a.user}</b><span class="w-badge ${a.kind === 'ban' ? 'bad' : 'info'}">${a.kind === 'ban' ? '⛔ Ban' : '🔇 Timeout'}</span><span class="w-hint">${ago(a.ts)}</span>
+      ${open ? '' : html`<span class="w-badge ${a.status === 'accepted' ? 'ok' : 'todo'}">${a.status === 'accepted' ? 'Accepted' : 'Declined'}</span>`}</div>
+    <p class="w-hint" style="margin:6px 0">Punished for: ${a.case_reason || 'no reason recorded'}${a.case_ts ? ' · ' + ago(a.case_ts) : ''}</p>
+    <blockquote class="w-flagged calm">${a.text}</blockquote>
+    ${caseMini(a)}
+    ${open ? (mine ? html`<input class="w-input" id="ap-note-${a.id}" maxlength="500" placeholder="Note to the player (optional)" style="margin-top:10px" aria-label="Note to the player">
+        <div class="w-decide"><button class="w-btn primary" data-act="apDecide" data-ok="1" data-id="${a.id}">✅ Accept – remove the ${a.kind}</button><button class="w-btn" data-act="apDecide" data-ok="0" data-id="${a.id}">Decline</button></div>`
+        : html`<p class="w-hint" style="margin-top:8px">Only admins can decide on a ban appeal.</p>`)
+      : html`<p class="w-sub" style="margin-top:8px">${a.handled_by}, ${ago(a.handled_ts)}${a.note ? ' – “' + a.note + '”' : ''}</p>`}
+  </article>`;
+}
+function viewQueue() {
+  const Q = S.queue, R = S.reports, A = S.appeals;
+  if (!Q || !R || !A) return html`<div class="w-pagehead"><h2>Reports & appeals</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  const done = S.queueDone;
+  return html`
+    <div class="w-pagehead"><h2>Reports & appeals</h2><p>Chat messages players flagged with “Report to moderators”, appeals against timeouts and bans, and raid mode.</p></div>
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Raid mode</h3><span class="w-badge ${Q.raid.active ? 'bad' : 'ok'}">${Q.raid.active ? 'On' : 'Off'}</span></div>
+      <p class="w-sub">${Q.raid.active ? 'On since ' + ago(Q.raid.since) + (Q.raid.by ? ' (' + Q.raid.by + ')' : '') + ' · ' + Q.raid.joined + ' joined meanwhile. They wait at the door until you lift it.'
+        : 'Switches on by itself when many accounts join within minutes: new members ' + (Q.raid.gate ? 'can’t get past the device question' : 'aren’t welcomed') + ' and staff get a ping.'}</p>
+      <div class="w-actions"><button class="w-btn ${Q.raid.active ? 'primary' : 'danger'}" data-act="raidSet" data-on="${Q.raid.active ? 0 : 1}">${Q.raid.active ? 'Lift raid mode' : 'Switch on now'}</button></div></section>
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Reported messages${!done && R.items.length ? html` <em class="w-count">${R.items.length}</em>` : ''}</h3>
+        <button class="w-btn small" data-act="queueDone">${done ? 'Show waiting' : 'Show handled'}</button></div>
+      ${R.items.length ? R.items.map(reportCard) : html`<div class="w-empty">${done ? 'Nothing handled yet.' : 'No reported messages are waiting. Players right-click a message → Apps → “Report to moderators”.'}</div>`}</section>
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Appeals${!done && A.items.length ? html` <em class="w-count">${A.items.length}</em>` : ''}</h3></div>
+      ${A.items.length ? A.items.map(appealCard) : html`<div class="w-empty">${done ? 'No appeals decided yet.' : 'No appeals are waiting. A timed-out or banned player can send one from the website’s Appeal page.'}</div>`}</section>`;
+}
+// Settings → Bug bot → Developers: the live page for the developers. The secret part of the link is only shown when it is made.
+function devPageCard() {
+  const D = S.devpage; if (!D) return '';
+  return html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Developers’ page</h3><span class="w-badge ${D.active ? 'ok' : 'todo'}">${D.active ? 'Link active' : 'Off'}</span></div>
+    <p class="w-hint" style="margin:0 0 10px">A page for the developers with every bug passed to the admins – no login, just a secret link. They can answer each bug: <b>Working on it</b> (the bug becomes “Being investigated”),
+      <b>Fixed in version…</b> (the bug is marked fixed and the player is told) or <b>Need more info</b> (their question is posted in the admin channel and shown on the bug).</p>
+    ${S.devLink ? html`<div class="w-linkbox"><input class="w-input" id="dev-link" readonly value="${S.devLink}" aria-label="Link to the developers’ page"><button class="w-btn primary" data-act="devCopy">Copy link</button></div>
+      <p class="w-hint" style="margin:6px 0 0">Copy it now – it is only shown this once. Anyone with the link can answer bugs, so send it only to the developers.</p>`
+      : D.active ? html`<p class="w-sub">Made ${ago(D.created)}. The link itself isn’t stored readable – make a new one if you lost it (the old one stops working).</p>` : ''}
+    <div class="w-actions" style="margin-top:10px"><button class="w-btn ${D.active ? '' : 'primary'}" data-act="devLinkNew">${D.active ? 'Make a new link' : 'Make the link'}</button>
+      ${D.active ? html`<button class="w-btn danger" data-act="devLinkOff">Switch off</button>` : ''}</div></section>`;
+}
 function viewWarnings() {
   const C = S.cases;
   if (!C) return html`<div class="w-pagehead"><h2>Warnings</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
@@ -2529,7 +2660,7 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { access: viewAccess, warnings: withSettings(viewWarnings, ['warnings'], 'Escalation settings'), rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: withSettings(viewInvites, ['invites']), players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+const VIEWS = { queue: withSettings(viewQueue, ['staffq'], 'Settings'), access: viewAccess, warnings: withSettings(viewWarnings, ['warnings'], 'Escalation settings'), rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: withSettings(viewInvites, ['invites']), players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
   features: viewPanel, welcome: viewWelcome, patch: viewPatch, mod: withSettings(viewMod, ['automod', 'guard'], 'Auto-mod & scam guard'), bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
@@ -2549,7 +2680,8 @@ const LOADERS = {
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
-  panel: async () => { S.langs = isMod() ? null : await call('GET', '/api/bugs/languages').catch(() => null); },
+  queue: async () => { const st = S.queueDone ? 'done' : 'open'; const [r, a] = await Promise.all([call('GET', '/api/reports?status=' + st), call('GET', '/api/appeals?status=' + st)]); S.reports = r; S.appeals = a; },
+  panel: async () => { if (isMod()) { S.langs = null; return; } const [l, d] = await Promise.all([call('GET', '/api/bugs/languages').catch(() => null), call('GET', '/api/devpage').catch(() => null)]); S.langs = l; S.devpage = d; },
   insights: async () => { S.insights = await call('GET', '/api/insights'); },
   overview: async () => { if (isMod()) { const [i, m] = await Promise.all([call('GET', '/api/insights'), call('GET', '/api/mybugs')]); S.insights = i; S.mybugs = m; } },
   patch: async () => { const [pn, pu] = await Promise.all([call('GET', '/api/patchnotes'), isMod() ? null : call('GET', '/api/push').catch(() => null)]); S.patch = pn; S.push = pu; },
@@ -2597,9 +2729,9 @@ function editing() {
     || [...m.querySelectorAll('select:not([multiple])')].some(e => { const d = [...e.options].findIndex(o => o.defaultSelected); return e.selectedIndex !== (d < 0 ? 0 : d); });
 }
 async function syncCore() {
-  const [overview, health, st, ch] = await Promise.all([call('GET', '/api/overview'), call('GET', '/api/health'),
-    call('GET', '/api/settings'), call('GET', '/api/channels')]);
-  S.overview = overview; S.health = health; S.channels = ch.channels;
+  const [overview, health, st, ch, q] = await Promise.all([call('GET', '/api/overview'), call('GET', '/api/health'),
+    call('GET', '/api/settings'), call('GET', '/api/channels'), call('GET', '/api/queue').then(q => q && q.raid ? q : null, () => null)]);
+  S.overview = overview; S.health = health; S.channels = ch.channels; S.queue = q;
   if (st) {   // keep unsaved changes, take everything else from the server
     const fresh = st.settings;
     Object.keys(fresh).forEach(k => { if (S.draft[k] === S.settings[k]) S.draft[k] = fresh[k]; });
@@ -2628,6 +2760,8 @@ async function syncTab(manual, opened) {
   if (S.tab === 'bot' && t === 'bot') loadStickerImgs();
 }
 function refreshNavCount() {
+  const mq = S.queue ? S.queue.reports + S.queue.appeals : 0, mb = $('.w-nav [data-hub="moderation"]');
+  if (mb) { let e2 = mb.querySelector('.w-count'); if (!mq) { if (e2) e2.remove(); } else { if (!e2) { e2 = document.createElement('em'); e2.className = 'w-count'; mb.appendChild(e2); } e2.textContent = mq; } }
   const n = S.overview && S.overview.stats.bugs.awaiting, b = $('.w-nav [data-hub="bugs"]'); if (!b) return;
   let em = b.querySelector('.w-count'); if (!n) { if (em) em.remove(); return; }
   if (!em) { em = document.createElement('em'); em.className = 'w-count'; b.appendChild(em); } em.textContent = n;
@@ -2743,10 +2877,10 @@ function renderLogin(error) {
 
 /* ============================================================ data flow */
 async function loadAll() {
-  const [overview, st, ch, health, bot] = await Promise.all([
+  const [overview, st, ch, health, bot, q] = await Promise.all([
     api('GET', '/api/overview'), api('GET', '/api/settings'), api('GET', '/api/channels'),
-    api('GET', '/api/health'), api('GET', '/api/bot')]);
-  S.overview = overview; S.settings = st.settings; S.draft = Object.assign({}, st.settings);
+    api('GET', '/api/health'), api('GET', '/api/bot'), api('GET', '/api/queue').then(q => q && q.raid ? q : null, () => null)]);
+  S.queue = q; S.overview = overview; S.settings = st.settings; S.draft = Object.assign({}, st.settings);
   S.panelInfo = st.panel; S.channels = ch.channels; S.health = health; S.bot = bot.profile;
   S.panelDraft = { title: st.settings.panel_title, text: st.settings.panel_text, channel_id: st.settings.report_channel_id };
   S.botDraft = { username: S.bot.username, nickname: S.bot.nickname || '', status: S.bot.status,
@@ -2766,8 +2900,8 @@ function logout(msg) {
   clearInterval(S.timer); S.key = ''; S.demo = false; S.tab = 'overview'; renderLogin(msg);
 }
 async function refreshLive() {
-  const [overview, health] = await Promise.all([call('GET', '/api/overview'), call('GET', '/api/health')]);
-  S.overview = overview; S.health = health;
+  const [overview, health, q] = await Promise.all([call('GET', '/api/overview'), call('GET', '/api/health'), call('GET', '/api/queue').then(q => q && q.raid ? q : null, () => null)]);
+  S.overview = overview; S.health = health; S.queue = q;
 }
 function startPolling() {
   clearInterval(S.timer); clearInterval(S.liveTimer);
@@ -3361,6 +3495,27 @@ root.addEventListener('click', async e => {
       await call('DELETE', '/api/blocklist/' + el.dataset.id);
       S.blocks = (await call('GET', '/api/blocklist')).items; toast('Player unblocked.'); renderMain();
     }
+    else if (act === 'raidSet') { busy(el, true, '…');
+      try { const r = await call('POST', '/api/raid', { active: el.dataset.on === '1' }); if (S.queue) S.queue.raid = r; toast(r.active ? 'Raid mode is on.' : 'Raid mode lifted.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'spikeKnown' || act === 'spikeDismiss') { busy(el, true, '…');
+      try { const r = await call('POST', '/api/spikes', act === 'spikeKnown' ? { known: +el.dataset.id } : { dismiss: el.dataset.key }); if (S.queue) S.queue.spikes = r.spikes; toast(act === 'spikeKnown' ? 'Posted as a known issue.' : 'Dismissed.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'queueDone') { S.queueDone = !S.queueDone; S.reports = S.appeals = null; renderMain(); loadTab('queue'); }
+    else if (act === 'repAct') { const id = el.dataset.id, a = el.dataset.a, why = document.getElementById('rep-why-' + id), min = document.getElementById('rep-min-' + id);
+      busy(el, true, '…');
+      try { const r = await call('POST', '/api/reports/' + id, { action: a, reason: why ? why.value.trim() : '', minutes: min ? +min.value : 60 });
+        toast(r.action || 'Done.'); S.reports.items = S.reports.items.filter(x => x.id !== r.id); if (S.queue) S.queue.reports = Math.max(0, S.queue.reports - 1); renderMain(); refreshNavCount(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'apDecide') { const id = el.dataset.id, note = document.getElementById('ap-note-' + id); busy(el, true, '…');
+      try { const r = await call('POST', '/api/appeals/' + id, { accept: el.dataset.ok === '1', note: note ? note.value.trim() : '' });
+        toast('Appeal ' + r.status + '.'); S.appeals.items = S.appeals.items.filter(x => x.id !== r.id); if (S.queue) S.queue.appeals = Math.max(0, S.queue.appeals - 1); renderMain(); refreshNavCount(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'devLinkNew') { busy(el, true, '…');
+      try { const r = await call('POST', '/api/devpage/link'); S.devpage = { active: true, created: r.created };
+        const base = (S.settings.giftcodes_site_url || '').trim() || new URL('../bugs/', location.href).href;
+        S.devLink = base.replace(/\/?$/, '/') + 'dev.html#k=' + r.token; renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'devLinkOff') { busy(el, true, '…');
+      try { S.devpage = await call('DELETE', '/api/devpage/link'); S.devLink = null; toast('The developers’ page is off – the old link no longer works.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'devCopy') { const i = document.getElementById('dev-link'); try { await navigator.clipboard.writeText(i.value); toast('Link copied.'); } catch (e) { i.select(); toast('Press Ctrl+C to copy.'); } }
     else if (act === 'sendDevList') {
       busy(el, true, 'Posting…');
       try { const r = await call('POST', '/api/devlist'); toast('List posted in #' + r.channel + '.'); } catch (err) { toast(err.message, 'err'); }
@@ -3505,7 +3660,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, alerts_channel_id: null, spike_enabled: true, spike_count: 5, spike_minutes: 60, msg_reports_enabled: true, appeals_enabled: true, raid_enabled: true, raid_joins: 10, raid_minutes: 5, raid_auto_lift_minutes: 0, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
     automod_mentions_on: true, automod_mentions_max: 5, automod_repeat_on: true, automod_warn: true, weekly_enabled: false, weekly_channel_id: null, weekly_weekday: 'sunday', weekly_hour: 18, push_enabled: true, guard_enabled: true, guard_timeout_minutes: 60, guard_block_invites: false, guard_allow_domains: 'discord.com\ndiscord.gg\ndiscordapp.com\nyoutube.com\ntenor.com', log_channel_kinds: 'all', dup_mode: 'auto', dup_auto_percent: 50, mod_ping_hours: 4, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
@@ -3822,6 +3977,30 @@ function makeMock() {
     if (p === '/api/replies') { replies.push({ id: nextReply++, title: body.title, text: body.text }); return { id: nextReply - 1 }; }
     m = p.match(/^\/api\/replies\/(\d+)$/);
     if (m) { const i = replies.findIndex(r => r.id === +m[1]); if (method === 'DELETE') { if (i >= 0) replies.splice(i, 1); } else if (i >= 0) Object.assign(replies[i], { title: body.title, text: body.text }); return { ok: true }; }
+    if (p === '/api/queue' || p === '/api/raid' || p === '/api/spikes' || p.startsWith('/api/reports') || p.startsWith('/api/appeals') || p.startsWith('/api/devpage')) {
+      const M = (window.__mockQ = window.__mockQ || { raid: { active: false, since: null, by: '', ended: null, joined: 0, gate: true },
+        spikes: [{ key: 'Alliance', area: 'Alliance', count: 6, bug: 62, ts: now - 900, known: false }], dev: { active: false, created: null },
+        reports: [{ id: 3, ts: now - 1200, status: 'open', content: 'you are all idiots, uninstall the game', channel: 'general', url: '#', target_id: '1', target: 'Grimnir', on_server: true,
+            reporters: [{ name: 'Mira', reason: 'insulting everyone', ts: now - 1200 }, { name: 'Jonas', reason: '', ts: now - 900 }], attachments: [],
+            context: [{ name: 'Mira', text: 'anyone else stuck on the alliance screen?', ts: now - 1300 }, { name: 'Jonas', text: 'yes, since the update', ts: now - 1260 }],
+            warnings: 1, cases: [{ id: 4, kind: 'warn', reason: 'Spamming the same message', ts: now - 6 * 86400, minutes: null, active: true, auto: true, moderator: '' }], action: '', handled_by: '', handled_ts: null }],
+        appeals: [{ id: 2, ts: now - 5400, status: 'open', kind: 'timeout', text: 'I was answering a friend who joked first. I get that it looked bad in the channel and I will keep it out of general.', user_id: '2', user: 'Bjorn',
+            case_reason: 'Reported message in #general', case_ts: now - 7200, note: '', handled_by: '', handled_ts: null, warnings: 0, cases: [] },
+          { id: 1, ts: now - 80000, status: 'open', kind: 'ban', text: 'My account was hacked last week and posted those links. I have changed my password and turned on two-step login.', user_id: '3', user: 'Astrid',
+            case_reason: 'Scam links', case_ts: now - 90000, note: '', handled_by: '', handled_ts: null, warnings: 0, cases: [{ id: 2, kind: 'ban', reason: 'Scam links', ts: now - 90000, minutes: null, active: false, auto: true, moderator: '' }] }] });
+      const open = k => M[k].filter(x => x.status === 'open');
+      if (p === '/api/raid') { Object.assign(M.raid, body.active ? { active: true, since: now, by: 'Dashboard', joined: 0 } : { active: false, ended: now }); return M.raid; }
+      if (p === '/api/spikes') { if (body.known) M.spikes.forEach(x => { if (x.bug === body.known) x.known = true; }); if (body.dismiss) M.spikes = M.spikes.filter(x => x.key !== body.dismiss); return { spikes: M.spikes }; }
+      if (p === '/api/devpage/link') { M.dev = method === 'DELETE' ? { active: false, created: null } : { active: true, created: now }; return method === 'DELETE' ? M.dev : Object.assign({ token: 'demo-Qx7vN2kLmP9sT4wZ8yB1cD' }, M.dev); }
+      if (p === '/api/devpage') return M.dev;
+      const one = p.match(/^\/api\/(reports|appeals)\/(\d+)$/);
+      if (one) { const x = M[one[1]].find(y => y.id === +one[2]); if (one[1] === 'appeals' && x.kind === 'ban' && S.user && S.user.role === 'mod') throw new Error('Only admins can decide on a ban appeal.');
+        Object.assign(x, one[1] === 'reports' ? { status: body.action === 'dismiss' ? 'dismissed' : 'actioned', action: { delete: 'Message deleted', warn: 'Message deleted, warned (2 active)', timeout: 'Message deleted, timed out for ' + (body.minutes || 60) + ' min', dismiss: 'Nothing wrong' }[body.action] }
+          : { status: body.accept ? 'accepted' : 'declined', note: body.note || '' }, { handled_by: 'You', handled_ts: now }); return x; }
+      if (p.startsWith('/api/reports')) return { items: M.reports.filter(x => (x.status === 'open') === !/status=done/.test(path)), open: open('reports').length };
+      if (p.startsWith('/api/appeals')) return { items: M.appeals.filter(x => (x.status === 'open') === !/status=done/.test(path)), open: open('appeals').length };
+      return { reports: open('reports').length, appeals: open('appeals').length, raid: M.raid, spikes: M.spikes };
+    }
     if (p === '/api/devlist') { addLog('system', 'Developers\u2019 list posted: 5 bugs (2 new) (sent manually)'); return { ok: true, channel: 'dev-bugs' }; }
     if (p === '/api/digest') { addLog('system', 'Weekly digest posted (sent manually)'); return { ok: true, channel: 'admin-bugs' }; }
     if (p === '/api/webblocks' && method === 'GET') return { items: webBlocks.map(x => Object.assign({}, x)) };

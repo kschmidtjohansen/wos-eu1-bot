@@ -220,6 +220,28 @@ db.executescript(
         active INTEGER NOT NULL DEFAULT 1,         -- a warning that still counts
         auto INTEGER NOT NULL DEFAULT 0            -- given by the bot (auto-mod / escalation)
     );
+    CREATE TABLE IF NOT EXISTS msg_reports (   -- "Report to moderators" on a chat message
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts INTEGER NOT NULL,
+        reporters TEXT NOT NULL DEFAULT '[]',      -- [{"id", "name", "reason", "ts"}]
+        target_id INTEGER NOT NULL, target_name TEXT,
+        channel_id INTEGER NOT NULL, channel_name TEXT, message_id INTEGER NOT NULL,
+        content TEXT, attachments TEXT NOT NULL DEFAULT '[]',
+        context TEXT NOT NULL DEFAULT '[]',        -- the few messages before it: [{"name", "text", "ts"}]
+        status TEXT NOT NULL DEFAULT 'open',       -- open | actioned | dismissed
+        action TEXT, handled_id INTEGER, handled_name TEXT, handled_ts INTEGER,
+        alert_msg_id INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS appeals (       -- one appeal per timeout / ban, sent from the website
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts INTEGER NOT NULL,
+        user_id INTEGER NOT NULL, user_name TEXT,
+        kind TEXT NOT NULL,                        -- ban | timeout
+        case_id INTEGER, case_reason TEXT, case_ts INTEGER,
+        text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',       -- open | accepted | declined
+        note TEXT, handled_id INTEGER, handled_name TEXT, handled_ts INTEGER
+    );
     CREATE TABLE IF NOT EXISTS giveaways (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         channel_id INTEGER NOT NULL, message_id INTEGER,
@@ -268,7 +290,8 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "reject_reason TEXT"), ("suggestions", "reject_reason TEXT"),
                      ("bug_reports", "dup_suggest INTEGER"), ("bug_reports", "dup_score INTEGER"), ("bug_reports", "dup_dismissed INTEGER"), ("bug_reports", "ai_title TEXT"), ("bug_reports", "ai_summary TEXT"),
                      ("bug_reports", "ai_checked INTEGER"), ("bug_reports", "ai_dup INTEGER"), ("bug_reports", "ai_conf INTEGER"),
-                     ("bug_reports", "ai_reason TEXT"), ("bug_reports", "match_en TEXT"), ("bug_reports", "match_lang TEXT"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
+                     ("bug_reports", "ai_reason TEXT"), ("bug_reports", "match_en TEXT"), ("bug_reports", "match_lang TEXT"), ("bug_reports", "dev_state TEXT"), ("bug_reports", "dev_note TEXT"),
+                     ("bug_reports", "dev_version TEXT"), ("bug_reports", "dev_ts INTEGER"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
                      ("bug_reports", "mod_pinged INTEGER"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
@@ -404,6 +427,16 @@ SCHEMA = {
     "devlist_channel_id": {"type": "channel", "default": None},
     "devlist_hour": {"type": "int", "default": 8, "min": 0, "max": 23},
     "devlist_files": {"type": "bool", "default": True},
+    "alerts_channel_id": {"type": "channel", "default": None},
+    "spike_enabled": {"type": "bool", "default": True},
+    "spike_count": {"type": "int", "default": 5, "min": 3, "max": 50},
+    "spike_minutes": {"type": "int", "default": 60, "min": 10, "max": 720},
+    "msg_reports_enabled": {"type": "bool", "default": True},
+    "appeals_enabled": {"type": "bool", "default": True},
+    "raid_enabled": {"type": "bool", "default": True},
+    "raid_joins": {"type": "int", "default": 10, "min": 3, "max": 200},
+    "raid_minutes": {"type": "int", "default": 5, "min": 1, "max": 60},
+    "raid_auto_lift_minutes": {"type": "int", "default": 0, "min": 0, "max": 1440},
     "update_notice_enabled": {"type": "bool", "default": True},
     "report_style": {"type": "choice", "default": "form", "choices": ["form", "ticket"]},
     "info_remind_hours": {"type": "int", "default": 48, "min": 0, "max": 720},
@@ -2062,6 +2095,153 @@ def previous_month() -> str:
     from datetime import datetime
     n = datetime.now(tz())
     return f"{n.year - (n.month == 1):04d}-{(n.month - 2) % 12 + 1:02d}"
+
+
+# ------------------------------------------------------------- developer page
+DEV_STATES = ("working", "fixed", "need_info")
+
+
+def dev_link_new() -> str:
+    """A new secret for the developers' page. Only its hash is kept, so the old link stops working."""
+    token = _secrets.token_urlsafe(24)
+    put_raw("devpage_hash", _th(token))
+    put_raw("devpage_created", str(int(time.time())))
+    return token
+
+
+def dev_link_ok(token: str) -> bool:
+    h = get_raw("devpage_hash")
+    return bool(token and h) and _secrets.compare_digest(_th(token), h)
+
+
+def dev_link_off():
+    db.execute("DELETE FROM settings WHERE key IN ('devpage_hash','devpage_created')")
+    db.commit()
+
+
+# ------------------------------------------------------------- spike alert
+def spike_bugs(area: Optional[str], minutes: int) -> list:
+    """Reports about one area in the last minutes (duplicates included – they are the flood), oldest first."""
+    since = int(time.time()) - minutes * 60
+    if area:
+        return db.execute("SELECT * FROM bug_reports WHERE created_at>=? AND area=? ORDER BY id", (since, area)).fetchall()
+    return db.execute("SELECT * FROM bug_reports WHERE created_at>=? AND (area IS NULL OR area='') ORDER BY id", (since,)).fetchall()
+
+
+def spike_state() -> dict:
+    try:
+        return json.loads(get_raw("spike_state") or "{}")
+    except ValueError:
+        return {}
+
+
+# ------------------------------------------------------------- message reports
+def get_msg_report(rid: int):
+    return db.execute("SELECT * FROM msg_reports WHERE id=?", (rid,)).fetchone()
+
+
+def msg_report_for(message_id: int):
+    return db.execute("SELECT * FROM msg_reports WHERE message_id=? ORDER BY id DESC LIMIT 1", (message_id,)).fetchone()
+
+
+def add_msg_report(reporter_id: int, reporter_name: str, reason: str, target_id: int, target_name: str, channel_id: int,
+                   channel_name: str, message_id: int, content: str, attachments: list, context: list) -> tuple:
+    """Returns (row, is_new). A message that is already in the queue just gets one more reporter."""
+    now = int(time.time())
+    who = {"id": str(reporter_id), "name": (reporter_name or "")[:60], "reason": (reason or "")[:300], "ts": now}
+    r = msg_report_for(message_id)
+    if r is not None and r["status"] == "open":
+        people = json.loads(r["reporters"])
+        if not any(x["id"] == who["id"] for x in people):
+            people.append(who)
+            db.execute("UPDATE msg_reports SET reporters=? WHERE id=?", (json.dumps(people), r["id"]))
+            db.commit()
+        return get_msg_report(r["id"]), False
+    rid = db.execute("INSERT INTO msg_reports (ts, reporters, target_id, target_name, channel_id, channel_name, message_id, content, "
+                     "attachments, context) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                     (now, json.dumps([who]), target_id, (target_name or "")[:60], channel_id, (channel_name or "")[:80], message_id,
+                      (content or "")[:1900], json.dumps(attachments[:6]), json.dumps(context[:6]))).lastrowid
+    db.commit()
+    return get_msg_report(rid), True
+
+
+def msg_reports(status: str = "open", limit: int = 60) -> list:
+    if status == "open":
+        return db.execute("SELECT * FROM msg_reports WHERE status='open' ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return db.execute("SELECT * FROM msg_reports WHERE status<>'open' ORDER BY handled_ts DESC LIMIT ?", (limit,)).fetchall()
+
+
+def close_msg_report(rid: int, status: str, action: str, by_id, by_name: str):
+    db.execute("UPDATE msg_reports SET status=?, action=?, handled_id=?, handled_name=?, handled_ts=? WHERE id=?",
+               (status, action[:200], by_id, (by_name or "")[:60], int(time.time()), rid))
+    db.commit()
+    return get_msg_report(rid)
+
+
+def reports_by(user_id: int, seconds: int) -> int:
+    since = int(time.time()) - seconds
+    n = 0
+    for r in db.execute("SELECT reporters FROM msg_reports WHERE ts>=?", (since,)).fetchall():
+        n += sum(1 for x in json.loads(r["reporters"]) if x["id"] == str(user_id) and x["ts"] >= since)
+    return n
+
+
+def open_counts() -> dict:
+    return {"reports": db.execute("SELECT COUNT(*) FROM msg_reports WHERE status='open'").fetchone()[0],
+            "appeals": db.execute("SELECT COUNT(*) FROM appeals WHERE status='open'").fetchone()[0]}
+
+
+# ------------------------------------------------------------- appeals
+def get_appeal(aid: int):
+    return db.execute("SELECT * FROM appeals WHERE id=?", (aid,)).fetchone()
+
+
+def last_case(user_id: int, kind: str):
+    return db.execute("SELECT * FROM mod_cases WHERE user_id=? AND kind=? ORDER BY id DESC LIMIT 1", (user_id, kind)).fetchone()
+
+
+def appeal_for(user_id: int, kind: str, case_id=None, case_ts=None):
+    """The appeal already sent for this ban/timeout, if any (one per case; without a case: one per 30 days)."""
+    if case_id:
+        return db.execute("SELECT * FROM appeals WHERE user_id=? AND kind=? AND case_id=? ORDER BY id DESC LIMIT 1",
+                          (user_id, kind, case_id)).fetchone()
+    return db.execute("SELECT * FROM appeals WHERE user_id=? AND kind=? AND case_id IS NULL AND ts>=? ORDER BY id DESC LIMIT 1",
+                      (user_id, kind, int(time.time()) - 30 * 86400)).fetchone()
+
+
+def add_appeal(user_id: int, user_name: str, kind: str, case, text: str) -> int:
+    aid = db.execute("INSERT INTO appeals (ts, user_id, user_name, kind, case_id, case_reason, case_ts, text) VALUES (?,?,?,?,?,?,?,?)",
+                     (int(time.time()), user_id, (user_name or "")[:60], kind, case["id"] if case else None,
+                      case["reason"] if case else None, case["ts"] if case else None, text[:1500])).lastrowid
+    db.commit()
+    return aid
+
+
+def appeals(status: str = "open", limit: int = 60) -> list:
+    if status == "open":
+        return db.execute("SELECT * FROM appeals WHERE status='open' ORDER BY id LIMIT ?", (limit,)).fetchall()
+    return db.execute("SELECT * FROM appeals WHERE status<>'open' ORDER BY handled_ts DESC LIMIT ?", (limit,)).fetchall()
+
+
+def decide_appeal(aid: int, status: str, note: str, by_id, by_name: str):
+    db.execute("UPDATE appeals SET status=?, note=?, handled_id=?, handled_name=?, handled_ts=? WHERE id=?",
+               (status, (note or "")[:500] or None, by_id, (by_name or "")[:60], int(time.time()), aid))
+    db.commit()
+    return get_appeal(aid)
+
+
+# ------------------------------------------------------------- raid mode
+def raid_state() -> dict:
+    try:
+        d = json.loads(get_raw("raid_state") or "{}")
+    except ValueError:
+        d = {}
+    return {"active": bool(d.get("active")), "since": d.get("since"), "by": d.get("by"), "joins": d.get("joins") or [],
+            "ended": d.get("ended"), "alert": d.get("alert")}
+
+
+def save_raid(d: dict):
+    put_raw("raid_state", json.dumps(d))
 
 
 # ------------------------------------------------------------- daily list for the developers

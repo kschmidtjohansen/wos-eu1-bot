@@ -1,0 +1,158 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bugs for the developers – WOS EU1</title><meta name="theme-color" content="#060c17"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<style>
+main{max-width:980px;padding-top:28px}
+h1{font-size:clamp(26px,4vw,38px);margin-bottom:8px}
+.lead{font-size:16px;margin-bottom:20px}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.count{font-family:var(--display);font-size:15px;color:var(--muted)}
+.count b{color:var(--text);font-size:28px;margin-right:6px}
+.bug{padding:18px 20px;margin-bottom:12px;border-left:3px solid var(--line-2)}
+.bug.working{border-left-color:var(--warn)} .bug.need_info{border-left-color:var(--ice)} .bug.fixed{border-left-color:var(--ok)}
+.bug-h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.bug-h .n{font-family:var(--display);color:var(--muted);font-size:14px}
+.bug-h h2{font-family:'Figtree',sans-serif;font-size:18px;font-weight:700;letter-spacing:0;margin:0;flex:1 1 300px;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--muted);font-size:13.5px;margin:4px 0 10px}
+.meta b{color:var(--text);font-weight:650}
+.txt{white-space:pre-wrap;overflow-wrap:anywhere;max-width:75ch}
+.en{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--ice-soft);border:1px solid rgba(125,227,244,.22);white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;max-width:75ch}
+.en small{display:block;color:var(--ice);font-weight:700;margin-bottom:2px}
+.shots{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.shots button{width:104px;height:104px;border-radius:12px;border:1px solid var(--line-2);background:rgba(4,10,20,.5);color:var(--muted);cursor:pointer;padding:0;overflow:hidden;font:inherit;font-size:13px}
+.shots button:hover{border-color:var(--ice)}
+.shots img{width:100%;height:100%;object-fit:cover;display:block}
+.ans{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.ans .btn{padding:9px 14px;border-radius:12px;font-size:14.5px}
+.ans .btn[aria-pressed=true]{border-color:var(--ice);background:var(--ice-soft);color:var(--ice)}
+.ans .said{flex:1 1 100%;font-size:14px;color:var(--muted)}
+.ans .said b{color:var(--text)}
+.ask{flex:1 1 100%;display:grid;gap:8px;grid-template-columns:1fr auto;align-items:start}
+.ask textarea{min-height:64px}
+.ask input{max-width:220px}
+.ask.ver{grid-template-columns:auto auto 1fr;align-items:center}
+.doneh{margin:34px 0 10px;font-size:17px}
+.lb{position:fixed;inset:0;z-index:99;background:rgba(3,6,12,.92);display:grid;place-items:center;padding:16px;cursor:zoom-out}
+.lb img,.lb video{max-width:100%;max-height:92vh;border-radius:12px}
+@media (max-width:620px){.ask,.ask.ver{grid-template-columns:1fr}.ask input{max-width:none}}
+</style></head><body>
+<main id="main">
+  <div class="top"><div><h1>Bugs for the developers</h1>
+    <p class="lead">Every bug the <span id="srv">server</span> team has checked and passed on. Duplicates are merged into one. Answer a bug and the team and the player hear about it.</p></div>
+    <div class="count" id="count" hidden><b>0</b>open</div></div>
+  <div class="tools"><input type="search" id="q" placeholder="Search title, text, area, UID…" aria-label="Search"></div>
+  <div class="chips" id="chips"></div>
+  <div id="list" aria-live="polite"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+</main>
+<script src="config.js"></script>
+<script>
+(function () {
+  const base = ((window.WOS_CONFIG || {}).API_BASE || '').replace(/\/+$/, '');
+  const key = (location.hash.match(/k=([\w-]+)/) || [])[1] || '';
+  const $ = id => document.getElementById(id);
+  const el = (tag, props, ...kids) => { const e = document.createElement(tag); Object.entries(props || {}).forEach(([k, v]) => { if (k === 'class') e.className = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v); }); kids.flat().forEach(k => e.append(k)); return e; };
+  let data = null, filter = 'todo', error = '', editing = null;   // editing = {id, kind}
+  const blobs = {};
+  async function api(method, path, body) {
+    const r = await fetch(base + path, { method, headers: Object.assign({ 'X-Dev-Key': key }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined });
+    let j = {}; try { j = await r.json(); } catch (e) { /* not json */ }
+    if (!r.ok) { const e = new Error(j.error || 'Could not reach the server. Try again in a moment.'); e.status = r.status; throw e; }
+    return j;
+  }
+  async function blob(bug, f) {
+    const k = bug + '/' + f.id;
+    if (!blobs[k]) { const r = await fetch(base + '/public/dev/files/' + bug + '/' + f.id, { headers: { 'X-Dev-Key': key } }); if (!r.ok) throw new Error('gone'); blobs[k] = URL.createObjectURL(await r.blob()); }
+    return blobs[k];
+  }
+  const date = ts => new Date(ts * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const LABEL = { working: 'Working on it', need_info: 'Need more info', fixed: 'Fixed' };
+  function lightbox(url, video) {
+    const m = video ? el('video', { src: url, controls: '', autoplay: '' }) : el('img', { src: url, alt: '' });
+    const box = el('div', { class: 'lb', role: 'dialog', 'aria-label': 'Attachment' }, m);
+    box.onclick = e => { if (e.target === box || !video) box.remove(); };
+    document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { box.remove(); document.removeEventListener('keydown', esc); } });
+    document.body.append(box);
+  }
+  const seen = new IntersectionObserver(es => es.forEach(async e => {
+    if (!e.isIntersecting) return; seen.unobserve(e.target);
+    const b = e.target; try { const u = await blob(b.dataset.bug, { id: b.dataset.fid }); b.replaceChildren(el('img', { src: u, alt: 'Screenshot' })); } catch (x) { b.textContent = 'gone'; }
+  }), { rootMargin: '300px' });
+  async function answer(b, state, extra) {
+    try {
+      const r = await api('PUT', '/public/dev/bugs/' + b.id, Object.assign({ state: state || '' }, extra || {}));
+      b.dev = r.dev; b.status = r.status; editing = null;
+      if (state === 'fixed') { data.open = data.open.filter(x => x.id !== b.id); data.done.unshift(b); }
+      draw();
+    } catch (e) { alertBox(e.message); }
+  }
+  function alertBox(text) { const m = $('err') || el('div', { class: 'msg err', id: 'err', role: 'alert' }); m.textContent = text; $('list').prepend(m); m.scrollIntoView({ block: 'center' }); }
+  function card(b, done) {
+    const st = b.dev.state, kids = [];
+    kids.push(el('div', { class: 'bug-h' }, el('span', { class: 'n' }, '#' + b.id), el('h2', {}, b.title), ...(st ? [el('span', { class: 'st ' + (st === 'working' ? 'being_investigated' : st === 'fixed' ? 'fixed' : 'passed') }, LABEL[st] + (st === 'fixed' && b.dev.version ? ' in ' + b.dev.version : ''))] : [])));
+    kids.push(el('div', { class: 'meta' }, el('span', {}, 'Reported ', el('b', {}, date(b.reported))), ...(b.area ? [el('span', {}, 'Area ', el('b', {}, b.area))] : []), ...(b.version ? [el('span', {}, 'Game version ', el('b', {}, b.version))] : []),
+      ...(b.affected > 1 ? [el('span', {}, el('b', {}, String(b.affected)), ' players affected')] : []), ...(b.chief || b.uid ? [el('span', {}, 'Chief ', el('b', {}, b.chief || '–'), ' · UID ', el('b', {}, b.uid || '–'))] : [])));
+    kids.push(el('div', { class: 'txt' }, b.text || '(no text)'));
+    if (b.english) kids.push(el('div', { class: 'en' }, el('small', {}, 'English translation'), b.english));
+    if (b.files.length) kids.push(el('div', { class: 'shots' }, b.files.map(f => {
+      const btn = el('button', { type: 'button', 'data-bug': b.id, 'data-fid': f.id, title: f.name }, f.kind === 'video' ? '▶ Video' : '…');
+      btn.onclick = async () => { try { lightbox(await blob(b.id, f), f.kind === 'video'); } catch (e) { btn.textContent = 'gone'; } };
+      if (f.kind !== 'video') seen.observe(btn);
+      return btn;
+    })));
+    if (done) return el('article', { class: 'card bug fixed' }, kids);
+    const ans = el('div', { class: 'ans' });
+    if (st === 'need_info' && b.dev.note) ans.append(el('div', { class: 'said' }, 'You asked: ', el('b', {}, b.dev.note)));
+    const ed = editing && editing.id === b.id ? editing.kind : null;
+    const work = el('button', { class: 'btn', type: 'button', 'aria-pressed': String(st === 'working') }, 'Working on it');
+    work.onclick = () => answer(b, st === 'working' ? '' : 'working');
+    const fix = el('button', { class: 'btn', type: 'button', 'aria-expanded': String(ed === 'fixed') }, 'Fixed in version…');
+    fix.onclick = () => { editing = ed === 'fixed' ? null : { id: b.id, kind: 'fixed' }; draw(); };
+    const ask = el('button', { class: 'btn', type: 'button', 'aria-pressed': String(st === 'need_info'), 'aria-expanded': String(ed === 'need_info') }, 'Need more info');
+    ask.onclick = () => { editing = ed === 'need_info' ? null : { id: b.id, kind: 'need_info' }; draw(); };
+    ans.append(work, fix, ask);
+    if (ed === 'fixed') {
+      const v = el('input', { id: 'ver-' + b.id, placeholder: 'e.g. 1.4.2', maxlength: '30', value: data.version || '', 'aria-label': 'Version with the fix' });
+      const ok = el('button', { class: 'btn pri', type: 'submit' }, 'Mark as fixed');
+      const f = el('form', { class: 'ask ver' }, v, ok, el('span', { class: 'muted', style: 'font-size:13.5px' }, 'The bug is closed as fixed and the player gets a message.'));
+      f.onsubmit = e => { e.preventDefault(); ok.disabled = true; answer(b, 'fixed', { version: v.value.trim() }); };
+      ans.append(f); setTimeout(() => v.focus(), 0);
+    }
+    if (ed === 'need_info') {
+      const ta = el('textarea', { maxlength: '600', placeholder: 'What do you need to know? The server team gets this and asks the player.', 'aria-label': 'Your question' }); ta.value = st === 'need_info' ? b.dev.note : '';
+      const ok = el('button', { class: 'btn pri', type: 'submit' }, 'Send question');
+      const f = el('form', { class: 'ask' }, ta, ok);
+      f.onsubmit = e => { e.preventDefault(); if (ta.value.trim().length < 3) return ta.focus(); ok.disabled = true; answer(b, 'need_info', { note: ta.value.trim() }); };
+      ans.append(f); setTimeout(() => ta.focus(), 0);
+    }
+    kids.push(ans);
+    return el('article', { class: 'card bug ' + (st || '') }, kids);
+  }
+  function draw() {
+    const box = $('list'); box.replaceChildren();
+    if (error) return box.append(el('div', { class: 'card empty' }, error));
+    if (!data) return;
+    $('srv').textContent = data.server; const c = $('count'); c.hidden = false; c.firstChild.textContent = data.open.length;
+    const n = { todo: data.open.filter(b => !b.dev.state).length, working: data.open.filter(b => b.dev.state === 'working').length, need_info: data.open.filter(b => b.dev.state === 'need_info').length, all: data.open.length };
+    const ch = $('chips'); ch.replaceChildren();
+    [['todo', 'No answer yet'], ['working', 'Working on it'], ['need_info', 'Need more info'], ['all', 'All open']].forEach(([k, l]) =>
+      ch.append(el('button', { type: 'button', 'aria-pressed': String(filter === k), onclick: () => { filter = k; draw(); } }, l + ' ' + n[k])));
+    const q = $('q').value.trim().toLowerCase();
+    const hit = b => !q || [b.title, b.text, b.english, b.area, b.uid, b.chief, '#' + b.id].join(' ').toLowerCase().includes(q);
+    const list = data.open.filter(b => (filter === 'all' || (filter === 'todo' ? !b.dev.state : b.dev.state === filter)) && hit(b));
+    if (!list.length) box.append(el('div', { class: 'card empty' }, data.open.length ? 'Nothing here. Try another filter.' : 'No open bugs right now. New ones show up here as soon as the team passes them on.'));
+    list.forEach(b => box.append(card(b)));
+    const done = data.done.filter(hit);
+    if (done.length) { box.append(el('h2', { class: 'doneh' }, 'Fixed in the last 14 days')); done.forEach(b => box.append(card(b, true))); }
+  }
+  async function load() {
+    if (!key) { error = 'This page opens with the link from the server team. Ask them for it.'; return draw(); }
+    try { data = await api('GET', '/public/dev/list'); } catch (e) { error = e.message; }
+    if (data && !data.open.some(b => !b.dev.state)) filter = 'all';
+    draw();
+  }
+  $('q').oninput = draw;
+  load();
+})();
+</script></body></html>
