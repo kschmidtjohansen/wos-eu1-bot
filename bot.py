@@ -1585,7 +1585,7 @@ class WosBot(discord.Client):
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
-                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
+                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
                          "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
@@ -1691,7 +1691,20 @@ class WosBot(discord.Client):
         except discord.HTTPException as exc:
             log_event("system", f"Could not send the welcome message: {exc}", member.id, member.display_name)
 
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        if payload.guild_id == GUILD_ID:
+            store.log_message_deleted([payload.message_id])
+
+    async def on_raw_bulk_message_delete(self, payload: discord.RawBulkMessageDeleteEvent):
+        if payload.guild_id == GUILD_ID:
+            store.log_message_deleted(list(payload.message_ids), "staff (bulk delete)")
+
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
+        try:
+            if payload.guild_id == GUILD_ID and "content" in (payload.data or {}):
+                store.log_message_edit(payload.message_id, payload.data.get("content") or "")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[message log] {exc!r}")
         if _import_watch:
             try:
                 await on_leaderboard_edit(payload)
@@ -1721,6 +1734,10 @@ class WosBot(discord.Client):
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
+        try:
+            remember_message(message)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[message log] {exc!r}")
         try:
             if await guard_message(message) or await automod_message(message):
                 return
@@ -4001,6 +4018,7 @@ async def guard_message(message) -> bool:
     for cid, mid in ({(message.channel.id, message.id)} | {(x[1], x[2]) for x in burst}):
         ch = bot.get_channel(cid)
         try:
+            store.mark_bot_delete(mid)
             await (ch.get_partial_message(mid) if ch else message).delete()
             removed += 1
         except discord.HTTPException:
@@ -5047,20 +5065,19 @@ async def timeout_cmd(interaction: discord.Interaction, member: discord.Member, 
     await interaction.followup.send(f"🔇 {member.mention} timed out for {minutes} min – case #{c}.", ephemeral=True)
 
 
-@bot.tree.command(name="ban", description="Ban a member (admins)", guild=_GUILD)
+@bot.tree.command(name="ban", description="Ban a member (admins) – for good, or for a number of days", guild=_GUILD)
+@app_commands.describe(member="Who", reason="Why – the member sees this", days="Leave empty for a permanent ban. With days, the bot unbans by itself.")
 @app_commands.guild_only()
-async def ban_cmd(interaction: discord.Interaction, member: discord.Member, reason: str):
+async def ban_cmd(interaction: discord.Interaction, member: discord.Member, reason: str, days: Optional[app_commands.Range[int, 1, 365]] = None):
     if not is_admin(interaction.user) or is_mod(member):
         return await interaction.response.send_message("Admins only – and not on staff.", ephemeral=True)
-    await dm_t(member.id, "dm.banned", reason=reason)
-    await tell_appeal(member.id)
+    await interaction.response.defer(ephemeral=True)
     try:
-        await member.ban(reason=reason[:500], delete_message_seconds=0)
+        c = await ban_user(member, reason, interaction.user.id, interaction.user.display_name, days or 0)
     except discord.HTTPException:
-        return await interaction.response.send_message("I couldn't – I need the “Ban Members” permission and a role above theirs.", ephemeral=True)
-    c = store.add_case(member.id, member.display_name, "ban", reason, interaction.user.id, interaction.user.display_name)
-    log_event("mod", f"{member.display_name} banned by {interaction.user.display_name}: {reason}", interaction.user.id, interaction.user.display_name)
-    await interaction.response.send_message(f"⛔ {member.display_name} banned – case #{c}.", ephemeral=True)
+        return await interaction.followup.send("I couldn't – I need the “Ban Members” permission and a role above theirs.", ephemeral=True)
+    await interaction.followup.send(f"⛔ {member.display_name} banned" + (f" for {days} day{'s' if days != 1 else ''} – I'll unban them myself" if days else "")
+                                    + f" – case #{c}.", ephemeral=True)
 
 
 # ------------------------------------------------------------ more auto-mod rules
@@ -5112,6 +5129,7 @@ async def automod_message(message) -> bool:
         return False
     rule, tell = hit
     try:
+        store.mark_bot_delete(message.id)
         await message.delete()
     except discord.HTTPException:
         pass
@@ -5539,6 +5557,7 @@ async def act_on_report(r, action: str, by_id, by_name: str, reason: Optional[st
         ch = g.get_channel_or_thread(r["channel_id"]) if g else None
         try:
             if ch is not None:
+                store.mark_bot_delete(r["message_id"])
                 await ch.get_partial_message(r["message_id"]).delete()
                 did.append("message deleted")
         except discord.NotFound:
@@ -5690,6 +5709,7 @@ async def decide_appeal(a, accept: bool, note: Optional[str], by_id, by_name: st
             if a["kind"] == "ban":
                 await g.unban(discord.Object(id=a["user_id"]), reason=f"Appeal #{a['id']} accepted by {by_name}"[:500])
                 store.add_case(a["user_id"], a["user_name"], "unban", f"Appeal #{a['id']} accepted", by_id, by_name)
+                store.clear_temp_ban(a["user_id"])
             else:
                 m = g.get_member(a["user_id"])
                 if m is not None:
@@ -5725,6 +5745,54 @@ async def handle_appeal_button(interaction: discord.Interaction):
         await decide_appeal(a, what == "yes", None, interaction.user.id, interaction.user.display_name, is_admin(interaction.user))
     except ValueError as exc:
         await interaction.followup.send(str(exc), ephemeral=True)
+
+
+# --------------------------------------------------------------- message log, temporary bans, player card
+def remember_message(message: discord.Message):
+    """Keep chat messages for a few days so staff can read what was deleted or edited (Moderation → Deleted messages)."""
+    if not cfg("msglog_enabled") or message.guild is None or message.guild.id != GUILD_ID:
+        return
+    if isinstance(message.channel, discord.Thread) and message.channel.is_private():
+        return                                              # bug-report tickets are stored with the report already
+    store.log_message(message.id, message.channel.id, getattr(message.channel, "name", ""), message.author.id,
+                      message.author.display_name, message.content, [a.url for a in message.attachments],
+                      int(message.created_at.timestamp()))
+
+
+async def ban_user(user, reason: str, by_id, by_name: str, days: int = 0) -> int:
+    """Ban a member or a user id. days > 0 = the bot lifts the ban by itself after that many days. Returns the case number."""
+    g = bot.get_guild(GUILD_ID)
+    uid, name = user.id, getattr(user, "display_name", None) or getattr(user, "name", None) or f"User …{str(user.id)[-4:]}"
+    until = int(time.time()) + days * 86400 if days else None
+    why = reason + (f" (for {days} day{'s' if days != 1 else ''})" if days else "")
+    await dm_t(uid, "dm.banned_days" if days else "dm.banned", reason=reason, days=days)
+    await tell_appeal(uid)
+    await g.ban(discord.Object(id=uid), reason=why[:500], delete_message_seconds=0)
+    c = store.add_case(uid, name, "ban", why, by_id, by_name, minutes=days * 1440 if days else None)
+    if until:
+        store.set_temp_ban(uid, name, until, c)
+    else:
+        store.clear_temp_ban(uid)
+    log_event("mod", f"{name} banned by {by_name}" + (f" for {days} day{'s' if days != 1 else ''}" if days else "") + f": {reason}", by_id, by_name)
+    return c
+
+
+async def lift_temp_bans(now: Optional[int] = None) -> int:
+    """Every few minutes: unban the players whose temporary ban is over."""
+    g, n = bot.get_guild(GUILD_ID), 0
+    for t in store.due_temp_bans(now):
+        try:
+            await g.unban(discord.Object(id=t["user_id"]), reason="Temporary ban is over")
+        except discord.NotFound:
+            pass                                             # already unbanned by hand
+        except discord.HTTPException as exc:
+            log_event("system", f"Could not lift the temporary ban of {t['user_name']}: {exc}", None, brand())
+            continue
+        store.clear_temp_ban(t["user_id"])
+        store.add_case(t["user_id"], t["user_name"], "unban", "Temporary ban is over", None, brand(), auto=True)
+        log_event("mod", f"Temporary ban of {t['user_name']} is over – unbanned", None, brand())
+        n += 1
+    return n
 
 
 # --------------------------------------------------------------- raid mode
@@ -5844,6 +5912,10 @@ async def community_tick():
         await raid_tick()
     except Exception as exc:  # noqa: BLE001
         print(f"[raid mode] {exc!r}")
+    try:
+        await lift_temp_bans()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[temporary bans] {exc!r}")
 
 
 async def run_schedules(now=None):
@@ -5852,6 +5924,10 @@ async def run_schedules(now=None):
     from datetime import datetime, timedelta
     now = now or datetime.now(store.tz())
     done = []
+    try:
+        store.purge_msg_log(cfg("msglog_days"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[message log] {exc!r}")
     try:
         if await scan_duplicates():
             done.append("duplicates")

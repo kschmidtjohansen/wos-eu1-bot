@@ -25,6 +25,7 @@ import discord
 from aiohttp import web
 
 import store
+import texts as _texts
 
 PERM_LABELS = {
     "view_channel": "View Channel",
@@ -122,13 +123,15 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             print(f"[dashboard api] {request.method} {request.path} failed: {exc!r}")
             return web.json_response({"error": "Something went wrong in the bot. Check its console."}, status=500)
 
-    AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console", "/api/auth/appeal"}
+    AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console", "/api/auth/appeal", "/api/auth/player"}
     # Moderators get the bug dashboard only: read bugs and stats, handle bugs. Nothing that changes the bot.
     MOD_READ = [r"/api/overview", r"/api/health", r"/api/channels", r"/api/settings", r"/api/bot", r"/api/status", r"/api/insights",
                 r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles",
-                r"/api/queue", r"/api/reports", r"/api/appeals"]
+                r"/api/queue", r"/api/reports", r"/api/appeals",
+                r"/api/players/find", r"/api/players/\d+", r"/api/msglog"]
     MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/translate"),
-                 ("POST", r"/api/reports/\d+"), ("POST", r"/api/appeals/\d+"), ("POST", r"/api/raid"), ("POST", r"/api/spikes")]
+                 ("POST", r"/api/reports/\d+"), ("POST", r"/api/appeals/\d+"), ("POST", r"/api/raid"), ("POST", r"/api/spikes"),
+                 ("POST", r"/api/players/\d+/notes"), ("POST", r"/api/players/\d+/action")]
     SECRET_SETTING = re.compile(r"(header|secret|token|key|webhook|url)", re.I)
     DEFAULT_STAFF_ROLES = {"admin": ["Admin", "Boss", "Developer"], "mod": ["Senior Moderator", "Moderator"]}
 
@@ -633,9 +636,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             async with s.get(f"{DISCORD_API}/users/@me", headers={"Authorization": "Bearer " + tok["access_token"]}) as r:
                 user = await r.json(content_type=None)
         uid = int(user["id"])
-        if state.startswith("a."):                          # a player logging in to send an appeal – never a dashboard session
+        if state.startswith(("a.", "m.")):                  # a player logging in (appeal / my reports) – never a dashboard session
             name = (user.get("global_name") or user.get("username") or str(uid))[:60]
-            resp = web.HTTPFound(appeal_page())
+            resp = web.HTTPFound(appeal_page("appeal.html" if state.startswith("a.") else "my.html"))
             resp.set_cookie(APPEAL_COOKIE, appeal_sign(uid, name, int(time.time()) + 3600), max_age=3600, httponly=True,
                             samesite="Lax", path="/", secure=c["redirect"].startswith("https://"))
             resp.del_cookie("wos_state", path="/api/auth/")
@@ -1827,6 +1830,167 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             hooks["spike_dismiss"](str(d["dismiss"]))
         return web.json_response({"spikes": hooks["active_spikes"]()})
 
+    # ------------------------------------------------ player card, staff notes, deleted messages
+    def msg_dict(m):
+        return {"id": str(m["message_id"]), "channel": m["channel_name"] or "", "author_id": str(m["author_id"]),
+                "author": person(m["author_id"], m["author_name"]) or m["author_name"] or "?", "content": m["content"] or "",
+                "attachments": len(json.loads(m["attachments"])), "ts": m["ts"], "deleted_ts": m["deleted_ts"], "deleted_by": m["deleted_by"] or "",
+                "edits": json.loads(m["edits"]),
+                "url": f"https://discord.com/channels/{guild_id}/{m['channel_id']}/{m['message_id']}"}
+
+    def player_id(request) -> int:
+        raw = request.match_info["id"]
+        if not raw.isdigit() or not 15 <= len(raw) <= 20:
+            raise ApiError(400, "That isn't a Discord user ID.")
+        return int(raw)
+
+    async def player_card(uid: int) -> dict:
+        g = get_guild()
+        m = g.get_member(uid)
+        cases_ = store.cases_for(uid, 30)
+        bugs_, sugs_ = store.player_bugs(uid), store.player_suggestions(uid)
+        link, inv, rep = store.get_link(uid), store.invited_by(uid), store.player_reports(uid)
+        name = (m.display_name if m else None) or next((x for x in ([c["user_name"] for c in cases_] + [b["reporter_name"] for b in bugs_]
+                                                                    + [inv["member_name"] if inv else None]) if x), None)
+        banned = None
+        if m is None:
+            try:
+                ban = await g.fetch_ban(discord.Object(id=uid))
+                tb = store.temp_ban(uid)
+                banned = {"reason": ban.reason or "", "until": tb["until"] if tb else None}
+                if not name or name.startswith("User …") or name.isdigit():
+                    name = getattr(ban.user, "name", None) or name
+            except discord.HTTPException:
+                banned = None
+        until = getattr(m, "timed_out_until", None) if m else None
+        block = store.get_block(uid)
+        ic = store.invite_counts(uid)
+        st = {}
+        for b in bugs_:
+            st[b["status"]] = st.get(b["status"], 0) + 1
+        return {
+            "id": str(uid), "name": name or f"User …{str(uid)[-4:]}", "on_server": m is not None,
+            "avatar": str(m.display_avatar.replace(size=128).url) if m else "",
+            "joined": int(m.joined_at.timestamp()) if m and m.joined_at else None,
+            "created": int(m.created_at.timestamp()) if m else None,
+            "roles": [r.name for r in sorted(m.roles, key=lambda r: -r.position) if not r.is_default()][:12] if m else [],
+            "staff": bool(m and (await staff_role(uid))),
+            "timeout_until": int(until.timestamp()) if until and until.timestamp() > time.time() else None,
+            "banned": banned, "blocked": {"reason": block["reason"] or "", "until": block["until"]} if block else None,
+            "link": {"uid": link["player_uid"], "chief": link["chief_name"] or "", "ts": link["ts"]} if link else None,
+            "warnings": store.active_warnings(uid), "cases": [case_dict(c) for c in cases_],
+            "bugs": [{"id": b["id"], "summary": store.bug_summary(b), "status": b["status"], "created_at": b["created_at"],
+                      "duplicate_of": b["duplicate_of"]} for b in bugs_],
+            "bug_counts": st,
+            "suggestions": [{"id": x["id"], "text": (x["text"] or "")[:160], "status": x["status"], "created_at": x["created_at"]} for x in sugs_],
+            "appeals": [{"id": a["id"], "kind": a["kind"], "status": a["status"], "ts": a["ts"], "text": a["text"][:300], "note": a["note"] or ""}
+                        for a in store.player_appeals(uid)],
+            "reported": [{"id": r["id"], "ts": r["ts"], "content": (r["content"] or "")[:300], "channel": r["channel_name"] or "",
+                          "status": r["status"], "action": r["action"] or ""} for r in rep["about"]],
+            "reports_made": rep["made"],
+            "invites": {"regular": ic.get("regular", 0), "total": ic.get("total", 0), "left": ic.get("left", 0), "fake": ic.get("fake", 0),
+                        "bonus": ic.get("bonus", 0)},
+            "invited_by": ({"id": str(inv["inviter_id"]) if inv["inviter_id"] else None,
+                            "name": (person(inv["inviter_id"]) if inv["inviter_id"] else None) or ("Unknown" if not inv["inviter_id"] else f"User …{str(inv['inviter_id'])[-4:]}"),
+                            "ts": inv["ts"], "new_account": bool(inv["fake"])} if inv else None),
+            "notes": [{"id": n["id"], "text": n["text"], "author": n["author_name"] or "", "ts": n["ts"]} for n in store.player_notes(uid)],
+            "deleted": [msg_dict(x) for x in store.changed_messages("deleted", user_id=uid, limit=10)],
+        }
+
+    @routes.get("/api/players/find")
+    async def players_find(request):
+        q = (request.query.get("q") or "").strip()[:60]
+        if len(q) < 2:
+            return web.json_response({"items": []})
+        g = get_guild()
+        out, seen = [], set()
+        if q.isdigit() and 15 <= len(q) <= 20:
+            out.append({"id": q, "name": person(int(q)) or f"User …{q[-4:]}", "on_server": g.get_member(int(q)) is not None}); seen.add(int(q))
+        ql = q.lower()
+        for m in g.members:
+            if len(out) >= 12:
+                break
+            if not m.bot and m.id not in seen and (ql in m.display_name.lower() or ql in m.name.lower()):
+                seen.add(m.id); out.append({"id": str(m.id), "name": m.display_name, "on_server": True})
+        for uid, name in store.find_players(q):
+            if len(out) >= 12:
+                break
+            if uid not in seen:
+                seen.add(uid); out.append({"id": str(uid), "name": person(uid, name) or name or f"User …{str(uid)[-4:]}", "on_server": g.get_member(uid) is not None})
+        return web.json_response({"items": out})
+
+    @routes.get("/api/players/{id}")
+    async def player_get(request):
+        return web.json_response(await player_card(player_id(request)))
+
+    @routes.post("/api/players/{id}/notes")
+    async def player_note_add(request):
+        uid = player_id(request)
+        text = str((await body_json(request)).get("text") or "").strip()
+        if len(text) < 2:
+            raise ApiError(400, "Write the note first.")
+        store.add_player_note(uid, text, who_id(request), who(request))
+        return web.json_response(await player_card(uid))
+
+    @routes.delete("/api/players/{id}/notes/{nid}")
+    async def player_note_del(request):
+        uid = player_id(request)
+        store.delete_player_note(int_param(request, "nid"))
+        return web.json_response(await player_card(uid))
+
+    @routes.post("/api/players/{id}/action")
+    async def player_action(request):
+        """warn | timeout | untimeout | ban (admins; days = temporary) | unban (admins)."""
+        uid = player_id(request)
+        d = await body_json(request)
+        action, reason = str(d.get("action") or ""), str(d.get("reason") or "").strip()[:400]
+        g = get_guild()
+        m = g.get_member(uid)
+        admin = request.get("role") == "admin"
+        if action in ("ban", "unban") and not admin:
+            raise ApiError(403, "Only admins can ban or unban.")
+        if m is not None and await staff_role(uid):
+            raise ApiError(400, "That's a staff member.")
+        if action in ("warn", "timeout", "ban") and len(reason) < 3:
+            raise ApiError(400, "Write why (the member sees it).")
+        try:
+            if action == "warn":
+                if m is None:
+                    raise ApiError(400, "That member isn't on the server.")
+                await hooks["warn_member"](m, reason, who_id(request), who(request))
+            elif action == "timeout":
+                if m is None:
+                    raise ApiError(400, "That member isn't on the server.")
+                await hooks["timeout_member"](m, max(1, min(40320, int(d.get("minutes") or 60))), reason, who_id(request), who(request))
+            elif action == "untimeout":
+                if m is None:
+                    raise ApiError(400, "That member isn't on the server.")
+                await m.timeout(None, reason=f"Removed by {who(request)}"[:500])
+                store.add_case(uid, m.display_name, "pardon", "Timeout removed", who_id(request), who(request))
+                store.log_event("mod", f"Timeout of {m.display_name} removed by {who(request)}", who_id(request), who(request))
+            elif action == "ban":
+                days = max(0, min(365, int(d.get("days") or 0)))
+                await hooks["ban_user"](m or discord.Object(id=uid), reason, who_id(request), who(request), days)
+            elif action == "unban":
+                await g.unban(discord.Object(id=uid), reason=f"Unbanned by {who(request)}"[:500])
+                store.clear_temp_ban(uid)
+                store.add_case(uid, person(uid) or str(uid), "unban", reason or "Unbanned from the dashboard", who_id(request), who(request))
+                store.log_event("mod", f"User …{str(uid)[-4:]} unbanned by {who(request)}", who_id(request), who(request))
+            else:
+                raise ApiError(400, "Unknown action.")
+        except (TypeError, ValueError):
+            raise ApiError(400, "Minutes and days must be numbers.")
+        except discord.HTTPException as exc:
+            raise ApiError(502, f"Discord refused: {getattr(exc, 'text', '') or exc}. The bot needs the right permission and a role above theirs.")
+        return web.json_response(await player_card(uid))
+
+    @routes.get("/api/msglog")
+    async def msglog(request):
+        kind = "edited" if request.query.get("kind") == "edited" else "deleted"
+        q = (request.query.get("q") or "").strip()[:60]
+        return web.json_response({"kind": kind, "enabled": bool(store.cfg("msglog_enabled")), "days": store.cfg("msglog_days"),
+                                  "items": [msg_dict(m) for m in store.changed_messages(kind, q)]})
+
     # --------------------------------------------- automatic website pauses
     @routes.get("/api/webblocks")
     async def web_blocks(request):
@@ -1909,10 +2073,21 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                                   "changelog": bool(store.cfg("changelog_enabled")),
                                   "giftcodes": bool(store.cfg("giftcodes_enabled")),
                                   "ideas": bool(store.cfg("changelog_enabled")),
+                                  "languages": [{"code": c, "name": _texts.lang_name(c)} for c in store.languages()],
+                                  "player_login": bool(oauth_conf()["secret"] and oauth_conf()["redirect"]),
                                   "areas": store.area_list(), "version": store.cfg("game_version") or "",
                                   "limits": {"files": MAX_FILES, "file_mb": MAX_FILE // 2**20,
                                              "title": [5, 100], "description": [20, 1800]}},
                                  headers={"Cache-Control": "max-age=60"})
+
+    @routes.get("/public/texts")
+    async def public_texts(request):
+        """The website's texts in one of the server's languages (see the Translations page)."""
+        lang = (request.query.get("lang") or "en").lower()[:8]
+        if lang not in store.languages():
+            raise ApiError(404, "That language isn't switched on.")
+        return web.json_response({"lang": lang, "rtl": lang.split("-")[0] in _texts.RTL, "texts": store.site_texts(lang)},
+                                 headers={"Cache-Control": "max-age=300"})
 
     @routes.post("/public/report")
     async def public_report(request):
@@ -2158,20 +2333,19 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         except Exception:  # noqa: BLE001
             return None
 
-    def appeal_page() -> str:
+    def appeal_page(name: str = "appeal.html") -> str:
         base = (store.cfg("giftcodes_site_url") or "").strip()
         if base.lower().startswith(("http://", "https://")):
-            return base.rstrip("/") + "/appeal.html"
-        return "/bugs/appeal.html"
+            return base.rstrip("/") + "/" + name
+        return "/bugs/" + name
 
-    @routes.get("/api/auth/appeal")
-    async def appeal_login(request):
+    def player_login(prefix: str):
         c = oauth_conf()
-        if not (c["secret"] and c["redirect"]) or not store.cfg("appeals_enabled"):
-            raise ApiError(404, "Appeals are not available right now.")
+        if not (c["secret"] and c["redirect"]):
+            raise ApiError(404, "Logging in with Discord isn't set up on this server.")
         import secrets
         from urllib.parse import urlencode
-        state = "a." + secrets.token_urlsafe(24)
+        state = prefix + secrets.token_urlsafe(24)
         now = time.time()
         for k in [k for k, t in pending_logins.items() if now - t > 600]:
             pending_logins.pop(k, None)
@@ -2181,7 +2355,46 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         resp = web.HTTPFound(url)
         resp.set_cookie("wos_state", state, max_age=600, httponly=True, samesite="Lax", path="/api/auth/",
                         secure=c["redirect"].startswith("https://"))
-        raise resp
+        return resp
+
+    @routes.get("/api/auth/player")
+    async def my_login(request):
+        """A player logs in to see their own reports (never a dashboard session)."""
+        raise player_login("m.")
+
+    MY_STEPS = {"passed": "passed", "being_investigated": "being_investigated", "fixed": "fixed", "rejected": "rejected",
+                "admin_rejected": "rejected", "investigating": "investigating", "reopened": "reopened"}
+
+    @routes.get("/public/my")
+    async def my_reports(request):
+        user = appeal_user(request)
+        if user is None:
+            return web.json_response({"logged_in": False, "login": bool(oauth_conf()["secret"] and oauth_conf()["redirect"])},
+                                     headers={"Cache-Control": "no-store"})
+        uid, name = user
+        bugs_ = []
+        for b in store.player_bugs(uid, 60):
+            orig = store.get_bug(b["duplicate_of"]) if b["duplicate_of"] else None
+            steps = [{"ts": b["created_at"], "step": "sent"}] + [{"ts": x["ts"], "step": MY_STEPS[x["action"]]}
+                                                                  for x in store.bug_actions(b["id"]) if x["action"] in MY_STEPS]
+            bugs_.append({"id": b["id"], "title": store.bug_summary(b), "status": b["status"], "created": b["created_at"], "area": b["area"] or "",
+                          "fixed_in": b["fixed_version"] or "", "reason": b["reject_reason"] or "",
+                          "duplicate_of": b["duplicate_of"], "original_status": orig["status"] if orig else "",
+                          "original_fixed_in": (orig["fixed_version"] or "") if orig else "",
+                          "known": bool(b["public"]), "affected": 1 + len(store.duplicates_of(b["id"])) + store.vote_count(b["id"]),
+                          "dev": b["dev_state"] if b["dev_state"] in ("working", "fixed") else "", "steps": steps})
+        sugs_ = [{"id": x["id"], "text": (x["text"] or "")[:400], "status": x["status"], "created": x["created_at"],
+                  "reason": x["reject_reason"] or ""} for x in store.player_suggestions(uid, 60)]
+        link = store.get_link(uid)
+        return web.json_response({"logged_in": True, "name": name, "bugs": bugs_, "suggestions": sugs_,
+                                  "linked": {"chief": link["chief_name"] or "", "uid": link["player_uid"]} if link else None},
+                                 headers={"Cache-Control": "no-store"})
+
+    @routes.get("/api/auth/appeal")
+    async def appeal_login(request):
+        if not store.cfg("appeals_enabled"):
+            raise ApiError(404, "Appeals are not available right now.")
+        raise player_login("a.")
 
     async def appeal_me_payload(user):
         if user is None:

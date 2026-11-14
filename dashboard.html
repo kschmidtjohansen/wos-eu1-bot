@@ -427,6 +427,26 @@
 .w-fold[open] > summary::before{transform:rotate(90deg)}
 .w-fold[open] > summary{margin-bottom:10px}
 .w-more summary{cursor:pointer;color:var(--w-muted);font-size:13.5px}
+.w-plink{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:var(--w-border-strong);text-underline-offset:3px}
+.w-plink:hover{text-decoration-color:var(--w-accent)}
+.w-pfind{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.w-phead{display:flex;align-items:center;gap:12px}
+.w-phead img{width:44px;height:44px;border-radius:50%}
+.w-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px 16px;margin:10px 0 4px}
+.w-facts div{min-width:0}
+.w-facts dt{font-size:12.5px;color:var(--w-muted)}
+.w-facts dd{margin:0;overflow-wrap:anywhere}
+.w-h4{margin:16px 0 6px;font-size:15px}
+.w-h4 .w-hint{font-weight:400;margin-left:6px}
+.w-note{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:8px 12px;border-radius:10px;background:var(--w-surface-2);border:1px solid var(--w-border);margin-bottom:6px}
+.w-note p{margin:0;flex:1 1 100%;white-space:pre-wrap;overflow-wrap:anywhere}
+.w-note .w-btn{margin-left:auto}
+.w-msgrow{padding:12px 0;border-top:1px solid var(--w-border)}
+.w-msgrow:first-of-type{border-top:0}
+.w-click{cursor:pointer}.w-click:hover span{text-decoration:underline}
+.w-seg{display:inline-flex;border:1px solid var(--w-border);border-radius:12px;overflow:hidden}
+.w-seg button{border:0;background:none;color:var(--w-muted);font:inherit;padding:8px 14px;cursor:pointer}
+.w-seg button[aria-selected=true]{background:var(--w-surface-2);color:var(--w-text);font-weight:600}
 .w-alertrow{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:14px 18px;margin-bottom:12px;border-left:3px solid var(--w-accent)}
 .w-alertrow.bad{border-left-color:var(--w-bad,#ff6b7a);background:linear-gradient(90deg,rgba(255,107,122,.10),transparent 70%)}
 .w-alertrow.warn{border-left-color:var(--w-warn);background:linear-gradient(90deg,var(--w-warn-soft),transparent 70%)}
@@ -813,7 +833,7 @@ const S = {
 };
 const NAV = [
   ['overview', 'Overview', 'grid', 'Daily work'], ['bugs', 'Bugs', 'bug', 'Daily work'], ['suggestions', 'Suggestions', 'bulb', 'Daily work'],
-  ['codes', 'Gift codes', 'gift', 'Daily work'], ['players', 'Players', 'users', 'Daily work'], ['queue', 'Reports & appeals', 'shield', 'Daily work'], ['warnings', 'Warnings', 'alert', 'Daily work'], ['mod', 'Moderation', 'shield', 'Daily work'],
+  ['codes', 'Gift codes', 'gift', 'Daily work'], ['players', 'Players', 'users', 'Daily work'], ['queue', 'Reports & appeals', 'shield', 'Daily work'], ['msglog', 'Deleted messages', 'list', 'Daily work'], ['warnings', 'Warnings', 'alert', 'Daily work'], ['mod', 'Moderation', 'shield', 'Daily work'],
   ['welcome', 'Welcome', 'userplus', 'Community'], ['access', 'Access & languages', 'globe', 'Community'], ['rolemenus', 'Role menus', 'tag', 'Community'],
   ['giveaways', 'Giveaways', 'party', 'Community'], ['timers', 'Timed messages', 'clock', 'Community'], ['invites', 'Invites', 'userplus', 'Community'],
   ['info', 'Info channel', 'list', 'Posts'], ['patch', 'Patch notes & posts', 'wrench', 'Posts'],
@@ -826,11 +846,11 @@ const NAV = [
 const HUBS = [
   ['overview', 'Overview', 'grid', ['overview']], ['bugs', 'Bugs', 'bug', ['bugs']], ['suggestions', 'Suggestions', 'bulb', ['suggestions']],
   ['codes', 'Gift codes', 'gift', ['codes']], ['players', 'Players', 'users', ['players']], '|',
-  ['moderation', 'Moderation', 'shield', ['queue', 'warnings', 'mod']], ['members', 'Members', 'userplus', ['welcome', 'access', 'rolemenus', 'invites']],
+  ['moderation', 'Moderation', 'shield', ['queue', 'msglog', 'warnings', 'mod']], ['members', 'Members', 'userplus', ['welcome', 'access', 'rolemenus', 'invites']],
   ['events', 'Events', 'party', ['giveaways', 'timers']], ['posts', 'Posts', 'list', ['info', 'patch']], '|',
   ['stats', 'Stats', 'chart', ['insights', 'moderators', 'status', 'log']], ['setup', 'Settings', 'wrench', ['panel', 'channels', 'translations', 'bot', 'data']]
 ];
-const HUB_LABEL = { queue: 'Reports & appeals', warnings: 'Warnings', mod: 'Auto-mod & replies', welcome: 'Welcome', access: 'Access & languages', rolemenus: 'Role menus', invites: 'Invites',
+const HUB_LABEL = { queue: 'Reports & appeals', msglog: 'Deleted messages', warnings: 'Warnings', mod: 'Auto-mod & replies', welcome: 'Welcome', access: 'Access & languages', rolemenus: 'Role menus', invites: 'Invites',
   giveaways: 'Giveaways', timers: 'Timed messages', info: 'Info channel', patch: 'Patch notes & posts', insights: 'Insights', moderators: 'Moderators',
   status: 'Server status', log: 'Activity log', panel: 'Bug bot', channels: 'Channels', translations: 'Translations', bot: 'Bot profile', data: 'Data & backups' };
 const allowed = t => !isMod() || MOD_TABS.includes(t);
@@ -848,7 +868,7 @@ function sideNav(o) {
     : html`<button role="tab" data-act="hub" data-hub="${h[0]}" ${h[3].length === 1 ? html`data-tab="${h[3][0]}"` : ''} aria-selected="${String(hubOf(S.tab)[0] === h[0])}">${icon(h[2])}<span>${hubName(h)}</span>${h[0] === 'bugs' && o.stats.bugs.awaiting ? html`<em class="w-count">${o.stats.bugs.awaiting}</em>` : ''}${h[0] === 'moderation' && S.queue && (S.queue.reports + S.queue.appeals) ? html`<em class="w-count">${S.queue.reports + S.queue.appeals}</em>` : ''}</button>`);
 }
 window.wosdGo = t => { S.tab = t; renderTab(); };
-const MOD_TABS = ['overview', 'bugs', 'queue', 'insights', 'moderators', 'status'];   // moderator view: bugs + stats, nothing that changes the bot
+const MOD_TABS = ['overview', 'bugs', 'queue', 'msglog', 'insights', 'moderators', 'status'];   // moderator view: bugs + stats, nothing that changes the bot
 const isMod = () => !!(S.user && S.user.role !== 'admin');
 const CHANNELS = [
   ['report_channel_id', 'Bug report channel', 'Where the panel message lives and where players open their private tickets.'],
@@ -873,7 +893,7 @@ const FEATURE_KEYS = ['warn_timeout_at', 'warn_timeout_minutes', 'warn_ban_at', 
   'reminders_enabled', 'reminder_mod_hours', 'reminder_admin_hours', 'reminder_critical_hours',
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
-  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'devlist_enabled', 'devlist_hour', 'devlist_files', 'spike_enabled', 'spike_count', 'spike_minutes', 'msg_reports_enabled', 'appeals_enabled', 'raid_enabled', 'raid_joins', 'raid_minutes', 'raid_auto_lift_minutes', 'update_notice_enabled',
+  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'devlist_enabled', 'devlist_hour', 'devlist_files', 'spike_enabled', 'spike_count', 'spike_minutes', 'msg_reports_enabled', 'appeals_enabled', 'raid_enabled', 'raid_joins', 'raid_minutes', 'raid_auto_lift_minutes', 'msglog_enabled', 'msglog_days', 'update_notice_enabled',
   'report_style', 'info_remind_hours', 'info_close_hours', 'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'giftcodes_delete_expired', 'giftcodes_list', 'giftcodes_site_url', 'drive_enabled', 'drive_every_days', 'drive_keep'];
 const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'];
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
@@ -1212,6 +1232,11 @@ const FSEC = {
       ${toggleRow('spike_enabled', 'Alert the admins when reports pile up', 'Many reports about the same area in a short time usually means something broke. The admins get a ping with a button that posts the bug as a known issue – players then see it before they report. One alert per area every 3 hours.')}
       ${numberRow('spike_count', 'Reports', 'How many reports about one area…', 3, 50, 'reports')}
       ${numberRow('spike_minutes', 'Within', '…within this many minutes.', 10, 720, 'minutes')}
+    </section>`,
+  msglog: () => html`
+    <section class="w-card w-pad"><div class="w-group-title">Message log</div>
+      ${toggleRow('msglog_enabled', 'Keep deleted and edited messages for staff', 'The bot remembers the text of chat messages for a few days. When one is deleted or edited, staff can still read it here and on the player card. Private bug tickets and attachments are not kept.')}
+      ${numberRow('msglog_days', 'Keep for', 'Older messages are removed from the bot for good.', 1, 30, 'days')}
     </section>`,
   staffq: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Reported messages & appeals</div>
@@ -1615,7 +1640,7 @@ function bugModal() {
   return html`<div class="w-modal" id="wmodal" data-act="modalBg"><div class="w-modal-card" role="dialog" aria-modal="true" aria-label="Bug #${b.id}">
     <div class="w-modal-head"><h3><span class="w-hint" style="font-size:15px">#${b.id}</span> ${b.summary}</h3><button class="w-btn small" data-act="closeModal" id="m-close">Close</button></div>
     <div class="w-bugmeta">${bugBadge(b.status)}${b.public ? html`<span class="w-knowntag">📌 Known issue</span>` : ''}${b.votes ? html`<span class="w-badge info" title="Players who picked “I have this too”">👥 ${b.votes} affected</span>` : ''}
-      <span>${who} · ${ago(b.created_at)}</span>${b.area ? html`<span>${b.area}</span>` : ''}${b.version ? html`<span>${b.version}</span>` : ''}${b.severity ? html`<span>${SEV[b.severity]}</span>` : ''}
+      <span>${pname(b.reporter_id, who)} · ${ago(b.created_at)}</span>${b.area ? html`<span>${b.area}</span>` : ''}${b.version ? html`<span>${b.version}</span>` : ''}${b.severity ? html`<span>${SEV[b.severity]}</span>` : ''}
       ${(b.chief_name || b.uid) ? html`<span>Chief <b>${b.chief_name || '–'}</b> · UID ${b.uid || '–'}</span>` : ''}</div>
     ${devLine(b)}
     ${reportText(b.text)}
@@ -1706,7 +1731,7 @@ function showModal() {
   loadThumbs();
   const c = $('#m-close'); if (c) c.focus();
 }
-function closeModal() { S.detail = null; S.rejOpen = false; const m = $('#wmodal'); if (m) m.remove(); }
+function closeModal() { S.detail = null; S.player = null; S.rejOpen = false; const m = $('#wmodal'); if (m) m.remove(); }
 function refreshOverviewSoon() { setTimeout(() => { if (S.tab !== 'overview') call('GET', '/api/overview').then(o => { S.overview = o; refreshNavCount(); }).catch(() => {}); }, 300); }
 async function changeBug(body, okMsg, btn) {
   busy(btn, true, 'Working…');
@@ -1902,7 +1927,7 @@ function caseMini(x) {
 function reportCard(r) {
   const open = r.status === 'open';
   return html`<article class="w-qcard" data-rid="${r.id}">
-    <div class="w-qhead"><b>${r.target}</b><span class="w-hint">in #${r.channel} · ${ago(r.ts)}</span>${r.warnings ? html`<span class="w-badge warn">⚠️ ${r.warnings} active</span>` : ''}
+    <div class="w-qhead"><b>${pname(r.target_id, r.target)}</b><span class="w-hint">in #${r.channel} · ${ago(r.ts)}</span>${r.warnings ? html`<span class="w-badge warn">⚠️ ${r.warnings} active</span>` : ''}
       <a class="w-linkbtn" href="${r.url}" target="_blank" rel="noopener">Open in Discord ↗</a></div>
     ${r.context.length ? html`<div class="w-ctx">${r.context.map(c => html`<p><b>${c.name}</b> ${c.text || '…'}</p>`)}</div>` : ''}
     <blockquote class="w-flagged">${r.content || '(no text)'}${r.attachments.length ? html`<span class="w-hint" style="display:block">${r.attachments.length} attachment${r.attachments.length === 1 ? '' : 's'} – open in Discord to see</span>` : ''}</blockquote>
@@ -1920,7 +1945,7 @@ function reportCard(r) {
 function appealCard(a) {
   const open = a.status === 'open', mine = a.kind !== 'ban' || !isMod();
   return html`<article class="w-qcard">
-    <div class="w-qhead"><b>${a.user}</b><span class="w-badge ${a.kind === 'ban' ? 'bad' : 'info'}">${a.kind === 'ban' ? '⛔ Ban' : '🔇 Timeout'}</span><span class="w-hint">${ago(a.ts)}</span>
+    <div class="w-qhead"><b>${pname(a.user_id, a.user)}</b><span class="w-badge ${a.kind === 'ban' ? 'bad' : 'info'}">${a.kind === 'ban' ? '⛔ Ban' : '🔇 Timeout'}</span><span class="w-hint">${ago(a.ts)}</span>
       ${open ? '' : html`<span class="w-badge ${a.status === 'accepted' ? 'ok' : 'todo'}">${a.status === 'accepted' ? 'Accepted' : 'Declined'}</span>`}</div>
     <p class="w-hint" style="margin:6px 0">Punished for: ${a.case_reason || 'no reason recorded'}${a.case_ts ? ' · ' + ago(a.case_ts) : ''}</p>
     <blockquote class="w-flagged calm">${a.text}</blockquote>
@@ -1941,6 +1966,7 @@ function viewQueue() {
       <p class="w-sub">${Q.raid.active ? 'On since ' + ago(Q.raid.since) + (Q.raid.by ? ' (' + Q.raid.by + ')' : '') + ' · ' + Q.raid.joined + ' joined meanwhile. They wait at the door until you lift it.'
         : 'Switches on by itself when many accounts join within minutes: new members ' + (Q.raid.gate ? 'can’t get past the device question' : 'aren’t welcomed') + ' and staff get a ping.'}</p>
       <div class="w-actions"><button class="w-btn ${Q.raid.active ? 'primary' : 'danger'}" data-act="raidSet" data-on="${Q.raid.active ? 0 : 1}">${Q.raid.active ? 'Lift raid mode' : 'Switch on now'}</button></div></section>
+    ${playerFind()}
     <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Reported messages${!done && R.items.length ? html` <em class="w-count">${R.items.length}</em>` : ''}</h3>
         <button class="w-btn small" data-act="queueDone">${done ? 'Show waiting' : 'Show handled'}</button></div>
       ${R.items.length ? R.items.map(reportCard) : html`<div class="w-empty">${done ? 'Nothing handled yet.' : 'No reported messages are waiting. Players right-click a message → Apps → “Report to moderators”.'}</div>`}</section>
@@ -1959,6 +1985,74 @@ function devPageCard() {
     <div class="w-actions" style="margin-top:10px"><button class="w-btn ${D.active ? '' : 'primary'}" data-act="devLinkNew">${D.active ? 'Make a new link' : 'Make the link'}</button>
       ${D.active ? html`<button class="w-btn danger" data-act="devLinkOff">Switch off</button>` : ''}</div></section>`;
 }
+/* ------------------------------------------------ player card (one page per player) and deleted messages */
+const pname = (id, name) => id && /^\d{15,20}$/.test(String(id)) ? html`<button class="w-plink" data-act="playerOpen" data-id="${id}" title="Open the player card">${name}</button>` : name;
+function playerFind() {
+  const F = S.pfind || { q: '', items: null };
+  return html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Find a player</h3></div>
+    <div class="w-inline"><input class="w-input" id="pf-q" placeholder="Discord name, chief name, UID or Discord ID" value="${F.q}" aria-label="Find a player" style="max-width:340px"><button class="w-btn" data-act="playerFind">Find</button></div>
+    ${F.items ? (F.items.length ? html`<div class="w-pfind">${F.items.map(x => html`<button class="w-btn small" data-act="playerOpen" data-id="${x.id}">${x.name}${x.on_server ? '' : ' (left)'}</button>`)}</div>`
+      : html`<p class="w-hint" style="margin:8px 0 0">Nobody matches. Paste a Discord user ID to open any account.</p>`) : ''}</section>`;
+}
+function msgRow(m, withAuthor) {
+  const last = m.edits.length ? m.edits[m.edits.length - 1] : null;
+  return html`<div class="w-msgrow"><div class="w-qhead">${withAuthor ? html`<b>${pname(m.author_id, m.author)}</b>` : ''}<span class="w-hint">#${m.channel} · written ${ago(m.ts)}${m.deleted_ts ? ' · deleted ' + ago(m.deleted_ts) : ''}</span>
+      ${m.deleted_ts ? html`<span class="w-badge ${m.deleted_by === 'bot' ? 'info' : 'todo'}">${m.deleted_by === 'bot' ? 'Removed by the bot' : m.deleted_by ? 'Removed by ' + m.deleted_by : 'Deleted'}</span>` : html`<a class="w-linkbtn" href="${m.url}" target="_blank" rel="noopener">Open ↗</a>`}</div>
+    <blockquote class="w-flagged calm">${m.content || '(no text)'}${m.attachments ? html`<span class="w-hint" style="display:block">${m.attachments} attachment${m.attachments === 1 ? '' : 's'} (not kept)</span>` : ''}</blockquote>
+    ${last ? html`<details class="w-fold"><summary><b>Before the edit</b><span class="w-hint">${m.edits.length} earlier version${m.edits.length === 1 ? '' : 's'}</span></summary>${m.edits.map(e => html`<blockquote class="w-flagged calm" style="opacity:.8">${e.text || '(no text)'}<span class="w-hint" style="display:block">changed ${ago(e.ts)}</span></blockquote>`)}</details>` : ''}</div>`;
+}
+function viewMsgLog() {
+  const L = S.msglog;
+  if (!L) return html`<div class="w-pagehead"><h2>Deleted messages</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  return html`
+    <div class="w-pagehead"><h2>Deleted messages</h2><p>Chat messages that were deleted or edited in the last ${L.days} days – so there is something to look at when someone deletes before a moderator arrives. Only staff can see this.</p></div>
+    <section class="w-card w-pad"><div class="w-sec-head"><div class="w-seg" role="tablist"><button data-act="msglogKind" data-k="deleted" aria-selected="${String(L.kind === 'deleted')}">Deleted</button><button data-act="msglogKind" data-k="edited" aria-selected="${String(L.kind === 'edited')}">Edited</button></div>
+        <div class="w-inline"><input class="w-input" id="ml-q" placeholder="Name, channel or words" value="${L.q || ''}" style="max-width:240px" aria-label="Search messages"><button class="w-btn small" data-act="msglogSearch">Search</button></div></div>
+      ${!L.enabled ? html`<div class="w-empty">The message log is switched off${isMod() ? '.' : ' – turn it on under Settings on this page.'}</div>`
+        : L.items.length ? L.items.map(m => msgRow(m, true)) : html`<div class="w-empty">${L.q ? 'Nothing matches.' : 'No ' + L.kind + ' messages in the last ' + L.days + ' days.'}</div>`}
+    </section>`;
+}
+const BUGST = { new: 'New', investigating: 'Info ticket', passed: 'With admins', being_investigated: 'Being fixed', fixed: 'Fixed', rejected: 'Rejected', admin_rejected: 'Rejected' };
+function playerModal() {
+  const p = S.player, admin = !isMod();
+  const facts = [p.joined ? ['Joined', ago(p.joined)] : null, p.created ? ['Account made', ago(p.created)] : null,
+    p.link ? ['Game account', (p.link.chief || '–') + ' · UID ' + p.link.uid] : ['Game account', 'not linked'],
+    ['Invites', p.invites.regular + (p.invites.total ? ' (' + p.invites.total + ' joined, ' + p.invites.left + ' left)' : '')],
+    p.invited_by ? ['Invited by', p.invited_by.name + ' · ' + ago(p.invited_by.ts) + (p.invited_by.new_account ? ' · new account' : '')] : null,
+    p.reports_made ? ['Messages they reported', p.reports_made] : null].filter(Boolean);
+  const sec = (title, n, body, open) => html`<details class="w-fold" ${open ? 'open' : ''}><summary><b>${title}</b><span class="w-hint">${n}</span></summary>${body}</details>`;
+  return html`<div class="w-modal" id="wmodal" data-act="modalBg"><div class="w-modal-card" role="dialog" aria-modal="true" aria-label="Player ${p.name}">
+    <div class="w-modal-head"><h3 class="w-phead">${p.avatar ? html`<img src="${p.avatar}" alt="">` : ''}<span>${p.name}</span></h3><button class="w-btn small" data-act="closeModal" id="m-close">Close</button></div>
+    <div class="w-bugmeta">${p.banned ? html`<span class="w-badge bad">⛔ Banned${p.banned.until ? ' until ' + new Date(p.banned.until * 1000).toLocaleDateString() : ''}</span>` : p.on_server ? html`<span class="w-badge ok">On the server</span>` : html`<span class="w-badge todo">Left the server</span>`}
+      ${p.timeout_until ? html`<span class="w-badge info">🔇 Timed out until ${new Date(p.timeout_until * 1000).toLocaleString()}</span>` : ''}${p.staff ? html`<span class="w-badge info">Staff</span>` : ''}
+      ${p.warnings ? html`<span class="w-badge warn">⚠️ ${p.warnings} active warning${p.warnings === 1 ? '' : 's'}</span>` : ''}${p.blocked ? html`<span class="w-badge todo">Blocked from reporting</span>` : ''}
+      <span>ID <code>${p.id}</code></span>${p.roles.length ? html`<span>${p.roles.slice(0, 6).join(', ')}</span>` : ''}</div>
+    ${p.banned && p.banned.reason ? html`<p class="w-hint" style="margin:0 0 6px">Ban reason: ${p.banned.reason}</p>` : ''}
+    <dl class="w-facts">${facts.map(f => html`<div><dt>${f[0]}</dt><dd>${f[1]}</dd></div>`)}</dl>
+
+    <h4 class="w-h4">Staff notes <span class="w-hint">only staff see these</span></h4>
+    ${p.notes.map(n => html`<div class="w-note"><p>${n.text}</p><span class="w-hint">${n.author} · ${ago(n.ts)}</span>${admin ? html`<button class="w-btn small" data-act="playerNoteDel" data-id="${n.id}" aria-label="Delete note">Delete</button>` : ''}</div>`)}
+    <div class="w-inline" style="margin-top:6px"><input class="w-input" id="pn-text" maxlength="1000" placeholder="${p.notes.length ? 'Add another note' : 'e.g. Talked to them in voice – it was a misunderstanding'}" aria-label="New note"><button class="w-btn" data-act="playerNote">Add note</button></div>
+
+    ${p.staff ? '' : html`<div class="w-decide" style="margin-top:14px">
+      <input class="w-input" id="pa-why" maxlength="400" placeholder="Reason – the member sees it" aria-label="Reason" style="flex:1 1 100%">
+      ${p.on_server ? html`<button class="w-btn danger" data-act="playerAct" data-a="warn">⚠️ Warn</button>
+        ${p.timeout_until ? html`<button class="w-btn" data-act="playerAct" data-a="untimeout">Remove timeout</button>` : html`<button class="w-btn danger" data-act="playerAct" data-a="timeout">🔇 Timeout</button>
+        <select class="w-select" id="pa-min" aria-label="Timeout length" style="width:auto"><option value="60">1 hour</option><option value="720">12 hours</option><option value="1440">1 day</option><option value="10080">1 week</option></select>`}` : ''}
+      ${admin ? (p.banned ? html`<button class="w-btn primary" data-act="playerAct" data-a="unban">Unban</button>`
+        : html`<button class="w-btn danger" data-act="playerAct" data-a="ban">⛔ Ban</button>
+        <select class="w-select" id="pa-days" aria-label="Ban length" style="width:auto"><option value="1">1 day</option><option value="3">3 days</option><option value="7" selected>7 days</option><option value="30">30 days</option><option value="0">For good</option></select>`) : ''}</div>`}
+
+    ${sec('Warnings and cases', p.cases.length, p.cases.length ? p.cases.map(c => html`<div class="w-caseline"><span class="w-badge ${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][0] : 'todo'}">${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][1] : c.kind}</span><span>${c.reason || '–'}${c.minutes && c.kind === 'timeout' ? ' · ' + c.minutes + ' min' : ''} <i class="w-hint">${c.auto ? 'Auto-mod' : c.moderator}</i></span><time title="${full(c.ts)}">${ago(c.ts)}</time></div>`) : html`<p class="w-hint">None.</p>`, p.cases.length > 0)}
+    ${sec('Bug reports', p.bugs.length + (p.bug_counts.fixed ? ' · ' + p.bug_counts.fixed + ' fixed' : ''), p.bugs.length ? p.bugs.map(b => html`<div class="w-caseline w-click" role="button" tabindex="0" data-act="bugOpen" data-id="${b.id}"><b>#${b.id}</b><span>${b.summary}${b.duplicate_of ? ' · duplicate of #' + b.duplicate_of : ''}</span><i class="w-hint">${BUGST[b.status] || b.status}</i><time>${ago(b.created_at)}</time></div>`) : html`<p class="w-hint">None.</p>`)}
+    ${p.suggestions.length ? sec('Suggestions', p.suggestions.length, p.suggestions.map(x => html`<div class="w-caseline"><b>#${x.id}</b><span>${x.text}</span><i class="w-hint">${x.status}</i><time>${ago(x.created_at)}</time></div>`)) : ''}
+    ${p.reported.length ? sec('Messages others reported', p.reported.length, p.reported.map(r => html`<div class="w-caseline"><span>“${r.content}” <i class="w-hint">#${r.channel}</i></span><i class="w-hint">${r.status === 'open' ? 'waiting' : r.action}</i><time>${ago(r.ts)}</time></div>`)) : ''}
+    ${p.appeals.length ? sec('Appeals', p.appeals.length, p.appeals.map(a => html`<div class="w-caseline"><span class="w-badge ${a.status === 'accepted' ? 'ok' : a.status === 'open' ? 'warn' : 'todo'}">${a.kind} · ${a.status}</span><span>${a.text}${a.note ? ' — “' + a.note + '”' : ''}</span><time>${ago(a.ts)}</time></div>`)) : ''}
+    ${p.deleted.length ? sec('Deleted messages', p.deleted.length, p.deleted.map(m => msgRow(m, false))) : ''}
+  </div></div>`;
+}
+async function openPlayer(id) { S.player = await call('GET', '/api/players/' + id); S.detail = null; showPlayer(); }
+function showPlayer() { const m = $('#wmodal'); if (m) m.remove(); root.insertAdjacentHTML('beforeend', String(playerModal())); const c = $('#m-close'); if (c) c.focus(); }
 function viewWarnings() {
   const C = S.cases;
   if (!C) return html`<div class="w-pagehead"><h2>Warnings</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
@@ -1975,7 +2069,7 @@ function viewWarnings() {
     <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Cases</h3>
       <div class="w-inline"><input class="w-input" id="cs-q" placeholder="Name, user ID or reason" value="${C.q || ''}" style="max-width:240px" aria-label="Search cases"><button class="w-btn small" data-act="caseSearch">Search</button></div></div>
       ${C.items.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>#</th><th style="text-align:left">Member</th><th style="text-align:left">What</th><th style="text-align:left">Reason</th><th>By</th><th>When</th><th>Active</th><th></th></tr></thead><tbody>
-        ${C.items.map(c => html`<tr><td>${c.id}</td><td style="text-align:left">${c.user}</td><td style="text-align:left"><span class="w-badge ${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][0] : 'todo'}">${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][1] : c.kind}</span>${c.minutes ? ' ' + c.minutes + ' min' : ''}</td>
+        ${C.items.map(c => html`<tr><td>${c.id}</td><td style="text-align:left">${pname(c.user_id, c.user)}</td><td style="text-align:left"><span class="w-badge ${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][0] : 'todo'}">${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][1] : c.kind}</span>${c.minutes ? ' ' + c.minutes + ' min' : ''}</td>
           <td style="text-align:left;max-width:320px;white-space:normal">${c.reason || '–'}</td><td>${c.auto ? 'Auto-mod' : c.moderator || '–'}</td><td title="${full(c.ts)}">${ago(c.ts)}</td><td>${c.warnings}</td>
           <td>${c.kind === 'warn' && c.active ? html`<button class="w-btn small" data-act="casePardon" data-id="${c.id}">Pardon</button>` : c.kind === 'warn' ? html`<span class="w-hint">pardoned</span>` : ''}</td></tr>`)}</tbody></table></div>`
         : html`<div class="w-empty">No cases${C.q ? ' match' : ' yet'}.</div>`}
@@ -2175,11 +2269,11 @@ function viewPlayers() {
   return html`
     <div class="w-pagehead"><h2>Players</h2><p>Discord members who linked their game account – with <code>/link</code>, the 🔗 button under the gift-codes list, or by giving their UID in a bug report.
       Linked players get their bug reports filled in${S.settings.redeem_enabled ? ' and gift codes redeemed automatically' : ''}.</p></div>
-    <div class="w-tiles w-tiles4"><div class="w-card w-tile"><i class="w-tic">${icon('users')}</i><b>${P.total}</b><span>Linked accounts</span></div></div>
+    ${playerFind()}
     <section class="w-card w-pad"><div class="w-inline" style="margin-bottom:10px"><input class="w-input" id="pl-q" placeholder="Search chief name, UID or Discord ID" value="${P.q || ''}" aria-label="Search players">
       <button class="w-btn" data-act="playersSearch">Search</button></div>
       ${P.items.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Chief</th><th>UID</th><th>Discord</th><th>Bug reports</th><th>Codes redeemed</th><th>Linked</th>${isMod() ? '' : html`<th></th>`}</tr></thead><tbody>
-        ${P.items.map(x => html`<tr><td>${x.chief || '–'}</td><td><code>${x.uid}</code></td><td>${x.name || 'User …' + x.discord_id.slice(-4)}</td><td>${x.bugs || '–'}</td><td>${x.redeemed || '–'}</td><td title="${full(x.ts)}">${ago(x.ts)}</td>
+        ${P.items.map(x => html`<tr><td>${x.chief || '–'}</td><td><code>${x.uid}</code></td><td>${pname(x.discord_id, x.name || 'User …' + x.discord_id.slice(-4))}</td><td>${x.bugs || '–'}</td><td>${x.redeemed || '–'}</td><td title="${full(x.ts)}">${ago(x.ts)}</td>
           ${isMod() ? '' : html`<td><button class="w-btn small danger" data-act="linkDelete" data-id="${x.discord_id}">Unlink</button></td>`}</tr>`)}</tbody></table></div>`
         : html`<div class="w-empty">${P.q ? 'No player matches that search.' : 'Nobody has linked their game account yet.'}</div>`}
       <p class="w-hint" style="margin-top:8px">Links are typed in by the players – they are not verified by the game.</p>
@@ -2660,7 +2754,7 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { queue: withSettings(viewQueue, ['staffq'], 'Settings'), access: viewAccess, warnings: withSettings(viewWarnings, ['warnings'], 'Escalation settings'), rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: withSettings(viewInvites, ['invites']), players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+const VIEWS = { queue: withSettings(viewQueue, ['staffq'], 'Settings'), msglog: withSettings(viewMsgLog, ['msglog'], 'Settings'), access: viewAccess, warnings: withSettings(viewWarnings, ['warnings'], 'Escalation settings'), rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: withSettings(viewInvites, ['invites']), players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
   features: viewPanel, welcome: viewWelcome, patch: viewPatch, mod: withSettings(viewMod, ['automod', 'guard'], 'Auto-mod & scam guard'), bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
@@ -2680,6 +2774,7 @@ const LOADERS = {
   bugs: () => loadBugs(true),
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
+  msglog: async () => { const k = (S.msglog && S.msglog.kind) || 'deleted', q = (S.msglog && S.msglog.q) || ''; S.msglog = Object.assign(await call('GET', '/api/msglog?kind=' + k + '&q=' + encodeURIComponent(q)), { q }); },
   queue: async () => { const st = S.queueDone ? 'done' : 'open'; const [r, a] = await Promise.all([call('GET', '/api/reports?status=' + st), call('GET', '/api/appeals?status=' + st)]); S.reports = r; S.appeals = a; },
   panel: async () => { if (isMod()) { S.langs = null; return; } const [l, d] = await Promise.all([call('GET', '/api/bugs/languages').catch(() => null), call('GET', '/api/devpage').catch(() => null)]); S.langs = l; S.devpage = d; },
   insights: async () => { S.insights = await call('GET', '/api/insights'); },
@@ -3495,6 +3590,21 @@ root.addEventListener('click', async e => {
       await call('DELETE', '/api/blocklist/' + el.dataset.id);
       S.blocks = (await call('GET', '/api/blocklist')).items; toast('Player unblocked.'); renderMain();
     }
+    else if (act === 'playerOpen') { busy(el, true); try { await openPlayer(el.dataset.id); } catch (err) { toast(err.message, 'err'); } busy(el, false); }
+    else if (act === 'playerFind') { const q = $('#pf-q').value.trim(); if (q.length < 2) return toast('Type at least 2 characters.', 'err');
+      try { S.pfind = { q, items: (await call('GET', '/api/players/find?q=' + encodeURIComponent(q))).items }; if (S.pfind.items.length === 1) await openPlayer(S.pfind.items[0].id); renderMain(); } catch (err) { toast(err.message, 'err'); } }
+    else if (act === 'playerNote') { const t = $('#pn-text').value.trim(); if (t.length < 2) return toast('Write the note first.', 'err'); busy(el, true, '…');
+      try { S.player = await call('POST', '/api/players/' + S.player.id + '/notes', { text: t }); showPlayer(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'playerNoteDel') { busy(el, true, '…');
+      try { S.player = await call('DELETE', '/api/players/' + S.player.id + '/notes/' + el.dataset.id); showPlayer(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'playerAct') { const a = el.dataset.a, why = $('#pa-why').value.trim(), keep = why;
+      if (['warn', 'timeout', 'ban'].includes(a) && why.length < 3) { $('#pa-why').focus(); return toast('Write the reason first – the member sees it.', 'err'); }
+      busy(el, true, '…');
+      try { S.player = await call('POST', '/api/players/' + S.player.id + '/action', { action: a, reason: why, minutes: $('#pa-min') ? +$('#pa-min').value : 60, days: $('#pa-days') ? +$('#pa-days').value : 0 });
+        toast({ warn: 'Warned.', timeout: 'Timed out.', untimeout: 'Timeout removed.', ban: 'Banned.', unban: 'Unbanned.' }[a]); showPlayer(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); const i = $('#pa-why'); if (i) i.value = keep; } }
+    else if (act === 'msglogKind') { S.msglog.kind = el.dataset.k; loadTab('msglog'); }
+    else if (act === 'msglogSearch') { S.msglog.q = $('#ml-q').value.trim(); loadTab('msglog'); }
     else if (act === 'raidSet') { busy(el, true, '…');
       try { const r = await call('POST', '/api/raid', { active: el.dataset.on === '1' }); if (S.queue) S.queue.raid = r; toast(r.active ? 'Raid mode is on.' : 'Raid mode lifted.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'spikeKnown' || act === 'spikeDismiss') { busy(el, true, '…');
@@ -3660,7 +3770,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, alerts_channel_id: null, spike_enabled: true, spike_count: 5, spike_minutes: 60, msg_reports_enabled: true, appeals_enabled: true, raid_enabled: true, raid_joins: 10, raid_minutes: 5, raid_auto_lift_minutes: 0, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, alerts_channel_id: null, spike_enabled: true, spike_count: 5, spike_minutes: 60, msg_reports_enabled: true, appeals_enabled: true, raid_enabled: true, raid_joins: 10, raid_minutes: 5, raid_auto_lift_minutes: 0, msglog_enabled: true, msglog_days: 7, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
     automod_mentions_on: true, automod_mentions_max: 5, automod_repeat_on: true, automod_warn: true, weekly_enabled: false, weekly_channel_id: null, weekly_weekday: 'sunday', weekly_hour: 18, push_enabled: true, guard_enabled: true, guard_timeout_minutes: 60, guard_block_invites: false, guard_allow_domains: 'discord.com\ndiscord.gg\ndiscordapp.com\nyoutube.com\ntenor.com', log_channel_kinds: 'all', dup_mode: 'auto', dup_auto_percent: 50, mod_ping_hours: 4, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
@@ -3977,10 +4087,33 @@ function makeMock() {
     if (p === '/api/replies') { replies.push({ id: nextReply++, title: body.title, text: body.text }); return { id: nextReply - 1 }; }
     m = p.match(/^\/api\/replies\/(\d+)$/);
     if (m) { const i = replies.findIndex(r => r.id === +m[1]); if (method === 'DELETE') { if (i >= 0) replies.splice(i, 1); } else if (i >= 0) Object.assign(replies[i], { title: body.title, text: body.text }); return { ok: true }; }
+    if (p === '/api/msglog') { const ed = /kind=edited/.test(path);
+      return { kind: ed ? 'edited' : 'deleted', enabled: true, days: 7, items: ed ? [{ id: '5', channel: 'general', author_id: '100000000000000001', author: 'Grimnir', content: 'sorry, that came out wrong', attachments: 0, ts: now - 4000, deleted_ts: null, deleted_by: '', edits: [{ text: 'you are all idiots', ts: now - 3900 }], url: '#' }]
+        : [{ id: '6', channel: 'general', author_id: '100000000000000001', author: 'Grimnir', content: 'uninstall the game, nobody wants you here', attachments: 0, ts: now - 2400, deleted_ts: now - 2300, deleted_by: '', edits: [], url: '#' },
+           { id: '7', channel: 'trade', author_id: '100000000000000003', author: 'Astrid', content: 'free gems here: hxxp://wos-gift.example', attachments: 1, ts: now - 90000, deleted_ts: now - 90000, deleted_by: 'bot', edits: [], url: '#' }] }; }
+    if (p.startsWith('/api/players/')) {
+      if (p === '/api/players/find') return { items: [{ id: '100000000000000001', name: 'Grimnir', on_server: true }, { id: '100000000000000003', name: 'Astrid', on_server: false }] };
+      const P = (window.__mockP = window.__mockP || { id: '100000000000000001', name: 'Grimnir', on_server: true, avatar: '', joined: now - 40 * 86400, created: now - 900 * 86400, roles: ['Member', 'Android / Emulator', 'English'], staff: false,
+        timeout_until: null, banned: null, blocked: null, link: { uid: '48211907', chief: 'Grimnir', ts: now - 30 * 86400 }, warnings: 1,
+        cases: [{ id: 4, kind: 'warn', reason: 'Spamming the same message', ts: now - 6 * 86400, minutes: null, active: true, auto: true, moderator: '' }],
+        bugs: bugs.slice(0, 4).map(b => ({ id: b.id, summary: b.summary, status: b.status, created_at: b.created_at, duplicate_of: b.duplicate_of })), bug_counts: { fixed: 1, passed: 2, new: 1 },
+        suggestions: [{ id: 9, text: 'Let us sort the hero list by power', status: 'accepted', created_at: now - 12 * 86400 }], appeals: [],
+        reported: [{ id: 3, ts: now - 1200, content: 'you are all idiots, uninstall the game', channel: 'general', status: 'open', action: '' }], reports_made: 2,
+        invites: { regular: 6, total: 9, left: 2, fake: 1, bonus: 0 }, invited_by: { id: '100000000000000002', name: 'Mira', ts: now - 40 * 86400, new_account: false },
+        notes: [{ id: 1, text: 'Usually helpful in #help. Gets heated in alliance arguments.', author: 'Sofie', ts: now - 9 * 86400 }],
+        deleted: [{ id: '6', channel: 'general', author_id: '100000000000000001', author: 'Grimnir', content: 'uninstall the game, nobody wants you here', attachments: 0, ts: now - 2400, deleted_ts: now - 2300, deleted_by: '', edits: [], url: '#' }] });
+      if (/\/notes$/.test(p)) P.notes.unshift({ id: Date.now(), text: body.text, author: 'You', ts: now });
+      else if (/\/notes\/\d+$/.test(p)) P.notes = P.notes.filter(n => String(n.id) !== p.split('/').pop());
+      else if (/\/action$/.test(p)) { const a = body.action; if (a === 'warn') { P.warnings++; P.cases.unshift({ id: 5, kind: 'warn', reason: body.reason, ts: now, minutes: null, active: true, auto: false, moderator: 'You' }); }
+        if (a === 'timeout') { P.timeout_until = now + body.minutes * 60; P.cases.unshift({ id: 6, kind: 'timeout', reason: body.reason, ts: now, minutes: body.minutes, active: false, auto: false, moderator: 'You' }); }
+        if (a === 'untimeout') P.timeout_until = null;
+        if (a === 'ban') { P.on_server = false; P.banned = { reason: body.reason, until: body.days ? now + body.days * 86400 : null }; P.cases.unshift({ id: 7, kind: 'ban', reason: body.reason + (body.days ? ' (for ' + body.days + ' days)' : ''), ts: now, minutes: null, active: false, auto: false, moderator: 'You' }); }
+        if (a === 'unban') P.banned = null; }
+      return JSON.parse(JSON.stringify(P)); }
     if (p === '/api/queue' || p === '/api/raid' || p === '/api/spikes' || p.startsWith('/api/reports') || p.startsWith('/api/appeals') || p.startsWith('/api/devpage')) {
       const M = (window.__mockQ = window.__mockQ || { raid: { active: false, since: null, by: '', ended: null, joined: 0, gate: true },
         spikes: [{ key: 'Alliance', area: 'Alliance', count: 6, bug: 62, ts: now - 900, known: false }], dev: { active: false, created: null },
-        reports: [{ id: 3, ts: now - 1200, status: 'open', content: 'you are all idiots, uninstall the game', channel: 'general', url: '#', target_id: '1', target: 'Grimnir', on_server: true,
+        reports: [{ id: 3, ts: now - 1200, status: 'open', content: 'you are all idiots, uninstall the game', channel: 'general', url: '#', target_id: '100000000000000001', target: 'Grimnir', on_server: true,
             reporters: [{ name: 'Mira', reason: 'insulting everyone', ts: now - 1200 }, { name: 'Jonas', reason: '', ts: now - 900 }], attachments: [],
             context: [{ name: 'Mira', text: 'anyone else stuck on the alliance screen?', ts: now - 1300 }, { name: 'Jonas', text: 'yes, since the update', ts: now - 1260 }],
             warnings: 1, cases: [{ id: 4, kind: 'warn', reason: 'Spamming the same message', ts: now - 6 * 86400, minutes: null, active: true, auto: true, moderator: '' }], action: '', handled_by: '', handled_ts: null }],

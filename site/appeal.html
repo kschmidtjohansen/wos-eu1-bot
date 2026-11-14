@@ -54,7 +54,7 @@ const S = {
 let me = null, error = null, busy = false, flash = '';
 const $ = id => document.getElementById(id), el = (...a) => WOS.el(...a), t = k => WOS.t(k);
 const base = ((window.WOS_CONFIG || {}).API_BASE || '').replace(/\/+$/, '');
-const when = ts => new Date(ts * 1000).toLocaleString(WOS.lang === 'pl' ? 'pl-PL' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const when = ts => new Date(ts * 1000).toLocaleString(WOS.locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 function foot() {
   const b = el('button', { type: 'button' }, t('out'));
   b.onclick = async () => { try { await WOS.api('/public/appeal/logout', { method: 'POST' }); } catch (e) { /* ignore */ } me = { logged_in: false, enabled: true, login: true }; draw(); };

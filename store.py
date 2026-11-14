@@ -242,6 +242,26 @@ db.executescript(
         status TEXT NOT NULL DEFAULT 'open',       -- open | accepted | declined
         note TEXT, handled_id INTEGER, handled_name TEXT, handled_ts INTEGER
     );
+    CREATE TABLE IF NOT EXISTS player_notes (  -- private staff notes on a player (player card)
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL, text TEXT NOT NULL,
+        author_id INTEGER, author_name TEXT, ts INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS temp_bans (     -- bans that end by themselves
+        user_id INTEGER PRIMARY KEY, user_name TEXT, until INTEGER NOT NULL, case_id INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS msg_log (       -- recent chat messages, kept a few days so deleted/edited ones can be read by staff
+        message_id INTEGER PRIMARY KEY,
+        channel_id INTEGER NOT NULL, channel_name TEXT,
+        author_id INTEGER NOT NULL, author_name TEXT,
+        content TEXT, attachments TEXT NOT NULL DEFAULT '[]',
+        ts INTEGER NOT NULL,
+        deleted_ts INTEGER,                        -- when it was deleted
+        deleted_by TEXT,                           -- 'bot' when the bot removed it (auto-mod, scam guard, a report)
+        edits TEXT NOT NULL DEFAULT '[]'           -- earlier versions: [{"text", "ts"}]
+    );
+    CREATE INDEX IF NOT EXISTS msg_log_author ON msg_log (author_id, ts);
+    CREATE INDEX IF NOT EXISTS msg_log_changed ON msg_log (deleted_ts);
     CREATE TABLE IF NOT EXISTS giveaways (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         channel_id INTEGER NOT NULL, message_id INTEGER,
@@ -437,6 +457,8 @@ SCHEMA = {
     "raid_joins": {"type": "int", "default": 10, "min": 3, "max": 200},
     "raid_minutes": {"type": "int", "default": 5, "min": 1, "max": 60},
     "raid_auto_lift_minutes": {"type": "int", "default": 0, "min": 0, "max": 1440},
+    "msglog_enabled": {"type": "bool", "default": True},
+    "msglog_days": {"type": "int", "default": 7, "min": 1, "max": 30},
     "update_notice_enabled": {"type": "bool", "default": True},
     "report_style": {"type": "choice", "default": "form", "choices": ["form", "ticket"]},
     "info_remind_hours": {"type": "int", "default": 48, "min": 0, "max": 720},
@@ -2097,6 +2119,135 @@ def previous_month() -> str:
     return f"{n.year - (n.month == 1):04d}-{(n.month - 2) % 12 + 1:02d}"
 
 
+# ------------------------------------------------------------- player card
+def player_notes(user_id: int) -> list:
+    return db.execute("SELECT * FROM player_notes WHERE user_id=? ORDER BY id DESC LIMIT 50", (user_id,)).fetchall()
+
+
+def add_player_note(user_id: int, text: str, author_id, author_name: str) -> int:
+    nid = db.execute("INSERT INTO player_notes (user_id, text, author_id, author_name, ts) VALUES (?,?,?,?,?)",
+                     (user_id, text[:1000], author_id, (author_name or "")[:60], int(time.time()))).lastrowid
+    db.commit()
+    return nid
+
+
+def delete_player_note(note_id: int) -> bool:
+    cur = db.execute("DELETE FROM player_notes WHERE id=?", (note_id,))
+    db.commit()
+    return cur.rowcount > 0
+
+
+def player_bugs(user_id: int, limit: int = 40) -> list:
+    return db.execute("SELECT * FROM bug_reports WHERE reporter_id=? ORDER BY id DESC LIMIT ?", (user_id, limit)).fetchall()
+
+
+def player_suggestions(user_id: int, limit: int = 40) -> list:
+    return db.execute("SELECT * FROM suggestions WHERE author_id=? ORDER BY id DESC LIMIT ?", (user_id, limit)).fetchall()
+
+
+def player_appeals(user_id: int) -> list:
+    return db.execute("SELECT * FROM appeals WHERE user_id=? ORDER BY id DESC LIMIT 20", (user_id,)).fetchall()
+
+
+def player_reports(user_id: int) -> dict:
+    """Chat messages of this player that others reported, and how many messages they reported themselves."""
+    about = db.execute("SELECT * FROM msg_reports WHERE target_id=? ORDER BY id DESC LIMIT 20", (user_id,)).fetchall()
+    made = db.execute("SELECT COUNT(*) FROM msg_reports WHERE reporters LIKE ?", (f'%"id": "{int(user_id)}"%',)).fetchone()[0]
+    return {"about": about, "made": made}
+
+
+def invited_by(user_id: int):
+    return db.execute("SELECT * FROM invite_joins WHERE member_id=? ORDER BY id DESC LIMIT 1", (user_id,)).fetchone()
+
+
+def find_players(q: str, limit: int = 12) -> list:
+    """Players the bot knows by name: (user_id, name) from reports, cases, links and joins."""
+    like = f"%{q}%"
+    out, seen = [], set()
+    for sql in ("SELECT reporter_id AS i, reporter_name AS n FROM bug_reports WHERE reporter_id>0 AND reporter_name LIKE ? ORDER BY id DESC LIMIT 20",
+                "SELECT user_id AS i, user_name AS n FROM mod_cases WHERE user_name LIKE ? ORDER BY id DESC LIMIT 20",
+                "SELECT discord_id AS i, chief_name AS n FROM links WHERE chief_name LIKE ? OR player_uid LIKE ? LIMIT 20",
+                "SELECT member_id AS i, member_name AS n FROM invite_joins WHERE member_name LIKE ? ORDER BY id DESC LIMIT 20"):
+        for r in db.execute(sql, (like, like) if sql.count("?") == 2 else (like,)).fetchall():
+            if r["i"] and r["i"] not in seen:
+                seen.add(r["i"])
+                out.append((r["i"], r["n"] or ""))
+    return out[:limit]
+
+
+# ------------------------------------------------------------- temporary bans
+def set_temp_ban(user_id: int, user_name: str, until: int, case_id=None):
+    db.execute("INSERT OR REPLACE INTO temp_bans (user_id, user_name, until, case_id) VALUES (?,?,?,?)",
+               (user_id, (user_name or "")[:60], until, case_id))
+    db.commit()
+
+
+def temp_ban(user_id: int):
+    return db.execute("SELECT * FROM temp_bans WHERE user_id=?", (user_id,)).fetchone()
+
+
+def due_temp_bans(now: Optional[int] = None) -> list:
+    return db.execute("SELECT * FROM temp_bans WHERE until<=?", (now or int(time.time()),)).fetchall()
+
+
+def clear_temp_ban(user_id: int):
+    db.execute("DELETE FROM temp_bans WHERE user_id=?", (user_id,))
+    db.commit()
+
+
+# ------------------------------------------------------------- deleted / edited messages
+def log_message(message_id: int, channel_id: int, channel_name: str, author_id: int, author_name: str, content: str, attachments: list, ts: int):
+    db.execute("INSERT OR IGNORE INTO msg_log (message_id, channel_id, channel_name, author_id, author_name, content, attachments, ts) "
+               "VALUES (?,?,?,?,?,?,?,?)", (message_id, channel_id, (channel_name or "")[:80], author_id, (author_name or "")[:60],
+                                            (content or "")[:4000], json.dumps(attachments[:8]), ts))
+    db.commit()
+
+
+def log_message_edit(message_id: int, new_text: str) -> bool:
+    r = db.execute("SELECT content, edits FROM msg_log WHERE message_id=?", (message_id,)).fetchone()
+    if r is None or (r["content"] or "") == (new_text or ""):
+        return False
+    edits = json.loads(r["edits"])[-9:] + [{"text": r["content"] or "", "ts": int(time.time())}]
+    db.execute("UPDATE msg_log SET content=?, edits=? WHERE message_id=?", ((new_text or "")[:4000], json.dumps(edits), message_id))
+    db.commit()
+    return True
+
+
+def log_message_deleted(message_ids, by: Optional[str] = None) -> int:
+    now, n = int(time.time()), 0
+    for mid in message_ids:
+        n += db.execute("UPDATE msg_log SET deleted_ts=?, deleted_by=COALESCE(deleted_by, ?) WHERE message_id=? AND deleted_ts IS NULL",
+                        (now, by, mid)).rowcount
+    db.commit()
+    return n
+
+
+def mark_bot_delete(message_id: int):
+    """The bot is about to delete this message itself (auto-mod, scam guard, a moderator's decision)."""
+    try:
+        db.execute("UPDATE msg_log SET deleted_by='bot' WHERE message_id=?", (int(message_id),))
+        db.commit()
+    except (TypeError, ValueError, sqlite3.Error):   # the log must never get in the way of moderation
+        pass
+
+
+def changed_messages(kind: str = "deleted", q: str = "", user_id: Optional[int] = None, limit: int = 60) -> list:
+    where, args = ["deleted_ts IS NOT NULL" if kind == "deleted" else "edits<>'[]'"], []
+    if user_id:
+        where.append("author_id=?"); args.append(user_id)
+    if q:
+        where.append("(author_name LIKE ? OR content LIKE ? OR channel_name LIKE ? OR CAST(author_id AS TEXT)=?)")
+        args += [f"%{q}%", f"%{q}%", f"%{q}%", q]
+    order = "deleted_ts DESC" if kind == "deleted" else "ts DESC"
+    return db.execute(f"SELECT * FROM msg_log WHERE {' AND '.join(where)} ORDER BY {order} LIMIT ?", (*args, limit)).fetchall()
+
+
+def purge_msg_log(days: int) -> int:
+    cur = db.execute("DELETE FROM msg_log WHERE ts<?", (int(time.time()) - days * 86400,))
+    db.commit()
+    return cur.rowcount
+
+
 # ------------------------------------------------------------- developer page
 DEV_STATES = ("working", "fixed", "need_info")
 
@@ -2544,6 +2695,24 @@ def T(key: str, lang: Optional[str] = None, **kw) -> str:
         if txt:
             return _texts.fill(txt, **kw)
     return key
+
+
+def site_texts(lang: str) -> dict:
+    """The website's texts in one language, without the "web." prefix: the admins' version, the built-in one, then the
+    machine translation. Texts that have none are left out – the page falls back to its own English."""
+    over = (translations().get(lang) or {})
+    try:
+        auto = (json.loads(get_raw("translations_auto") or "{}").get(lang) or {}) if lang != "en" else {}
+    except ValueError:
+        auto = {}
+    built = _texts.DEFAULTS.get(lang, {}) if lang != "en" else {}
+    out = {}
+    for k in _texts.KEYS:
+        if k.startswith("web."):
+            v = over.get(k) or built.get(k) or auto.get(k)
+            if v:
+                out[k[4:]] = v
+    return out
 
 
 def lang_for(user_id) -> str:

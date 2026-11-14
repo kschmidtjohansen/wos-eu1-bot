@@ -51,6 +51,10 @@ a:hover{text-decoration:underline}
 .hdr-tools{display:flex;gap:8px;align-items:center;margin-left:8px}
 .pill{border:1px solid var(--line-2);background:var(--glass-2);color:var(--muted);border-radius:999px;padding:6px 13px;cursor:pointer;font:inherit;font-size:13px;font-weight:700}
 .pill:hover{color:var(--text);border-color:var(--ice)}
+.pill.lang{width:auto;max-width:150px;padding:6px 10px;background-color:var(--solid);text-overflow:ellipsis}
+.pill.lang option{background:var(--solid);color:var(--text)}
+[dir=rtl] .skip{left:auto;right:-999px}[dir=rtl] .skip:focus{right:8px}[dir=rtl] .hp{left:auto;right:-5000px}[dir=rtl] .nav{margin-left:0;margin-right:auto}[dir=rtl] .hdr-tools{margin-left:0;margin-right:8px}
+[dir=rtl] .tl{padding-left:0;padding-right:28px}[dir=rtl] .tl::before{left:auto;right:8px}[dir=rtl] .rel::before{left:auto;right:-27px}[dir=rtl] .tips,[dir=rtl] .grp ul,[dir=rtl] .sim ul{padding-left:0;padding-right:20px}
 .pill.install{color:var(--heat-2);border-color:rgba(255,138,61,.45)}
 
 /* ---- tab bar (phones, feels like an app) – at the top, inside the sticky header, so the browser's own bar never covers it ---- */

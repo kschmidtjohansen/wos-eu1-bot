@@ -219,6 +219,7 @@ _EN = [
     ("dm.warned", "Direct messages", "⚠️ You received a warning on the server: **{why}**\nYou now have {n} active warning(s).{next}"),
     ("warn.next_timeout", "Direct messages", " At {n} warnings you are timed out automatically."),
     ("dm.banned", "Direct messages", "⛔ You were banned from the server."),
+    ("dm.banned_days", "Direct messages", "⛔ You were banned from the server for {days} day(s). The ban ends by itself."),
     ("dm.timeout", "Direct messages", "🔇 You were timed out on the server for {minutes} minutes."),
     ("dm.appeal_hint", "Direct messages", "If you think this was a mistake, you can send one appeal here: {url}"),
     ("dm.appeal_unbanned", "Direct messages", "✅ Your appeal was accepted and your ban was removed. You can join the server again."),
@@ -440,6 +441,7 @@ _PL = {
     "dm.warned": "⚠️ Otrzymałeś ostrzeżenie na serwerze: **{why}**\nMasz teraz {n} aktywne ostrzeżenie(a).{next}",
     "warn.next_timeout": " Przy {n} ostrzeżeniach zostaniesz automatycznie wyciszony.",
     "dm.banned": "⛔ Zostałeś zbanowany na serwerze.",
+    "dm.banned_days": "⛔ Zostałeś zbanowany na serwerze na {days} dni. Ban skończy się sam.",
     "dm.timeout": "🔇 Otrzymałeś wyciszenie na serwerze na {minutes} minut.",
     "dm.appeal_hint": "Jeśli uważasz, że to pomyłka, możesz wysłać jedno odwołanie tutaj: {url}",
     "dm.appeal_unbanned": "✅ Twoje odwołanie zostało przyjęte, a ban zdjęty. Możesz ponownie dołączyć do serwera.",
@@ -461,6 +463,12 @@ _PL = {
     "dm.redeemed": "🎁 Kod prezentowy **{code}** został automatycznie wykorzystany dla Twojego konta.",
     "gift.redeemed_note": "✅ = już wykorzystany dla Twojego konta",
 }
+
+from texts_web import WEB_EN, WEB_PL  # noqa: E402 – the players' website, translated the same way
+
+_EN += WEB_EN
+_PL.update(WEB_PL)
+RTL = ("ar", "fa", "he", "ur")           # written right to left
 
 DEFAULTS = {"en": {k: v for k, _, v in _EN}, "pl": _PL}
 GROUPS = {k: g for k, g, _ in _EN}
