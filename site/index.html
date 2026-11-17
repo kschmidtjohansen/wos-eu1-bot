@@ -7,7 +7,7 @@
 <main>
   <section class="hero">
     <div>
-      <span class="ver" id="ver" hidden><i></i><span id="ver-t"></span></span>
+      <div class="hero-tags"><a class="gs" id="gs" href="status.html" hidden><i></i><span id="gs-t"></span></a><span class="ver" id="ver" hidden><i></i><span id="ver-t"></span></span></div>
       <h1><span class="srv" id="srv"></span><span data-i="h1"></span></h1>
       <p class="lead" data-i="lead"></p>
       <div class="btns"><a class="btn pri" href="report.html" data-i="cta1"></a><a class="btn" href="known-issues.html" data-k="known" data-i="cta2"></a></div>
@@ -29,9 +29,9 @@
     <div id="ideas" hidden><div class="sec-h"><h2 data-i="ideasH"></h2></div><div class="list" id="ideas-l"></div></div>
   </section>
 
-  <section class="sec card banner" id="app" data-install hidden>
-    <div><span class="ic" id="app-ic"></span><div><h3 data-i="appH"></h3><span class="muted" data-i="appT"></span></div></div>
-    <button class="btn pri" type="button" id="app-b" data-i="install"></button></section>
+  <section class="sec card banner" id="app" hidden>
+    <div><span class="ic" id="app-ic"></span><div><h3 data-i="appH"></h3><span class="muted" id="app-t"></span></div></div>
+    <div class="btns"><a class="btn pri" id="app-b" rel="noopener" data-i="appB"></a><a class="btn" href="status.html" data-i="appS"></a></div></section>
   <section class="sec card banner" id="dc" hidden>
     <div><span class="ic" id="dc-ic"></span><div><h3 data-i="dcH"></h3><span class="muted" data-i="dcT"></span></div></div>
     <div class="btns" id="dc-btns"><a class="btn" id="dc-a" rel="noopener" data-i="dcB"></a></div></section>
@@ -45,7 +45,8 @@ const S = {
   aKnownH: 'Known issues', aKnown: "Bugs we already know about. Check here first – you can skip reporting these.", nOpen: 'being worked on',
   aFixH: "What's fixed", aFix: 'Every update and the bugs it fixed, with the game version.', nFixed: 'fixed so far',
   latestH: 'Fixed lately', all: 'See all', none: 'Nothing published yet.', ideasH: 'Ideas from players we added',
-  appH: 'Get the app', appT: 'Add WOS EU1 to your home screen – codes and known issues one tap away.',
+  appH: 'Get the game', appT: 'Android · version {v}. Installs over the version you have – your account is kept.', appB: 'Download for Android', appS: 'Server status',
+  gsOn: 'Game server online', gsOff: 'Game server offline', gsMaint: 'Game server in maintenance', gsDeg: 'Game server having problems',
   dcH: 'Never miss a code', dcT: 'Get a notification on your phone for new gift codes and the weekly news – or follow our Discord.', dcB: 'Join our Discord' },
  pl: { h1: 'Trzymaj się ciepło.', lead: 'Dzisiejsze kody prezentowe, błędy, o których już wiemy, i szybki sposób, by zgłosić, że coś w grze nie działa.',
   cta1: 'Zgłoś błąd', cta2: 'Znane problemy', todayH: 'Dzisiejsze kody', allCodes: 'Wszystkie kody',
@@ -53,16 +54,24 @@ const S = {
   aKnownH: 'Znane problemy', aKnown: 'Błędy, o których już wiemy. Sprawdź najpierw tutaj – tych nie musisz zgłaszać.', nOpen: 'w trakcie prac',
   aFixH: 'Co naprawiono', aFix: 'Każda aktualizacja i naprawione w niej błędy, z wersją gry.', nFixed: 'naprawionych',
   latestH: 'Ostatnio naprawione', all: 'Zobacz wszystkie', none: 'Nic jeszcze nie opublikowano.', ideasH: 'Pomysły graczy, które dodaliśmy',
-  appH: 'Pobierz aplikację', appT: 'Dodaj WOS EU1 do ekranu głównego – kody i znane problemy na wyciągnięcie ręki.',
+  appH: 'Pobierz grę', appT: 'Android · wersja {v}. Instaluje się na posiadaną wersję – Twoje konto zostaje.', appB: 'Pobierz na Androida', appS: 'Status serwera',
+  gsOn: 'Serwer gry online', gsOff: 'Serwer gry offline', gsMaint: 'Przerwa techniczna serwera', gsDeg: 'Serwer gry ma problemy',
   dcH: 'Nie przegap żadnego kodu', dcT: 'Dostawaj powiadomienia o nowych kodach i cotygodniowych nowościach – albo obserwuj nasz Discord.', dcB: 'Dołącz do Discorda' } };
 const $ = id => document.getElementById(id);
 const C = window.WOS_CONFIG || {};
 $('srv').textContent = C.SERVER_NAME || 'WOS EU1';
 document.querySelectorAll('.act .ic').forEach((s, i) => s.append(WOS.icon(['report', 'known', 'fixed'][i])));
 $('app-ic').append(WOS.icon('download')); $('dc-ic').append(WOS.icon('chat'));
-$('app-b').onclick = () => WOS.install();
 let codes = [], changes = [], known = [], ideas = [];
+let game = null;
+function drawGame() {
+  if (!game) return;
+  const st = game.game, k = { online: 'gsOn', offline: 'gsOff', maintenance: 'gsMaint', degraded: 'gsDeg' }[st];
+  if (k) { $('gs').className = 'gs ' + st; $('gs-t').textContent = WOS.t(k); $('gs').hidden = false; }
+  if (game.apk && !WOS.isIOS()) { $('app-b').href = game.apk; $('app-t').textContent = WOS.t('appT').replace('{v}', game.version || '–'); $('app').hidden = false; }
+}
 function draw() {
+  drawGame();
   const hl = $('hc-l'); hl.replaceChildren();
   const pick = codes.filter(c => c.new).concat(codes.filter(c => !c.new)).slice(0, 3);
   $('hc').hidden = !pick.length; pick.forEach(c => hl.append(WOS.ticket(c)));
@@ -75,7 +84,9 @@ function draw() {
     il.append(WOS.el('div', { class: 'card idea' }, WOS.el('q', {}, x.idea), chg, WOS.el('time', {}, WOS.date(x.ts)))); });
 }
 WOS.init(S).then(async cfg => {
-  if (cfg.version) { $('ver-t').textContent = cfg.version; $('ver').hidden = false; }
+  game = cfg.game; drawGame();
+  const v = cfg.version || (cfg.game && cfg.game.version);
+  if (v) { $('ver-t').textContent = v; $('ver').hidden = false; }
   if (C.DISCORD_URL) { $('dc-a').href = C.DISCORD_URL; $('dc').hidden = false; } else $('dc-a').hidden = true;
   try { if ((await WOS.api('/public/push/key')).enabled) { $('dc-btns').prepend(WOS.bell()); $('dc').hidden = false; } } catch (e) { /* off */ }
   const get = async (on, path) => { if (!on) return []; try { return (await WOS.api(path)).items; } catch (e) { return []; } };

@@ -891,7 +891,7 @@ const FEATURE_KEYS = ['warn_timeout_at', 'warn_timeout_minutes', 'warn_ban_at', 
   'automod_mentions_on', 'automod_mentions_max', 'automod_repeat_on', 'automod_warn', 'weekly_enabled', 'weekly_weekday', 'weekly_hour', 'push_enabled', 'guard_enabled', 'guard_timeout_minutes', 'guard_block_invites', 'guard_allow_domains', 'invites_enabled', 'invites_fake_days', 'log_channel_kinds', 'dup_mode', 'dup_auto_percent', 'mod_ping_hours', 'bugs_enabled', 'suggestions_enabled', 'investigate_enabled', 'dm_notifications',
   'delete_ticket_on_close', 'report_cooldown_minutes', 'suggestion_max_length',
   'reminders_enabled', 'reminder_mod_hours', 'reminder_admin_hours', 'reminder_critical_hours',
-  'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled',
+  'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'known_issues_enabled', 'game_enabled', 'game_site_url', 'game_check_host', 'game_status_alert',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
   'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'devlist_enabled', 'devlist_hour', 'devlist_files', 'spike_enabled', 'spike_count', 'spike_minutes', 'msg_reports_enabled', 'appeals_enabled', 'raid_enabled', 'raid_joins', 'raid_minutes', 'raid_auto_lift_minutes', 'msglog_enabled', 'msglog_days', 'update_notice_enabled',
   'report_style', 'info_remind_hours', 'info_close_hours', 'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'giftcodes_delete_expired', 'giftcodes_list', 'giftcodes_site_url', 'drive_enabled', 'drive_every_days', 'drive_keep'];
@@ -1206,6 +1206,12 @@ const FSEC = {
       ${numberRow('auto_block_rejects', 'Pause after this many rejected reports in a row', 'Duplicates do not count.', 2, 20, 'reports')}
       ${numberRow('auto_block_days', 'Pause for', 'Lift it early on the Moderation page.', 1, 90, 'days')}
       ${toggleRow('known_issues_enabled', 'Public known-issues list', 'known-issues.html only shows bugs you have marked “Show on the public list” (open a bug to do that).')}
+    </section>
+    <section class="w-card w-pad"><div class="w-group-title">Game server status & download</div>
+      ${toggleRow('game_enabled', 'Show the game’s status and download', 'The bot reads the game’s own website every 10 minutes: the Android download (version, file) and the status page. The website shows it on the front page, the Status page and the “Get the game” button.')}
+      ${textRow('game_site_url', 'Game website', 'The page with the download link. The status page is found from its “Server status” link.', 'https://…', 300)}
+      ${textRow('game_check_host', 'Live check of the game server (optional)', 'host:port of the game server. If set, the bot also tries to connect every 10 minutes – the status page on the game website is only updated when it is published.', '176.9.65.91:port', 120)}
+      ${toggleRow('game_status_alert', 'Tell the admins when the game server goes up or down', 'Posted in the staff alerts channel (or the admin channel).')}
     </section>`,
   suggestions: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Suggestions</div>
@@ -1772,6 +1778,11 @@ function viewStatus() {
       <div class="w-card w-tile"><i class="w-tic">${icon('pulse')}</i><b>${fmtDur(Y.uptime_s)}</b><span>Server running since reboot</span></div>
       <div class="w-card w-tile ${T.website_ok === false ? 'bad' : T.website_ok ? 'ok' : ''}"><i class="w-tic">${icon('message')}</i><b>${T.website_ok == null ? '–' : T.website_ok ? 'OK' : 'Down'}</b><span>Website ↔ bot</span></div>
     </div>
+    ${T.game ? html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Game server</h3>${isMod() ? '' : html`<button class="w-btn small" data-act="gameCheck">Check now</button>`}</div>
+      <div class="w-mysum"><span class="w-badge ${{ online: 'ok', offline: 'bad' }[T.game.game] || 'warn'}">${T.game.game ? T.game.game.charAt(0).toUpperCase() + T.game.game.slice(1) : 'Unknown'}</span>
+        ${(T.game.items || []).map(i => html`<span>${i.name}: <b>${i.state}</b></span>`)}${T.game.live ? html`<span>Live check: <b>${T.game.live.state}</b>${T.game.live.ms ? ' · ' + T.game.live.ms + ' ms' : ''}</span>` : ''}
+        <span>Game version <b>${T.game.version || '–'}</b></span><span>Checked ${T.game.checked ? ago(T.game.checked) : 'never'}</span></div>
+      <p class="w-hint" style="margin:0">From ${T.game.status_url || T.game.source}${T.game.note ? ' – “' + T.game.note + '”' : ''}. Players see this on the website’s Status page.</p></section>` : ''}
     <div class="w-grid2">
       <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:12px">Server load</h3>
         ${load != null ? meter('CPU', Math.min(load, 100), 100, 'load ' + Number(Y.load[0]).toFixed(2) + ' on ' + Y.cpus + ' CPU' + (Y.cpus === 1 ? '' : 's')) : ''}
@@ -3605,6 +3616,8 @@ root.addEventListener('click', async e => {
       catch (err) { busy(el, false); toast(err.message, 'err'); const i = $('#pa-why'); if (i) i.value = keep; } }
     else if (act === 'msglogKind') { S.msglog.kind = el.dataset.k; loadTab('msglog'); }
     else if (act === 'msglogSearch') { S.msglog.q = $('#ml-q').value.trim(); loadTab('msglog'); }
+    else if (act === 'gameCheck') { busy(el, true, 'Checking…');
+      try { const r = await call('POST', '/api/game/check'); if (S.status) S.status.game = r.game; toast(r.game && r.game.game ? 'Game server: ' + r.game.game : 'Checked.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'raidSet') { busy(el, true, '…');
       try { const r = await call('POST', '/api/raid', { active: el.dataset.on === '1' }); if (S.queue) S.queue.raid = r; toast(r.active ? 'Raid mode is on.' : 'Raid mode lifted.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'spikeKnown' || act === 'spikeDismiss') { busy(el, true, '…');
@@ -3771,7 +3784,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, alerts_channel_id: null, spike_enabled: true, spike_count: 5, spike_minutes: 60, msg_reports_enabled: true, appeals_enabled: true, raid_enabled: true, raid_joins: 10, raid_minutes: 5, raid_auto_lift_minutes: 0, msglog_enabled: true, msglog_days: 7, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, alerts_channel_id: null, spike_enabled: true, spike_count: 5, spike_minutes: 60, msg_reports_enabled: true, appeals_enabled: true, raid_enabled: true, raid_joins: 10, raid_minutes: 5, raid_auto_lift_minutes: 0, game_enabled: true, game_site_url: 'https://europa.176.9.65.91.nip.io/', game_check_host: '', game_status_alert: true, msglog_enabled: true, msglog_days: 7, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
     automod_mentions_on: true, automod_mentions_max: 5, automod_repeat_on: true, automod_warn: true, weekly_enabled: false, weekly_channel_id: null, weekly_weekday: 'sunday', weekly_hour: 18, push_enabled: true, guard_enabled: true, guard_timeout_minutes: 60, guard_block_invites: false, guard_allow_domains: 'discord.com\ndiscord.gg\ndiscordapp.com\nyoutube.com\ntenor.com', log_channel_kinds: 'all', dup_mode: 'auto', dup_auto_percent: 50, mod_ping_hours: 4, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,

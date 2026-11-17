@@ -1,0 +1,90 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Server status – WOS EU1</title><meta name="theme-color" content="#060c17">
+<meta name="description" content="Is the WOS EU1 game server online? Live status and the latest game download.">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="WOS EU1">
+<link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<style>
+.stx{max-width:820px}
+.big{display:flex;gap:18px;align-items:center;padding:24px 26px;border-inline-start:4px solid var(--line-2)}
+.big.online{border-inline-start-color:var(--ok)} .big.offline{border-inline-start-color:var(--bad)} .big.maintenance,.big.degraded{border-inline-start-color:var(--warn)}
+.orb{width:54px;height:54px;border-radius:50%;flex:none;display:grid;place-items:center;background:var(--glass-2)}
+.orb i{width:18px;height:18px;border-radius:50%;background:var(--muted)}
+.online .orb i{background:var(--ok);box-shadow:0 0 0 8px rgba(91,224,168,.14),0 0 24px rgba(91,224,168,.5);animation:beat 2.4s ease-in-out infinite}
+.offline .orb i{background:var(--bad);box-shadow:0 0 0 8px rgba(255,107,129,.14)}
+.maintenance .orb i,.degraded .orb i{background:var(--warn);box-shadow:0 0 0 8px rgba(255,193,94,.14)}
+@keyframes beat{50%{box-shadow:0 0 0 12px rgba(91,224,168,.06),0 0 30px rgba(91,224,168,.35)}}
+@media (prefers-reduced-motion:reduce){.online .orb i{animation:none}}
+.big h2{margin:0;font-size:clamp(22px,4vw,30px)}
+.big p{margin:4px 0 0;color:var(--muted)}
+.svc{display:grid;gap:8px;margin-top:14px}
+.svc .row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px}
+.svc .row b{font-weight:650}
+.svc .row span{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;font-weight:650;color:var(--muted)}
+.svc .row span.online{color:var(--ok)} .svc .row span.offline{color:var(--bad)} .svc .row span.maintenance,.svc .row span.degraded{color:var(--warn)}
+.svc .row span i{width:9px;height:9px;border-radius:50%;background:currentColor}
+.dl{margin-top:22px;display:grid;gap:14px}
+.dl h3{margin:0}
+.dl .m{color:var(--muted);font-size:14.5px}
+.sha{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.sha code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;flex:1 1 260px;color:var(--text);opacity:.85}
+.sha button{border:1px solid var(--line-2);background:var(--glass-2);color:var(--muted);border-radius:10px;padding:5px 10px;font:inherit;cursor:pointer}
+.foot{margin-top:18px;font-size:13.5px;color:var(--muted)}
+.foot a{color:var(--ice)}
+</style></head><body>
+<main id="main" class="stx">
+  <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
+  <div id="box" aria-live="polite"><div class="skel"></div><div class="skel"></div></div>
+</main>
+<script src="config.js"></script><script src="app.js"></script>
+<script>
+const S = {
+ en: { h1: 'Server status', lead: 'Is the game up? Checked every 10 minutes.',
+  up: 'The game server is online', down: 'The game server is offline', maint: 'The game server is in maintenance', degr: 'The game server is having problems', unk: 'Status not known right now',
+  upT: 'Everything is running. If you can’t connect, update the game first.', downT: 'The team knows when this page does. Check back in a few minutes – no need to report it.',
+  maintT: 'Planned work. The game will be back soon.', unkT: 'We couldn’t read the status. Try again in a few minutes.',
+  since: 'since', checked: 'Checked', svcH: 'Services', bot: 'Bug reports and this website',
+  dlH: 'Download the game', dlT: 'Android · version', dlB: 'Download for Android', dlIOS: 'There is no iPhone version yet – the game is Android only for now.',
+  dlNote: 'Installs over the version you have – your account is kept. If the old app no longer connects, install this one.',
+  sha: 'SHA-256 (to check the file)', copy: 'Copy', copied: 'Copied', src: 'Source', noData: 'The status hasn’t been checked yet. Try again in a few minutes.' },
+ pl: { h1: 'Status serwera', lead: 'Czy gra działa? Sprawdzamy co 10 minut.',
+  up: 'Serwer gry jest online', down: 'Serwer gry jest offline', maint: 'Na serwerze gry trwa przerwa techniczna', degr: 'Serwer gry ma problemy', unk: 'Status jest teraz nieznany',
+  upT: 'Wszystko działa. Jeśli nie możesz się połączyć, najpierw zaktualizuj grę.', downT: 'Zespół wie o tym od razu. Zajrzyj za kilka minut – nie musisz tego zgłaszać.',
+  maintT: 'Zaplanowane prace. Gra wkrótce wróci.', unkT: 'Nie udało się odczytać statusu. Spróbuj za kilka minut.',
+  since: 'od', checked: 'Sprawdzono', svcH: 'Usługi', bot: 'Zgłoszenia błędów i ta strona',
+  dlH: 'Pobierz grę', dlT: 'Android · wersja', dlB: 'Pobierz na Androida', dlIOS: 'Nie ma jeszcze wersji na iPhone’a – na razie gra jest tylko na Androida.',
+  dlNote: 'Instaluje się na posiadaną wersję – Twoje konto zostaje. Jeśli stara aplikacja już się nie łączy, zainstaluj tę.',
+  sha: 'SHA-256 (do sprawdzenia pliku)', copy: 'Kopiuj', copied: 'Skopiowano', src: 'Źródło', noData: 'Status nie był jeszcze sprawdzany. Spróbuj za kilka minut.' } };
+let data = null, error = false;
+const $ = id => document.getElementById(id), el = (...a) => WOS.el(...a), t = k => WOS.t(k);
+const when = ts => { try { return new Date(ts * 1000).toLocaleString(WOS.locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return new Date(ts * 1000).toLocaleString(); } };
+const ago = ts => { const s = Math.max(0, Date.now() / 1000 - ts); return s < 90 ? '1 min' : s < 3600 ? Math.round(s / 60) + ' min' : s < 86400 ? Math.round(s / 3600) + ' ' + t('h') : Math.round(s / 86400) + ' ' + t('d'); };
+function draw() {
+  const box = $('box'); box.replaceChildren();
+  const g = data && data.game;
+  if (error || !g || !g.checked) return box.append(el('div', { class: 'card empty' }, t(error ? 'unkT' : 'noData')));
+  const st = g.game || 'unknown', key = { online: 'up', offline: 'down', maintenance: 'maint', degraded: 'degr' }[st] || 'unk';
+  box.append(el('section', { class: 'card big ' + st }, el('span', { class: 'orb', 'aria-hidden': 'true' }, el('i')),
+    el('div', {}, el('h2', {}, t(key)), el('p', {}, t(key === 'degr' ? 'downT' : key + 'T')),
+      el('p', { style: 'font-size:13.5px' }, [g.since && g.since.game ? t('since') + ' ' + when(g.since.game) : '', t('checked') + ' ' + ago(g.checked) + ' ' + (WOS.lang === 'pl' ? 'temu' : 'ago')].filter(Boolean).join(' · ')))));
+  const rows = (g.items || []).map(i => [i.name, i.state]);
+  if (g.live) rows.push([g.live.state === 'online' && g.live.ms ? 'Game server (live check · ' + g.live.ms + ' ms)' : 'Game server (live check)', g.live.state]);
+  rows.push([t('bot'), 'online']);
+  box.append(el('h2', { style: 'margin:26px 0 0;font-size:18px' }, t('svcH')), el('div', { class: 'svc' }, rows.map(([n, s]) =>
+    el('div', { class: 'card row' }, el('b', {}, n), el('span', { class: s }, el('i'), t('st_' + (['online', 'offline', 'maintenance', 'degraded'].includes(s) ? s : 'unknown')))))));
+  if (g.apk || g.version) {
+    const kids = [el('div', {}, el('h3', {}, t('dlH')), el('p', { class: 'm', style: 'margin:4px 0 0' }, t('dlT') + ' ' + (g.version || '–')))];
+    if (WOS.isIOS()) kids.push(el('p', { class: 'm', style: 'margin:0' }, t('dlIOS')));
+    else if (g.apk) kids.push(el('div', { class: 'btns' }, el('a', { class: 'btn pri', href: g.apk, rel: 'noopener' }, t('dlB'))));
+    kids.push(el('p', { class: 'm', style: 'margin:0' }, t('dlNote')));
+    if (g.sha256) { const b = el('button', { type: 'button' }, t('copy'));
+      b.onclick = async () => { try { await navigator.clipboard.writeText(g.sha256); b.textContent = t('copied'); setTimeout(() => { b.textContent = t('copy'); }, 1500); } catch (e) { /* ignore */ } };
+      kids.push(el('div', { class: 'sha' }, el('span', {}, t('sha')), el('code', {}, g.sha256), b)); }
+    box.append(el('section', { class: 'card dl' }, kids));
+  }
+  if (g.status_url) box.append(el('p', { class: 'foot' }, t('src') + ': ', el('a', { href: g.status_url, rel: 'noopener' }, g.status_url.replace(/^https?:\/\//, '')), g.note ? ' – ' + g.note : ''));
+}
+async function load() { try { data = await WOS.api('/public/status'); error = false; } catch (e) { error = !data; } draw(); }
+WOS.init(S).then(() => { WOS.onLang.push(draw); load(); setInterval(load, 60000); });
+</script></body></html>

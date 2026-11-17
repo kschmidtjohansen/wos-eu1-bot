@@ -40,15 +40,15 @@ a:hover{text-decoration:underline}
 /* ---- header ---- */
 .hdr{position:sticky;top:0;z-index:50;background:rgba(6,12,23,.66);-webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%);border-bottom:1px solid var(--line)}
 .hdr-in{max-width:1120px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:16px}
-.brand{display:flex;align-items:center;gap:10px;color:var(--text);font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:-.01em}
+.brand{white-space:nowrap;flex:none;display:flex;align-items:center;gap:10px;color:var(--text);font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:-.01em}
 .brand:hover{text-decoration:none}
 .logo{width:34px;height:34px;border-radius:11px;display:block;box-shadow:0 0 0 1px var(--line-2),0 6px 18px -6px var(--heat)}
 .nav{display:flex;gap:2px;margin-left:auto;align-items:center}
-.nav a.lnk{color:var(--muted);padding:8px 13px;border-radius:12px;font-weight:600;font-size:15px;position:relative}
+.nav a.lnk{white-space:nowrap;color:var(--muted);padding:8px 11px;border-radius:12px;font-weight:600;font-size:15px;position:relative}
 .nav a.lnk:hover{color:var(--text);background:var(--glass-2);text-decoration:none}
 .nav a.lnk[aria-current=page]{color:var(--text);background:var(--ice-soft)}
 .nav a.lnk[data-new]::after,.tab[data-new]::after{content:"";position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--heat);box-shadow:0 0 8px var(--heat)}
-.hdr-tools{display:flex;gap:8px;align-items:center;margin-left:8px}
+.hdr-tools{display:flex;gap:8px;align-items:center;margin-left:8px;flex:none}
 .pill{border:1px solid var(--line-2);background:var(--glass-2);color:var(--muted);border-radius:999px;padding:6px 13px;cursor:pointer;font:inherit;font-size:13px;font-weight:700}
 .pill:hover{color:var(--text);border-color:var(--ice)}
 .pill.lang{width:auto;max-width:150px;padding:6px 10px;background-color:var(--solid);text-overflow:ellipsis}
@@ -56,10 +56,21 @@ a:hover{text-decoration:underline}
 [dir=rtl] .skip{left:auto;right:-999px}[dir=rtl] .skip:focus{right:8px}[dir=rtl] .hp{left:auto;right:-5000px}[dir=rtl] .nav{margin-left:0;margin-right:auto}[dir=rtl] .hdr-tools{margin-left:0;margin-right:8px}
 [dir=rtl] .tl{padding-left:0;padding-right:28px}[dir=rtl] .tl::before{left:auto;right:8px}[dir=rtl] .rel::before{left:auto;right:-27px}[dir=rtl] .tips,[dir=rtl] .grp ul,[dir=rtl] .sim ul{padding-left:0;padding-right:20px}
 .pill.install{color:var(--heat-2);border-color:rgba(255,138,61,.45)}
+.hero-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.hero-tags .ver{margin-bottom:0}
+.gs{display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;font-size:13px;font-weight:700;text-decoration:none;color:var(--muted);background:var(--glass-2);border:1px solid var(--line-2)}
+.gs i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.gs.online{color:var(--ok);border-color:rgba(91,224,168,.35);background:rgba(91,224,168,.08)}.gs.offline{color:var(--bad);border-color:rgba(255,107,129,.35);background:rgba(255,107,129,.08)}.gs.maintenance,.gs.degraded{color:var(--warn);border-color:rgba(255,193,94,.35)}
+.gs:hover{filter:brightness(1.15)}
+a.pill.install{text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}a.pill.install svg{width:15px;height:15px}a.pill.install .sm{display:none}
+@media (max-width:520px){a.pill.install .lg{display:none}a.pill.install .sm{display:inline}.pill.lang{max-width:104px}.hdr-in{gap:10px;padding:10px 14px}.brand{font-size:15px}}
+@media (max-width:360px){.pill.lang{max-width:80px;padding:6px 6px}.hdr-in{gap:8px;padding:10px 10px}.hdr-tools{gap:6px;margin-left:auto}a.pill.install{padding:6px 10px}}a.pill.install:hover{color:var(--text);border-color:var(--heat-2)}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-inline-start:6px;vertical-align:middle;background:var(--muted)}
+.live-dot.online{background:var(--ok);box-shadow:0 0 0 3px rgba(91,224,168,.18)}.live-dot.offline{background:var(--bad);box-shadow:0 0 0 3px rgba(255,107,129,.2)}.live-dot.maintenance,.live-dot.degraded{background:var(--warn)}
+.tab .live-dot{position:absolute;top:5px;inset-inline-end:calc(50% - 16px);margin:0}
 
 /* ---- tab bar (phones, feels like an app) – at the top, inside the sticky header, so the browser's own bar never covers it ---- */
 .tabs{display:none}
-@media (max-width:760px){
+@media (max-width:1180px){
   .nav{display:none}
   .hdr-tools{margin-left:auto}
   .hdr{padding-top:env(safe-area-inset-top)}
@@ -117,7 +128,7 @@ h3{margin:0 0 4px;font-size:17px;font-weight:700}
 .ver i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(91,224,168,.18)}
 @media (max-width:860px){.hero{grid-template-columns:1fr;gap:26px;padding-top:4px}}
 /* on phones the codes come first after the headline; the tab bar already has Report and Issues */
-@media (max-width:760px){.hero .btns{display:none}.hero .lead{font-size:16px;margin-bottom:0}.hero h1 .srv{display:none}main{padding-top:24px}}
+@media (max-width:1180px){.hero .btns{display:none}.hero .lead{font-size:16px;margin-bottom:0}.hero h1 .srv{display:none}main{padding-top:24px}}
 form.card > .row:first-child label{margin-top:0}
 
 /* ---- gift code tickets ---- */

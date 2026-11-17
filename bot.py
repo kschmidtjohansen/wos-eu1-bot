@@ -35,6 +35,7 @@ import io
 import time
 from pathlib import Path
 from typing import Optional, Tuple
+import aiohttp
 
 import discord
 from discord import app_commands
@@ -1585,7 +1586,7 @@ class WosBot(discord.Client):
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
-                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
+                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
                          "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
@@ -5795,6 +5796,137 @@ async def lift_temp_bans(now: Optional[int] = None) -> int:
     return n
 
 
+# --------------------------------------------------------------- the game's website: download + server status
+GAME_EVERY = 600                 # seconds between checks
+_STATE_WORDS = {"online": "online", "up": "online", "operational": "online", "running": "online", "ok": "online",
+                "offline": "offline", "down": "offline", "unreachable": "offline",
+                "maintenance": "maintenance", "degraded": "degraded", "partial": "degraded"}
+
+
+def _page_lines(html_text: str) -> list:
+    import html as _html
+    t = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", html_text or "")
+    t = re.sub(r"(?i)<br\s*/?>|</?(p|div|li|tr|td|th|h[1-6]|section|article|header|footer|dt|dd|ul|ol|table|span|b|strong|em|small|a|label|time)\b[^>]*>", "\n", t)
+    t = _html.unescape(re.sub(r"<[^>]+>", " ", t))
+    return [re.sub(r"\s+", " ", x).strip(" :–-·|") for x in t.split("\n") if x.strip(" :–-·|\t\r ")]
+
+
+def parse_game_front(html_text: str, base: str) -> dict:
+    """Download link, version and SHA-256 from the game's front page."""
+    from urllib.parse import urljoin
+    out = {}
+    hrefs = re.findall(r"""href\s*=\s*["']([^"']+)["']""", html_text or "", re.I)
+    apk = next((h for h in hrefs if re.search(r"\.apk(\?|#|$)", h, re.I)), None)
+    if apk:
+        out["apk"] = urljoin(base, apk)
+    st = next((h for h in hrefs if re.search(r"status", h, re.I)), None)
+    out["status_url"] = urljoin(base, st) if st else urljoin(base, "status.html")
+    text = " ".join(_page_lines(html_text))
+    m = re.search(r"(?:version|android|download|\bv)\s*v?(\d+\.\d+(?:\.\d+){0,2})", text, re.I) or re.search(r"\b(\d+\.\d+\.\d+)\b", text)
+    if m:
+        out["version"] = m.group(1)
+    if not out.get("version") and apk:
+        m = re.search(r"(\d+\.\d+\.\d+)", apk)
+        if m:
+            out["version"] = m.group(1)
+    m = re.search(r"\b([a-fA-F0-9]{64})\b", html_text or "")
+    if m:
+        out["sha256"] = m.group(1).lower()
+    return out
+
+
+def parse_game_status(html_text: str) -> dict:
+    """Services and their state from the game's status page ("Website online", "Game server: offline" …)."""
+    lines, items, note = _page_lines(html_text), [], ""
+    words = "|".join(_STATE_WORDS)
+    for i, ln in enumerate(lines):
+        m = re.fullmatch(rf"(.{{2,40}}?)\s*(?:is|:|–|-)?\s*\b({words})\b\.?", ln, re.I)
+        if m and not re.search(r"status|checked", m.group(1), re.I):
+            items.append({"name": m.group(1).strip(" :–-").capitalize(), "state": _STATE_WORDS[m.group(2).lower()]})
+        elif re.fullmatch(rf"({words})\.?", ln, re.I) and i and not re.fullmatch(rf"({words})", lines[i - 1], re.I) \
+                and len(lines[i - 1]) <= 40 and not re.search(r"status", lines[i - 1], re.I):
+            items.append({"name": lines[i - 1].capitalize(), "state": _STATE_WORDS[ln.rstrip(".").lower()]})
+        if re.search(r"checked|updated|last check", ln, re.I) and not note:
+            note = ln[:200]
+    seen, uniq = set(), []
+    for it in items:
+        if it["name"].lower() not in seen:
+            seen.add(it["name"].lower()); uniq.append(it)
+    return {"items": uniq[:8], "note": note}
+
+
+async def _probe(host_port: str) -> Optional[dict]:
+    """Optional live check: can the game server's port be reached right now?"""
+    hp = (host_port or "").strip()
+    if not hp:
+        return None
+    host, _, port = hp.rpartition(":")
+    if not host or not port.isdigit():
+        return {"state": "unknown", "error": "Write it as host:port"}
+    t0 = time.monotonic()
+    try:
+        _, w = await asyncio.wait_for(asyncio.open_connection(host.strip("[]"), int(port)), timeout=6)
+        w.close()
+        return {"state": "online", "ms": int((time.monotonic() - t0) * 1000)}
+    except Exception:  # noqa: BLE001
+        return {"state": "offline"}
+
+
+async def check_game(force: bool = False) -> dict:
+    """Read the game's website (download link, version) and its status page. Kept for the players' website and the dashboard."""
+    old = store.game_status()
+    now = int(time.time())
+    if not cfg("game_enabled") or not (cfg("game_site_url") or "").strip():
+        return old
+    if not force and now - int(old.get("checked") or 0) < GAME_EVERY - 30:
+        return old
+    base = cfg("game_site_url").strip()
+    new = {"checked": now, "source": base, "site": "offline", "items": old.get("items") or [], "note": old.get("note", ""),
+           "version": old.get("version"), "apk": old.get("apk"), "sha256": old.get("sha256"), "status_url": old.get("status_url"),
+           "since": dict(old.get("since") or {})}
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15), headers={"User-Agent": "WOS-EU1-bot"}) as s:
+            async with s.get(base) as r:
+                front = await r.text(errors="replace")
+                new["site"] = "online" if r.status < 500 else "offline"
+            if new["site"] == "online":
+                new.update({k: v for k, v in parse_game_front(front, base).items() if v})
+                try:
+                    async with s.get(new["status_url"]) as r:
+                        if r.status < 400:
+                            st = parse_game_status(await r.text(errors="replace"))
+                            if st["items"]:
+                                new["items"], new["note"] = st["items"], st["note"]
+                except Exception:  # noqa: BLE001
+                    pass
+    except Exception as exc:  # noqa: BLE001
+        new["error"] = str(exc)[:200] or exc.__class__.__name__
+    live = await _probe(cfg("game_check_host"))
+    if live:
+        new["live"] = live
+    new["game"] = (live or {}).get("state") if live and live.get("state") != "unknown" else \
+        next((i["state"] for i in new["items"] if re.search(r"game|server", i["name"], re.I)), None) or \
+        ("offline" if new["site"] == "offline" and not new["items"] else None)
+    if new["game"] != old.get("game"):
+        new["since"]["game"] = now
+    if new["site"] != old.get("site"):
+        new["since"]["site"] = now
+    put_raw("game_status", json.dumps(new))
+    if old and old.get("game") and new["game"] and old.get("game") != new["game"] and cfg("game_status_alert"):
+        ch = alert_chan("admin_channel_id")
+        if ch is not None:
+            icon_ = {"online": "🟢", "offline": "🔴"}.get(new["game"], "🟠")
+            try:
+                await ch.send(f"{icon_} **Game server is {new['game']}** (was {old['game']}) – from {new.get('status_url') or base}",
+                              allowed_mentions=discord.AllowedMentions.none())
+            except discord.HTTPException:
+                pass
+        log_event("system", f"Game server is {new['game']} (was {old.get('game')})", None, brand())
+    if new.get("version") and new["version"] != old.get("version") and old.get("version"):
+        log_event("system", f"New game version on the game's website: {new['version']} (was {old['version']})", None, brand())
+    return new
+
+
 # --------------------------------------------------------------- raid mode
 _recent_joins: list = []          # (ts, member_id)
 
@@ -5916,6 +6048,10 @@ async def community_tick():
         await lift_temp_bans()
     except Exception as exc:  # noqa: BLE001
         print(f"[temporary bans] {exc!r}")
+    try:
+        await check_game()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[game status] {exc!r}")
 
 
 async def run_schedules(now=None):

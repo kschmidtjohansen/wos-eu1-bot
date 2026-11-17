@@ -2,7 +2,8 @@
 (function () {
   const C = window.WOS_CONFIG || {};
   const T = {
-    en: { nav_home: 'Home', nav_report: 'Report a bug', nav_known: 'Known issues', nav_fixed: "What's fixed", nav_codes: 'Gift codes', nav_my: 'My reports', tab_my: 'Mine', langLabel: 'Language',
+    en: { nav_home: 'Home', nav_report: 'Report a bug', nav_known: 'Known issues', nav_fixed: "What's fixed", nav_codes: 'Gift codes', nav_my: 'My reports', tab_my: 'Mine', langLabel: 'Language', nav_status: 'Status', tab_status: 'Status', getGame: 'Get the game', getGameS: 'Game',
+      st_online: 'Online', st_offline: 'Offline', st_maintenance: 'Maintenance', st_degraded: 'Having problems', st_unknown: 'Unknown',
       tab_home: 'Home', tab_codes: 'Codes', tab_known: 'Issues', tab_report: 'Report', tab_fixed: 'Fixed',
       newBadge: 'NEW', discord: 'Join our Discord', status: 'Server status', skip: 'Skip to content', rights: 'Made for the players of',
       netErr: 'Could not reach the server. Please try again later.', install: 'Install app', copy: 'Copy', copied: 'Copied',
@@ -11,7 +12,8 @@
       bellOn: 'Notify me', bellIsOn: 'Notifications on', bellOff: 'Turn off notifications', bellDenied: 'Notifications are blocked for this site – allow them in your browser settings.',
       bellIOS: 'On iPhone, add the app to your Home Screen first (Share → Add to Home Screen), then turn notifications on there.',
       bellNo: "This browser can't show notifications.", bellHttps: 'Notifications need the secure (https) version of this site.', bellDone: "Done – you'll get a notification for new codes." },
-    pl: { nav_home: 'Start', nav_report: 'Zgłoś błąd', nav_known: 'Znane problemy', nav_fixed: 'Co naprawiono', nav_codes: 'Kody', nav_my: 'Moje zgłoszenia', tab_my: 'Moje', langLabel: 'Język',
+    pl: { nav_home: 'Start', nav_report: 'Zgłoś błąd', nav_known: 'Znane problemy', nav_fixed: 'Co naprawiono', nav_codes: 'Kody', nav_my: 'Moje zgłoszenia', tab_my: 'Moje', langLabel: 'Język', nav_status: 'Status', tab_status: 'Status', getGame: 'Pobierz grę', getGameS: 'Gra',
+      st_online: 'Online', st_offline: 'Offline', st_maintenance: 'Przerwa techniczna', st_degraded: 'Problemy', st_unknown: 'Nieznany',
       tab_home: 'Start', tab_codes: 'Kody', tab_known: 'Problemy', tab_report: 'Zgłoś', tab_fixed: 'Poprawki',
       newBadge: 'NOWE', discord: 'Dołącz do Discorda', status: 'Status serwera', skip: 'Przejdź do treści', rights: 'Stworzone dla graczy',
       netErr: 'Nie można połączyć się z serwerem. Spróbuj później.', install: 'Zainstaluj aplikację', copy: 'Kopiuj', copied: 'Skopiowano',
@@ -30,6 +32,7 @@
     download: '<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>',
     chat: '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+    status: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
     my: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
     spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>'
   };
@@ -38,7 +41,7 @@
   const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } } };
   const browser = (navigator.language || 'en').toLowerCase();
   let lang = store.get('wos.lang') || (browser.startsWith('pl') ? 'pl' : 'en');
-  const pages = [['index.html', 'home'], ['codes.html', 'codes'], ['known-issues.html', 'known'], ['report.html', 'report'], ['changelog.html', 'fixed'], ['my.html', 'my']];
+  const pages = [['index.html', 'home'], ['codes.html', 'codes'], ['known-issues.html', 'known'], ['report.html', 'report'], ['changelog.html', 'fixed'], ['status.html', 'status'], ['my.html', 'my']];
   const pageKey = (location.pathname.split('/').pop() || 'index.html').replace(/\.html$/, '') || 'index';
   let remote = {};                       // texts from the server for the current language (Translations page on the dashboard)
   try { remote = JSON.parse(store.get('wos.tx.' + lang) || '{}'); } catch (e) { remote = {}; }
@@ -148,6 +151,7 @@
   let deferred = null;
   const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  W.isIOS = isIOS;
   W.canInstall = () => !standalone() && (!!deferred || isIOS());
   W.install = async () => {
     if (deferred) { deferred.prompt(); try { await deferred.userChoice; } catch (e) { /* ignore */ } deferred = null; W.syncInstall(); return true; }
@@ -173,7 +177,7 @@
     const links = pages.map(([f, k]) => W.el('a', { class: 'lnk', href: f, 'data-i': 'nav_' + k, 'data-k': k, id: 'nav-' + k, ...cur(f) }));
     const nav = W.el('nav', { class: 'nav', id: 'nav', 'aria-label': 'Main' }, links);
     const tools = W.el('div', { class: 'hdr-tools' },
-      W.el('button', { class: 'pill install', type: 'button', 'data-install': '', 'data-i': 'install', hidden: '', onclick: () => W.install() }),
+      W.el('a', { class: 'pill install', id: 'get-game', hidden: '', rel: 'noopener' }, W.icon('download'), W.el('span', { class: 'lg', 'data-i': 'getGame' }), W.el('span', { class: 'sm', 'data-i': 'getGameS' })),
       W.el('select', { class: 'pill lang', id: 'lang-sel' }, langOptions([{ code: 'en', name: 'English' }, { code: 'pl', name: 'Polski' }])));
     const logo = W.el('img', { class: 'logo', src: 'icons/icon-192.png', alt: '', width: '34', height: '34' });
     const hdr = W.el('header', { class: 'hdr' }, W.el('div', { class: 'hdr-in' },
@@ -182,7 +186,7 @@
       W.el('a', { class: 'tab', href: f, 'data-k': k, id: 'tab-' + k, ...cur(f) }, W.icon(k), W.el('span', { 'data-i': 'tab_' + k }))));
     document.body.prepend(W.el('a', { class: 'skip', href: '#main', 'data-i': 'skip' }), hdr);
     const ftr = W.el('footer', {}, W.el('div', { class: 'ftr' }, W.el('span', {}, W.t('rights') + ' ' + (C.SERVER_NAME || '')),
-      W.el('nav', {}, ...(C.STATUS_URL ? [W.el('a', { href: C.STATUS_URL, 'data-i': 'status' })] : []), ...(C.DISCORD_URL ? [W.el('a', { href: C.DISCORD_URL, rel: 'noopener', 'data-i': 'discord' })] : []))));
+      W.el('nav', {}, W.el('a', { href: 'status.html', 'data-i': 'status' }), ...(C.DISCORD_URL ? [W.el('a', { href: C.DISCORD_URL, rel: 'noopener', 'data-i': 'discord' })] : []))));
     hdr.append(tabs);                 // on phones the tabs sit in the header at the top (the browser's bar covers the bottom)
     document.body.append(ftr);
     document.getElementById('lang-sel').onchange = e => W.setLang(e.target.value, true);
@@ -207,7 +211,7 @@
   }
 
   W.init = async function (strings) {
-    W.strings = strings || {}; chrome(); W.apply(); W.syncInstall();
+    W.strings = strings || {}; chrome(); W.apply();
     try { W.cfg = await W.api('/public/config'); } catch (e) { W.cfg = {}; }
     const langs = W.cfg.languages && W.cfg.languages.length ? W.cfg.languages : [{ code: 'en', name: 'English' }, { code: 'pl', name: 'Polski' }];
     const has = c => langs.some(l => l.code === c);
@@ -219,6 +223,10 @@
     const sel = document.getElementById('lang-sel'); if (sel) sel.replaceChildren(...langOptions(langs));
     await W.setLang(W.lang, false);
     if (!W.cfg.player_login) document.querySelectorAll('[data-k="my"]').forEach(a => { a.hidden = true; });
+    const gm = W.cfg.game, gb = document.getElementById('get-game');                     // the game's own download (Android)
+    if (gb && gm && gm.apk && !isIOS()) { gb.href = gm.apk; gb.title = 'WOS ' + (gm.version || ''); gb.hidden = false; }
+    if (gm && gm.game) { const dot = W.el('i', { class: 'live-dot ' + gm.game, title: W.t('st_' + gm.game) });   // live dot on the Status link
+      document.querySelectorAll('[data-k="status"]').forEach(a => a.append(dot.cloneNode())); }
     const hide = k => document.querySelectorAll(`[data-k="${k}"]`).forEach(a => { a.hidden = true; });
     if (W.cfg.known_issues === false) hide('known');
     if (W.cfg.changelog === false) hide('fixed');

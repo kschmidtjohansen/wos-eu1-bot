@@ -478,6 +478,10 @@ SCHEMA = {
     "giftcodes_delete_expired": {"type": "bool", "default": True},
     "giftcodes_list": {"type": "bool", "default": True},
     "giftcodes_site_url": {"type": "text", "default": "", "min": 0, "max": 300},
+    "game_enabled": {"type": "bool", "default": True},
+    "game_site_url": {"type": "text", "default": "https://europa.176.9.65.91.nip.io/", "min": 0, "max": 300},
+    "game_check_host": {"type": "text", "default": "", "min": 0, "max": 120},
+    "game_status_alert": {"type": "bool", "default": True},
     "board_channel_id": {"type": "channel", "default": None},
     "log_channel_id": {"type": "channel", "default": None},
     "push_enabled": {"type": "bool", "default": True},
@@ -2695,6 +2699,14 @@ def T(key: str, lang: Optional[str] = None, **kw) -> str:
         if txt:
             return _texts.fill(txt, **kw)
     return key
+
+
+def game_status() -> dict:
+    """What the bot last read from the game's own website (download + server status). {} until the first check."""
+    try:
+        return json.loads(get_raw("game_status") or "{}")
+    except ValueError:
+        return {}
 
 
 def site_base() -> Optional[str]:

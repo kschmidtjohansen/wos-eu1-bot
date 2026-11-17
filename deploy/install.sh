@@ -184,7 +184,7 @@ if [[ -f $NGX ]] && ! grep -q 'wos-front' $NGX; then
     {
       echo "# wos-front: the players' website at the server's own address (/bugs/ keeps working for old links)"
       echo "location = / { root $BUGSDIR; try_files /index.html =404; add_header Cache-Control \"no-cache\"; }"
-      echo 'location ~ ^/((?:index|codes|known-issues|report|changelog|my|appeal|dev)\.html|sw\.js|app\.js|config\.js|style\.css|manifest\.json|(?:icons|fonts)/[\w.-]+)$ { alias '"$BUGSDIR"'/$1; }'
+      echo 'location ~ ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev)\.html|sw\.js|app\.js|config\.js|style\.css|manifest\.json|(?:icons|fonts)/[\w.-]+)$ { alias '"$BUGSDIR"'/$1; }'
     } >> $NGX
     if nginx -t >/dev/null 2>&1; then systemctl reload nginx; ok "The website now opens on the server's own address (http://<server>/)"
     else cp -p /tmp/wos-bot.conf.bak $NGX; systemctl reload nginx 2>/dev/null || true
@@ -198,7 +198,7 @@ if [[ -f $APC ]] && ! grep -q 'AliasMatch' $APC; then
     cp -p $APC /tmp/wos-bot-apache.bak
     {
       echo "AliasMatch ^/$ $BUGSDIR/index.html"
-      echo 'AliasMatch ^/((?:index|codes|known-issues|report|changelog|my|appeal|dev)\.html|sw\.js|app\.js|config\.js|style\.css|manifest\.json|(?:icons|fonts)/[\w.-]+)$ '"$BUGSDIR"'/$1'
+      echo 'AliasMatch ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev)\.html|sw\.js|app\.js|config\.js|style\.css|manifest\.json|(?:icons|fonts)/[\w.-]+)$ '"$BUGSDIR"'/$1'
     } >> $APC
     if apache2ctl configtest >/dev/null 2>&1; then systemctl reload apache2; else cp -p /tmp/wos-bot-apache.bak $APC; fi
   fi

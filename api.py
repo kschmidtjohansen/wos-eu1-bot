@@ -817,7 +817,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             "system": {"uptime_s": int(up) if up else None, "load": [round(x, 2) for x in load] if load else None,
                        "cpus": os.cpu_count(), "memory": meminfo(),
                        "disk": {"total": disk.total, "free": disk.free}},
-            "services": services, "website_ok": site_ok,
+            "services": services, "website_ok": site_ok, "game": game_public(),
             "data": {"db_bytes": Path("bugs.db").stat().st_size if Path("bugs.db").exists() else 0,
                      "last_backup": backups[0]["ts"] if backups else None, "backups": len(backups)},
             "updates": upd,
@@ -2076,9 +2076,30 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                                   "languages": [{"code": c, "name": _texts.lang_name(c)} for c in store.languages()],
                                   "player_login": bool(oauth_conf()["secret"] and oauth_conf()["redirect"]),
                                   "areas": store.area_list(), "version": store.cfg("game_version") or "",
+                                  "game": game_public(),
                                   "limits": {"files": MAX_FILES, "file_mb": MAX_FILE // 2**20,
                                              "title": [5, 100], "description": [20, 1800]}},
                                  headers={"Cache-Control": "max-age=60"})
+
+    def game_public():
+        g = store.game_status()
+        if not store.cfg("game_enabled") or not g:
+            return None
+        return {"version": g.get("version") or "", "apk": g.get("apk") or "", "sha256": g.get("sha256") or "",
+                "game": g.get("game"), "site": g.get("site"), "items": g.get("items") or [], "note": g.get("note") or "",
+                "checked": g.get("checked"), "since": g.get("since") or {}, "status_url": g.get("status_url") or "",
+                "source": g.get("source") or "", "live": g.get("live")}
+
+    @routes.get("/public/status")
+    async def public_status(request):
+        """The game's server status and download, as the bot last read them from the game's website."""
+        return web.json_response({"game": game_public(), "bot": {"online": True, "uptime_s": int(time.time() - STARTED)}},
+                                 headers={"Cache-Control": "no-cache"})
+
+    @routes.post("/api/game/check")
+    async def game_check(request):
+        await hooks["check_game"](True)
+        return web.json_response({"game": game_public()})
 
     @routes.get("/public/texts")
     async def public_texts(request):
