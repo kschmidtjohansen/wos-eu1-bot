@@ -752,6 +752,13 @@
 @media (max-width:520px){.w-tiles,.w-tiles4{grid-template-columns:repeat(2,minmax(0,1fr))}.w-tile{padding:14px}.w-sidefoot .w-btn{padding:7px 4px;font-size:13px}
   .w-todo button{grid-template-columns:auto minmax(0,1fr)}.w-todo button .w-ic{display:none}}
 @media (prefers-reduced-motion:reduce){.wosd *,.wosd *::before,.wosd *::after{transition:none !important;animation:none !important}.w-beam{display:none}}
+.w-pagehead{position:relative}
+.w-pagehead .w-gear{position:absolute;top:2px;right:0}
+.w-pagehead:has(.w-gear) > p{padding-right:170px}
+.w-gear.on{border-color:var(--w-accent);color:var(--w-accent)}
+.w-gearpanel{border:1px solid var(--w-border);border-radius:18px;padding:14px;margin:0 0 18px;background:rgba(125,227,244,.035)}
+.w-gearpanel > :last-child{margin-bottom:0}
+@media (max-width:700px){.w-pagehead .w-gear{position:static;margin-top:8px}.w-pagehead:has(.w-gear) > p{padding-right:0}}
 </style>
 </head>
 <body>
@@ -836,27 +843,29 @@ const S = {
   timer: null, mock: null
 };
 const NAV = [
-  ['overview', 'Overview', 'grid', 'Daily work'], ['bugs', 'Bugs', 'bug', 'Daily work'], ['suggestions', 'Suggestions', 'bulb', 'Daily work'],
-  ['codes', 'Gift codes', 'gift', 'Daily work'], ['players', 'Players', 'users', 'Daily work'], ['queue', 'Reports & appeals', 'shield', 'Daily work'], ['msglog', 'Deleted messages', 'list', 'Daily work'], ['warnings', 'Warnings', 'alert', 'Daily work'], ['mod', 'Moderation', 'shield', 'Daily work'],
-  ['welcome', 'Welcome', 'userplus', 'Community'], ['access', 'Access & languages', 'globe', 'Community'], ['rolemenus', 'Role menus', 'tag', 'Community'],
-  ['giveaways', 'Giveaways', 'party', 'Community'], ['timers', 'Timed messages', 'clock', 'Community'], ['invites', 'Invites', 'userplus', 'Community'],
-  ['info', 'Info channel', 'list', 'Posts'], ['patch', 'Patch notes & posts', 'wrench', 'Posts'], ['partners', 'Promoter servers', 'users', 'Posts'],
-  ['insights', 'Insights', 'chart', 'How it is going'], ['moderators', 'Moderators', 'timer', 'How it is going'], ['status', 'Server status', 'pulse', 'How it is going'], ['log', 'Activity log', 'list', 'How it is going'],
-  ['panel', 'Bug bot', 'bug', 'Set up'], ['channels', 'Channels', 'hash', 'Set up'], ['translations', 'Translations', 'globe', 'Set up'],
-  ['bot', 'Bot profile', 'bot', 'Set up'], ['data', 'Data & backups', 'db', 'Set up']
+  ['overview', 'Overview', 'grid', 'Daily work'], ['bugs', 'Bugs', 'bug', 'Daily work'], ['devs', 'Developers', 'users', 'Daily work'], ['suggestions', 'Suggestions', 'bulb', 'Daily work'],
+  ['codes', 'Gift codes', 'gift', 'Daily work'], ['redeem', 'Auto-redeem', 'gift', 'Daily work'],
+  ['queue', 'Reports & appeals', 'shield', 'Moderation'], ['players', 'Players', 'users', 'Moderation'], ['msglog', 'Deleted messages', 'list', 'Moderation'], ['warnings', 'Warnings', 'alert', 'Moderation'], ['mod', 'Auto-mod & replies', 'shield', 'Moderation'],
+  ['welcome', 'Welcome', 'userplus', 'Members'], ['access', 'Access & languages', 'globe', 'Members'], ['rolemenus', 'Role menus', 'tag', 'Members'], ['invites', 'Invites', 'userplus', 'Members'],
+  ['patch', 'Patch notes', 'wrench', 'Posts'], ['info', 'Info channel', 'list', 'Posts'], ['timers', 'Timed messages', 'clock', 'Posts'], ['giveaways', 'Giveaways', 'party', 'Posts'], ['partners', 'Promoter servers', 'users', 'Posts'],
+  ['insights', 'Insights', 'chart', 'Stats'], ['moderators', 'Moderators', 'timer', 'Stats'], ['status', 'Server status', 'pulse', 'Stats'], ['log', 'Activity log', 'list', 'Stats'],
+  ['panel', 'Bug panel', 'bug', 'Settings'], ['channels', 'Channels', 'hash', 'Settings'], ['website', 'Website', 'globe', 'Settings'], ['translations', 'Translations', 'globe', 'Settings'],
+  ['bot', 'Bot profile', 'bot', 'Settings'], ['data', 'Data & backups', 'db', 'Settings']
 ];
 // Moderators who log in with Discord see these pages; admins see everything.
-// The menu shows 11 sections; each opens its pages as tabs at the top of the page.
+// Two levels at most: a section in the menu, then its pages as tabs at the top. A page's own settings open
+// with its ⚙ Settings button instead of another row of tabs.
 const HUBS = [
-  ['overview', 'Overview', 'grid', ['overview']], ['bugs', 'Bugs', 'bug', ['bugs']], ['suggestions', 'Suggestions', 'bulb', ['suggestions']],
-  ['codes', 'Gift codes', 'gift', ['codes']], ['players', 'Players', 'users', ['players']], '|',
-  ['moderation', 'Moderation', 'shield', ['queue', 'msglog', 'warnings', 'mod']], ['members', 'Members', 'userplus', ['welcome', 'access', 'rolemenus', 'invites']],
-  ['events', 'Events', 'party', ['giveaways', 'timers']], ['posts', 'Posts', 'list', ['info', 'patch', 'partners']], '|',
-  ['stats', 'Stats', 'chart', ['insights', 'moderators', 'status', 'log']], ['setup', 'Settings', 'wrench', ['panel', 'channels', 'translations', 'bot', 'data']]
+  ['overview', 'Overview', 'grid', ['overview']], ['bugs', 'Bugs', 'bug', ['bugs', 'devs']], ['suggestions', 'Suggestions', 'bulb', ['suggestions']],
+  ['codes', 'Gift codes', 'gift', ['codes', 'redeem']], '|',
+  ['moderation', 'Moderation', 'shield', ['queue', 'players', 'msglog', 'warnings', 'mod']], ['members', 'Members', 'userplus', ['welcome', 'access', 'rolemenus', 'invites']],
+  ['posts', 'Posts', 'list', ['patch', 'info', 'timers', 'giveaways', 'partners']], '|',
+  ['stats', 'Stats', 'chart', ['insights', 'moderators', 'status', 'log']], ['setup', 'Settings', 'wrench', ['panel', 'channels', 'website', 'translations', 'bot', 'data']]
 ];
-const HUB_LABEL = { partners: 'Promoter servers', queue: 'Reports & appeals', msglog: 'Deleted messages', warnings: 'Warnings', mod: 'Auto-mod & replies', welcome: 'Welcome', access: 'Access & languages', rolemenus: 'Role menus', invites: 'Invites',
-  giveaways: 'Giveaways', timers: 'Timed messages', info: 'Info channel', patch: 'Patch notes & posts', insights: 'Insights', moderators: 'Moderators',
-  status: 'Server status', log: 'Activity log', panel: 'Bug bot', channels: 'Channels', translations: 'Translations', bot: 'Bot profile', data: 'Data & backups' };
+const HUB_LABEL = { bugs: 'Bugs', devs: 'Developers', codes: 'Codes', redeem: 'Auto-redeem', players: 'Players', partners: 'Promoter servers', queue: 'Reports & appeals', msglog: 'Deleted messages',
+  warnings: 'Warnings', mod: 'Auto-mod & replies', welcome: 'Welcome', access: 'Access & languages', rolemenus: 'Role menus', invites: 'Invites',
+  giveaways: 'Giveaways', timers: 'Timed messages', info: 'Info channel', patch: 'Patch notes', insights: 'Insights', moderators: 'Moderators',
+  status: 'Server status', log: 'Activity log', panel: 'Bug panel', channels: 'Channels', website: 'Website', translations: 'Translations', bot: 'Bot profile', data: 'Data & backups' };
 const allowed = t => !isMod() || MOD_TABS.includes(t);
 const hubName = h => isMod() && h[0] === 'stats' ? 'Bug stats' : h[1];
 const hubOf = t => HUBS.find(h => h !== '|' && h[3].includes(t)) || HUBS[0];
@@ -1100,10 +1109,19 @@ function langCard() {
     ${L.languages.length ? L.languages.map(x => html`<div class="w-arearow" style="cursor:default"><span>${x.name}</span><b>${x.count}</b><i class="w-stack" style="height:6px"><i style="width:${x.count / top * 100}%;background:var(--w-accent)"></i></i></div>`) : html`<div class="w-empty">No reports yet.</div>`}
   </section>`;
 }
+function viewDevs() {
+  if (isMod()) return html`<div class="w-pagehead"><h2>Developers</h2></div>`;
+  return html`<div class="w-pagehead"><h2>Developers</h2><p>How bugs reach the developers: their own live page and the daily Excel list.</p></div>
+    ${devPageCard()}${fsec('devlist')}${saveBar()}`;
+}
+function viewWebsite() {
+  return html`<div class="w-pagehead"><h2>Website</h2><p>The players’ website: reports from the website, the public lists, the game’s status and download, and phone notifications.</p></div>
+    ${fsec('website', 'push')}${saveBar()}`;
+}
 function viewPanel() {
   const d = S.panelDraft, p = S.health.panel, sub = subOf(BUGBOT_SUBS);
-  const head = html`<div class="w-pagehead"><h2>Bug bot</h2>
-      <p>Everything about bug reports and suggestions: the panel message players use, how reports work, the website form and the reminders for staff.</p></div>${subTabs(BUGBOT_SUBS)}`;
+  const head = html`<div class="w-pagehead"><h2>Bug panel</h2>
+      <p>The message in the bug report channel that players use to report a bug or send an idea.</p></div>`;
   if (sub === 'reports') return html`${head}${fsec('bugReports', 'modMessages')}${saveBar()}`;
   if (sub === 'suggestions') return html`${head}${fsec('suggestions')}${saveBar()}`;
   if (sub === 'website') return html`${head}${fsec('website')}${saveBar()}`;
@@ -1184,18 +1202,22 @@ function textRow(k, label, desc, ph, max) {
   return html`<div class="w-row"><div><div class="w-row-label">${label}</div><div class="w-row-desc">${desc}</div></div>
     <input class="w-input" style="max-width:220px" data-k="${k}" maxlength="${max}" placeholder="${ph}" value="${S.draft[k] || ''}" aria-label="${label}"></div>`;
 }
-// Sub-tabs inside a page (e.g. Bug bot → Panel message · Bug reports · …). Remembered per page.
+// Older views were split in parts; each part is now its own page (or sits behind the Settings button).
 const subOf = list => { const v = (S.sub || {})[S.tab]; return list.some(x => x[0] === v) ? v : list[0][0]; };
-const subTabs = list => html`<div class="w-subtabs" role="tablist" aria-label="Parts of this page">${list.map(x => html`<button role="tab" class="w-subtab" data-act="sub" data-v="${x[0]}" aria-selected="${String(subOf(list) === x[0])}">${x[1]}</button>`)}</div>`;
-// A page with its own settings gets a "Settings" sub-tab (admins only).
-function withSettings(view, names, label) {
+const subTabs = () => '';
+const fixedSub = (view, v) => () => { S.sub = S.sub || {}; S.sub[S.tab] = v; return view(); };
+// A page with its own settings: a ⚙ Settings button in the page head opens them right under it (admins only).
+const GEAR_LOAD = { bugs: async () => { S.langs = await call('GET', '/api/bugs/languages').catch(() => null); } };
+function withSettings(view, names, label, extra) {
   return () => {
     const page = String(view());
     if (isMod()) return new Raw(page);
-    const list = [['main', 'Overview'], ['settings', label || 'Settings']];
-    const cut = page.indexOf('</div>', page.indexOf('w-pagehead')) + 6;
-    if (subOf(list) === 'main') return new Raw(page.slice(0, cut) + subTabs(list) + page.slice(cut));
-    return new Raw(page.slice(0, cut) + subTabs(list) + String(fsec(...names)) + String(saveBar()));
+    const at = page.indexOf('</div>', page.indexOf('w-pagehead'));
+    if (page.indexOf('w-pagehead') < 0 || at < 0) return new Raw(page);
+    const on = !!(S.gear && S.gear[S.tab]);
+    const btn = String(html`<button class="w-btn small w-gear${on ? ' on' : ''}" data-act="gear" aria-expanded="${String(on)}" aria-controls="gearpanel">${icon('wrench')} ${on ? 'Close settings' : (label || 'Settings')}</button>`);
+    const panel = on ? String(html`<div class="w-gearpanel" id="gearpanel">${fsec(...names)}${extra ? extra() : ''}</div>`) + String(saveBar()) : '';
+    return new Raw(page.slice(0, at) + btn + page.slice(at, at + 6) + panel + page.slice(at + 6));
   };
 }
 
@@ -1856,7 +1878,7 @@ function viewCodes() {
   return html`${head}
     ${!on || !ch ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>${!on ? 'Gift codes are switched off' : 'No gift-codes channel chosen'}</b>
       <div class="w-sub">${!on ? 'Turn them on under Settings, so players see them on the website and with /codes.' : 'Choose one on the Channels page, otherwise new codes are not announced.'}</div></div>
-      <button class="w-btn small" data-act="${!on ? 'sub' : 'goto'}" data-v="settings" data-tab="channels">Fix</button></div>` : ''}
+      <button class="w-btn small" data-act="${!on ? 'gear' : 'goto'}" data-v="settings" data-tab="channels">Fix</button></div>` : ''}
     <section class="w-card w-pad w-addcode">
       <div class="w-addrow">
         <input class="w-input w-codein" id="gc-code" maxlength="40" placeholder="New code, e.g. WOSEU1GIFT" autocomplete="off" aria-label="Code">
@@ -2353,7 +2375,7 @@ function viewInvites() {
   return html`
     <div class="w-pagehead"><h2>Invites</h2><p>Who invited whom. People who leave, and brand-new accounts, don’t count towards an invite total. Players can check theirs with <code>/invites show</code> and <code>/invites top</code>.</p></div>
     ${!V.can_read ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>The bot can’t read the invite links</b><div class="w-sub">Give the bot’s role the <b>Manage Server</b> permission in Discord – it needs it to see which link someone used.</div></div></div>` : ''}
-    ${!V.enabled ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>Invite tracking is switched off</b><div class="w-sub">Turn it on under Invites → Settings.</div></div><button class="w-btn small" data-act="goto" data-tab="invites" data-sub="settings">Fix</button></div>` : ''}
+    ${!V.enabled ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>Invite tracking is switched off</b><div class="w-sub">Turn it on with the Settings button on the Invites page.</div></div><button class="w-btn small" data-act="goto" data-tab="invites" data-sub="settings">Fix</button></div>` : ''}
     <div class="w-tiles w-tiles4">${tile(V.joins30, 'Joined, last 30 days')}${tile(V.known30, 'With a known inviter', 'ok')}${tile(V.inviters, 'People who invited someone')}${tile(V.top.length ? V.top[0].regular : 0, V.top.length ? 'Top: ' + V.top[0].name : 'No inviters yet')}</div>
     <section class="w-card w-pad"><h3 class="w-h3">Carry over from Invite Tracker</h3>
       ${V.carried && V.carried.players ? html`<div class="w-banner ok" style="margin:6px 0 12px">${icon('check')}<div><b>${V.carried.players} player${V.carried.players === 1 ? '' : 's'} carried over</b><div class="w-sub">Last import ${ago(V.carried.ts)}. New joins are added on top, so nobody starts from zero.</div></div></div>`
@@ -2689,7 +2711,7 @@ function viewInsights() {
     </section>
     <section class="w-card w-pad"><h3 class="w-h3">Bugs by game version</h3>
       ${I.versions && I.versions.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Version</th><th>Reports</th><th>Fixed</th></tr></thead><tbody>
-        ${I.versions.map(v => html`<tr><td>${v.name}</td><td>${v.total}</td><td>${v.fixed}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">No versions recorded yet. Set the current version under Bug bot → Bug reports.</div>`}
+        ${I.versions.map(v => html`<tr><td>${v.name}</td><td>${v.total}</td><td>${v.fixed}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">No versions recorded yet. Set the current version with the Settings button on the Bugs page.</div>`}
     </section>
     <section class="w-card w-pad"><h3 class="w-h3">Top reporters</h3><p class="w-sub" style="margin-bottom:8px">“Accepted” = a moderator passed the bug on to the admins. A high share means useful reports.</p>
       ${I.reporters.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Player</th><th>Reports</th><th>Accepted</th><th>Fixed</th><th>Rejected</th><th>Quality</th></tr></thead><tbody>
@@ -2749,7 +2771,7 @@ function viewData() {
 const PATCH_SUBS = [['notes', 'Patch notes'], ['weekly', 'Weekly post'], ['push', 'Phone notifications']];
 function viewPatch() {
   const P = S.patch, ch = chanName(S.settings.patchnotes_channel_id), sub = subOf(PATCH_SUBS);
-  if (sub !== 'notes') return html`<div class="w-pagehead"><h2>Patch notes & posts</h2><p>What the bot posts for players: patch notes with the fixed bugs, the weekly post and phone notifications.</p></div>${subTabs(PATCH_SUBS)}${isMod() ? '' : sub === 'weekly' ? html`${fsec('weekly')}<p class="w-hint" style="margin:-6px 0 14px 4px">Uses the time zone set under Bug bot → Reminders & digest.</p>` : fsec('push')}${saveBar()}`;
+  if (sub !== 'notes') return html`<div class="w-pagehead"><h2>Patch notes & posts</h2><p>What the bot posts for players: patch notes with the fixed bugs, the weekly post and phone notifications.</p></div>${subTabs(PATCH_SUBS)}${isMod() ? '' : sub === 'weekly' ? html`${fsec('weekly')}<p class="w-hint" style="margin:-6px 0 14px 4px">Uses the time zone set with the Settings button on the Bugs page.</p>` : fsec('push')}${saveBar()}`;
   if (!P) return html`<div class="w-pagehead"><h2>Patch notes</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
   const list = P.unreleased;
   const embed = list.length ? html`<div class="w-dp"><div class="w-dp-head"><img src="${S.overview.bot.avatar_url}" alt=""><div><span class="w-dp-name">${S.overview.bot.name}</span><span class="w-dp-tag">BOT</span></div></div>
@@ -2757,7 +2779,7 @@ function viewPatch() {
     <div class="w-dp-desc">${list.map(b => html`<div>• ${b.summary} <i>(#${b.id})</i></div>`)}</div>
     <div class="w-dp-foot">Thanks to everyone who reported these! · ${S.overview.bot.name}</div></div></div>` : '';
   return html`
-    <div class="w-pagehead"><h2>Patch notes & posts</h2><p>What the bot posts for players: patch notes with the fixed bugs, the weekly post and phone notifications.</p></div>${subTabs(PATCH_SUBS)}
+    <div class="w-pagehead"><h2>Patch notes</h2><p>Patch notes with the fixed bugs. The weekly post is set up with the Weekly post button.</p></div>
     <div class="w-grid2">
       <section class="w-card w-pad">
         <div class="w-sec-head"><h3 class="w-h3">Waiting to be announced <span class="w-badge ${list.length ? 'ok' : 'todo'}">${list.length}</span></h3></div>
@@ -2868,10 +2890,13 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { partners: viewPartners, queue: withSettings(viewQueue, ['staffq'], 'Settings'), msglog: withSettings(viewMsgLog, ['msglog'], 'Settings'), access: viewAccess, warnings: withSettings(viewWarnings, ['warnings'], 'Escalation settings'), rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: withSettings(viewInvites, ['invites']), players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
-  features: viewPanel, welcome: viewWelcome, patch: viewPatch, mod: withSettings(viewMod, ['automod', 'guard'], 'Auto-mod & scam guard'), bot: viewBot, data: viewData, log: viewLog };
+const VIEWS = { devs: viewDevs, redeem: fixedSub(viewCodes, 'redeem'), website: viewWebsite, partners: viewPartners, queue: withSettings(viewQueue, ['staffq']), msglog: withSettings(viewMsgLog, ['msglog']), access: viewAccess, warnings: withSettings(viewWarnings, ['warnings'], 'Escalation settings'), rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: withSettings(viewInvites, ['invites']), players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: withSettings(fixedSub(viewCodes, 'codes'), ['giftcodes']), translations: viewTranslations, bugs: withSettings(viewBugs, ['bugReports', 'modMessages', 'duplicates', 'spike', 'reminders', 'digest'], 'Settings', () => langCard()), suggestions: withSettings(viewSuggestions, ['suggestions']), insights: viewInsights, panel: fixedSub(viewPanel, 'panel'), channels: viewChannels,
+  features: viewPanel, welcome: viewWelcome, patch: withSettings(fixedSub(viewPatch, 'notes'), ['weekly'], 'Weekly post'), mod: withSettings(viewMod, ['automod', 'guard'], 'Auto-mod & scam guard'), bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
+  redeem: async () => { const [c, r] = await Promise.all([call('GET', '/api/giftcodes'), call('GET', '/api/redeem').catch(() => null)]); S.codes = c; S.redeem = r; },
+  devs: async () => { S.devpage = await call('GET', '/api/devpage').catch(() => null); },
+  website: async () => { S.push = await call('GET', '/api/push').catch(() => null); },
   codes: async () => { const [c, r] = await Promise.all([call('GET', '/api/giftcodes'), call('GET', '/api/redeem').catch(() => null)]); S.codes = c; S.redeem = r; },
   invites: async () => { S.invites = await call('GET', '/api/invites'); },
   access: async () => { const [a, r] = await Promise.all([call('GET', '/api/access'), call('GET', '/api/roles').catch(() => ({ roles: [] }))]); S.acc = a; S.roles = r.roles; },
@@ -3209,9 +3234,12 @@ root.addEventListener('click', async e => {
   const el = e.target.closest('[data-act]'); if (!el) return;
   const act = el.dataset.act;
   try {
-    if (act === 'nav' || act === 'goto') { S.tab = el.dataset.tab; if (el.dataset.sub) { S.sub = S.sub || {}; S.sub[S.tab] = el.dataset.sub; } renderTab(); }
+    if (act === 'nav' || act === 'goto') { S.tab = el.dataset.tab; if (el.dataset.sub === 'settings') { S.gear = S.gear || {}; S.gear[S.tab] = true; } else if (el.dataset.sub) { S.sub = S.sub || {}; S.sub[S.tab] = el.dataset.sub; } renderTab(); }
     else if (act === 'hub') { const h = HUBS.find(x => x[0] === el.dataset.hub); S.hubLast = S.hubLast || {}; const kids = hubKids(h);
       S.tab = kids.includes(S.hubLast[h[0]]) ? S.hubLast[h[0]] : kids[0]; renderTab(); }
+    else if (act === 'gear') { S.gear = S.gear || {}; S.gear[S.tab] = !S.gear[S.tab];
+      if (S.gear[S.tab] && GEAR_LOAD[S.tab]) await GEAR_LOAD[S.tab]();
+      renderMain(); updateSaveBar(); const g = $('#gearpanel'); if (g) g.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
     else if (act === 'sub') { S.sub = S.sub || {}; S.sub[S.tab] = el.dataset.v; renderMain(); updateSaveBar(); }
     else if (act === 'sheet') openSheet();
     else if (act === 'caseSearch') { S.cases.q = $('#cs-q').value.trim(); loadTab('warnings'); }
