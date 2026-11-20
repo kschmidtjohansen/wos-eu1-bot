@@ -56,12 +56,13 @@ CHANNEL_NEEDS = {
     "digest_channel_id": ("Weekly digest channel", _BASE),
     "devlist_channel_id": ("Developers' list channel", _BASE + ["attach_files"]),
     "alerts_channel_id": ("Staff alerts channel", _BASE + ["manage_messages"]),
+    "announce_channel_id": ("Announcements channel", list(_BASE)),
     "giftcodes_channel_id": ("Gift codes channel", _BASE + ["read_message_history"]),
     "board_channel_id": ("Known issues board channel", _BASE + ["read_message_history"]),
     "log_channel_id": ("Bot log channel", list(_BASE)),
     "invites_channel_id": ("Invite log channel", list(_BASE)),
 }
-OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id", "devlist_channel_id", "alerts_channel_id",
+OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id", "devlist_channel_id", "alerts_channel_id", "announce_channel_id",
                      "giftcodes_channel_id", "board_channel_id", "log_channel_id", "invites_channel_id")
 # accepted suggestions are only posted here; moderators decide in the mod channel
 
@@ -268,7 +269,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             optional = key in OPTIONAL_CHANNELS
             enabled = {"welcome_channel_id": bool(store.cfg("welcome_enabled")),
                        "patchnotes_channel_id": bool(cid), "backup_channel_id": bool(cid),
-                       "digest_channel_id": bool(cid), "devlist_channel_id": bool(cid), "alerts_channel_id": bool(cid)}.get(key, True)
+                       "digest_channel_id": bool(cid), "devlist_channel_id": bool(cid), "alerts_channel_id": bool(cid), "announce_channel_id": bool(cid)}.get(key, True)
             chans.append({"key": key, "label": label, "optional": optional,
                           "enabled": enabled,
                           "configured": bool(cid), "found": ch is not None,
@@ -1973,6 +1974,20 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     @routes.get("/api/partners")
     async def partners_list(request):
         return web.json_response(partners_payload())
+
+    @routes.post("/api/announce")
+    async def announce(request):
+        d = await body_json(request)
+        num = lambda v: int(v) if str(v or "").isdigit() else None  # noqa: E731
+        try:
+            r = await hooks["post_announcement"](clean(d.get("title"), 200), str(d.get("text") or ""), num(d.get("channel_id")),
+                                                 num(d.get("role_id")), bool(d.get("partners", True)), who(request), who_id(request),
+                                                 clean(d.get("image"), 500) or None)
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        except discord.HTTPException as exc:
+            raise ApiError(502, f"Discord refused: {getattr(exc, 'text', '') or exc}")
+        return web.json_response(r)
 
     @routes.post("/api/partners/invite")
     async def partners_invite(request):

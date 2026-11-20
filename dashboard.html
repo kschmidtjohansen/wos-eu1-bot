@@ -427,6 +427,8 @@
 .w-fold[open] > summary::before{transform:rotate(90deg)}
 .w-fold[open] > summary{margin-bottom:10px}
 .w-more summary{cursor:pointer;color:var(--w-muted);font-size:13.5px}
+.w-quick{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.w-qmodal{max-width:620px}
 .w-ptrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:10px}.w-ptrow label{gap:8px}
 .w-ptic{width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;background:var(--w-surface-2);font-size:12px;font-weight:700;text-transform:uppercase;object-fit:cover}
 .w-plink{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:var(--w-border-strong);text-underline-offset:3px}
@@ -880,6 +882,7 @@ const CHANNELS = [
   ['patchnotes_channel_id', 'Patch notes channel', 'Where the list of fixed bugs is announced (/patchnotes publish or the Patch notes page). Optional.'],
   ['backup_channel_id', 'Backup channel', 'Optional. A copy of the database is posted here every day. It contains player data – make it admin-only.'],
   ['digest_channel_id', 'Weekly digest channel', 'Optional. Where the Monday summary is posted. Empty = the admin channel.'],
+  ['announce_channel_id', 'Announcements channel', 'Optional. Where “New announcement” on the overview posts by default. Empty = the patch notes channel.'],
   ['devlist_channel_id', 'Developers\u2019 list channel', 'Optional. Every day the bot posts an Excel file here with the bugs passed to the admins that are still open (no duplicates) – ready to send to the developers. The bot needs “Attach Files”.'],
   ['alerts_channel_id', 'Staff alerts channel', 'Optional. Reported messages, appeals, raid mode and spike alerts are posted here with buttons. Empty = the mod channel (spike alerts: the admin channel). Keep it staff-only.'],
   ['giftcodes_channel_id', 'Gift codes channel', 'Optional. New gift codes are announced here. Give the bot “Mention @everyone” if you ping @everyone or @here.'],
@@ -1034,6 +1037,7 @@ function viewOverview() {
   const waiting = todo.reduce((a, t) => a + t[0], 0);
   return html`
     <div class="w-pagehead"><h2>${isMod() ? 'Bug dashboard' : 'Overview'}</h2><p>${isMod() ? 'Bug reports waiting for you, and how the team is doing.' : 'What needs a person right now, and how the server is doing.'}</p></div>
+    ${quickBar()}
     ${alertStrip()}
     <div class="w-bento">
       <section class="w-card w-hero">${waiting ? html`<i class="w-beam" aria-hidden="true"></i>` : ''}
@@ -1754,7 +1758,7 @@ function showModal() {
   loadThumbs();
   const c = $('#m-close'); if (c) c.focus();
 }
-function closeModal() { S.detail = null; S.player = null; S.rejOpen = false; const m = $('#wmodal'); if (m) m.remove(); }
+function closeModal() { S.detail = null; S.player = null; S.quick = null; S.rejOpen = false; const m = $('#wmodal'); if (m) m.remove(); }
 function refreshOverviewSoon() { setTimeout(() => { if (S.tab !== 'overview') call('GET', '/api/overview').then(o => { S.overview = o; refreshNavCount(); }).catch(() => {}); }, 300); }
 async function changeBug(body, okMsg, btn) {
   busy(btn, true, 'Working…');
@@ -2121,6 +2125,48 @@ function viewPartners() {
       ${P.left.length ? html`<details class="w-fold"><summary><b>Removed</b><span class="w-hint">${P.left.length}</span></summary>${P.left.map(l => html`<div class="w-caseline"><span>${l.name}</span><i class="w-hint">${l.promoter}</i><time>${ago(l.left_ts)}</time></div>`)}</details>` : ''}
     </section>`;
 }
+/* ------------------------------------------------ quick posting from the overview (admins) */
+function quickBar() {
+  if (isMod()) return '';
+  return html`<div class="w-quick"><button class="w-btn primary" data-act="qOpen" data-k="code">${icon('gift')} New gift code</button>
+    <button class="w-btn primary" data-act="qOpen" data-k="ann">${icon('send')} New announcement</button></div>`;
+}
+function quickModal() {
+  const Q = S.quick, set = S.settings;
+  const shell = (title, body) => html`<div class="w-modal" id="wmodal" data-act="modalBg"><div class="w-modal-card w-qmodal" role="dialog" aria-modal="true" aria-label="${title}">
+    <div class="w-modal-head"><h3>${title}</h3><button class="w-btn small" data-act="closeModal" id="m-close">Close</button></div>${body}</div></div>`;
+  if (Q.kind === 'code') {
+    const ch = chanName(set.giftcodes_channel_id), pt = (S.queue && S.queue.partners) || 0;
+    return shell('New gift code', html`
+      <div class="w-field"><label class="w-label" for="q-code">Code</label><input class="w-input w-codein" id="q-code" maxlength="40" placeholder="e.g. WOSEU1GIFT" autocomplete="off"></div>
+      <div class="w-grid2" style="gap:12px"><div class="w-field"><label class="w-label" for="q-dur">Works for</label>
+        <select class="w-select" id="q-dur">${(Q.durations || []).map(d => html`<option value="${d.hours == null ? '' : d.hours}" ${d.hours === 24 ? 'selected' : ''}>${d.label}</option>`)}</select></div>
+        <div class="w-field"><label class="w-label" for="q-reward">Reward (optional)</label><input class="w-input" id="q-reward" maxlength="200" placeholder="e.g. 500 gems"></div></div>
+      <label class="w-inline w-hint" style="gap:6px;margin-top:4px"><input type="checkbox" id="q-announce" checked> Announce it in ${ch || 'Discord'}${ch ? '' : ' (no gift-codes channel chosen yet)'} and in the promoter servers</label>
+      <div class="w-actions" style="margin-top:14px"><button class="w-btn primary" data-act="qCode">${icon('gift')} Add code</button>
+        <button class="w-btn" data-act="goto" data-tab="codes">All gift codes</button></div>`);
+  }
+  const def = set.announce_channel_id || set.patchnotes_channel_id || '';
+  return shell('New announcement', html`
+    <div class="w-field"><label class="w-label" for="q-title">Title (optional)</label><input class="w-input" id="q-title" maxlength="200" placeholder="e.g. Server maintenance tonight"></div>
+    <div class="w-field"><label class="w-label" for="q-text">Message</label><textarea class="w-textarea" id="q-text" maxlength="3800" style="min-height:150px" placeholder="What players should know. Discord formatting works: **bold**, links, emojis."></textarea></div>
+    <div class="w-grid2" style="gap:12px"><div class="w-field"><label class="w-label" for="q-chan">Post in</label><select class="w-select" id="q-chan">${channelOptions(def)}</select></div>
+      <div class="w-field"><label class="w-label" for="q-role">Tag a role</label><select class="w-select" id="q-role"><option value="">Nobody</option>${(Q.roles || []).map(r => html`<option value="${r.id}">@${r.name}</option>`)}</select></div></div>
+    <div class="w-field"><label class="w-label" for="q-img">Picture (optional)</label><input class="w-input" id="q-img" maxlength="500" placeholder="https://… link to an image"></div>
+    <label class="w-inline w-hint" style="gap:6px;margin-top:4px"><input type="checkbox" id="q-partners" checked> Also post it in the promoter servers (without the tag)</label>
+    <div class="w-actions" style="margin-top:14px"><button class="w-btn primary" data-act="qAnn">${icon('send')} Post announcement</button></div>`);
+}
+async function openQuick(kind) {
+  S.quick = { kind };
+  showQuick();
+  try {
+    if (kind === 'code') S.quick.durations = (await call('GET', '/api/giftcodes')).durations;
+    else S.quick.roles = (await call('GET', '/api/roles')).roles;
+  } catch (e) { /* the form still works */ }
+  if (S.quick && S.quick.kind === kind) { const keep = {}; ['q-code', 'q-reward', 'q-title', 'q-text', 'q-img'].forEach(i => { const x = document.getElementById(i); if (x) keep[i] = x.value; });
+    showQuick(); Object.entries(keep).forEach(([i, v]) => { const x = document.getElementById(i); if (x) x.value = v; }); }
+}
+function showQuick() { const m = $('#wmodal'); if (m) m.remove(); root.insertAdjacentHTML('beforeend', String(quickModal())); const f = $(S.quick.kind === 'code' ? '#q-code' : '#q-title'); if (f) f.focus(); }
 function viewWarnings() {
   const C = S.cases;
   if (!C) return html`<div class="w-pagehead"><h2>Warnings</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
@@ -3677,6 +3723,17 @@ root.addEventListener('click', async e => {
     else if (act === 'msglogSearch') { S.msglog.q = $('#ml-q').value.trim(); loadTab('msglog'); }
     else if (act === 'gameCheck') { busy(el, true, 'Checking…');
       try { const r = await call('POST', '/api/game/check'); if (S.status) S.status.game = r.game; toast(r.game && r.game.game ? 'Game server: ' + r.game.game : 'Checked.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'qOpen') openQuick(el.dataset.k);
+    else if (act === 'qCode') { const code = $('#q-code').value.trim(), dur = $('#q-dur').value;
+      if (!code) { $('#q-code').focus(); return toast('Type the code first.', 'err'); } busy(el, true, 'Adding…');
+      try { const r = await call('POST', '/api/giftcodes', { code, reward: $('#q-reward').value.trim(), hours: dur ? parseInt(dur, 10) : null, announce: $('#q-announce').checked });
+        closeModal(); toast(r.warning || 'Gift code ' + r.item.code + ' added' + '.', r.warning ? 'warn' : undefined); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'qAnn') { const text = $('#q-text').value.trim();
+      if (text.length < 2) { $('#q-text').focus(); return toast('Write the message first.', 'err'); } busy(el, true, 'Posting…');
+      try { const r = await call('POST', '/api/announce', { title: $('#q-title').value.trim(), text, channel_id: $('#q-chan').value, role_id: $('#q-role').value, image: $('#q-img').value.trim(), partners: $('#q-partners').checked });
+        closeModal(); toast('Posted in #' + r.channel + (r.partners ? ' and ' + r.partners + ' promoter server' + (r.partners === 1 ? '' : 's') : '') + '.'); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'auditFix') { busy(el, true, 'Closing…');
       try { const r = await call('POST', '/api/staff-audit/fix'); S.audit = r; toast(r.failed.length ? 'Some channels failed: ' + r.failed.join('; ') : 'Done – only staff can read them now.', r.failed.length ? 'err' : undefined); renderMain(); }
       catch (err) { busy(el, false); toast(err.message, 'err'); } }
@@ -3862,7 +3919,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, alerts_channel_id: null, spike_enabled: true, spike_count: 5, spike_minutes: 60, msg_reports_enabled: true, appeals_enabled: true, raid_enabled: true, raid_joins: 10, raid_minutes: 5, raid_auto_lift_minutes: 0, game_enabled: true, game_site_url: 'https://europa.176.9.65.91.nip.io/', game_check_host: '', game_status_alert: true, msglog_enabled: true, msglog_days: 7, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, alerts_channel_id: null, announce_channel_id: null, spike_enabled: true, spike_count: 5, spike_minutes: 60, msg_reports_enabled: true, appeals_enabled: true, raid_enabled: true, raid_joins: 10, raid_minutes: 5, raid_auto_lift_minutes: 0, game_enabled: true, game_site_url: 'https://europa.176.9.65.91.nip.io/', game_check_host: '', game_status_alert: true, msglog_enabled: true, msglog_days: 7, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
     automod_mentions_on: true, automod_mentions_max: 5, automod_repeat_on: true, automod_warn: true, weekly_enabled: false, weekly_channel_id: null, weekly_weekday: 'sunday', weekly_hour: 18, push_enabled: true, guard_enabled: true, guard_timeout_minutes: 60, guard_block_invites: false, guard_allow_domains: 'discord.com\ndiscord.gg\ndiscordapp.com\nyoutube.com\ntenor.com', log_channel_kinds: 'all', dup_mode: 'auto', dup_auto_percent: 50, mod_ping_hours: 4, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
     reminders_enabled: true, reminder_mod_hours: 24, reminder_admin_hours: 72, reminder_critical_hours: 4,
@@ -4179,6 +4236,7 @@ function makeMock() {
     if (p === '/api/replies') { replies.push({ id: nextReply++, title: body.title, text: body.text }); return { id: nextReply - 1 }; }
     m = p.match(/^\/api\/replies\/(\d+)$/);
     if (m) { const i = replies.findIndex(r => r.id === +m[1]); if (method === 'DELETE') { if (i >= 0) replies.splice(i, 1); } else if (i >= 0) Object.assign(replies[i], { title: body.title, text: body.text }); return { ok: true }; }
+    if (p === '/api/announce') return { url: '#', channel: 'announcements', partners: 2 };
     if (p.startsWith('/api/staff-audit')) {
       const fixed = p.endsWith('/fix') || window.__auditFixed; window.__auditFixed = fixed;
       const ch = (key, label, channel, extra) => ({ key, label, channel, kind: key === 'report_channel_id' ? 'threads' : 'view', roles: fixed ? [] : extra, admins: [], people: [], ok: fixed || !extra.length });

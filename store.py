@@ -469,6 +469,7 @@ SCHEMA = {
     "digest_hour": {"type": "int", "default": 9, "min": 0, "max": 23},
     "devlist_enabled": {"type": "bool", "default": True},
     "devlist_channel_id": {"type": "channel", "default": None},
+    "announce_channel_id": {"type": "channel", "default": None},
     "devlist_hour": {"type": "int", "default": 8, "min": 0, "max": 23},
     "devlist_files": {"type": "bool", "default": True},
     "alerts_channel_id": {"type": "channel", "default": None},

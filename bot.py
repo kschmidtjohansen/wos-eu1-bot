@@ -1598,7 +1598,7 @@ class WosBot(discord.Client):
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
-                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
+                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
                          "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
                          "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
@@ -4467,6 +4467,37 @@ def weekly_embed(d: dict) -> discord.Embed:
     site = (cfg("giftcodes_site_url") or "").rsplit("/", 1)[0]
     e.set_footer(text=brand() + (f" · {site}/" if site.startswith("http") else ""))
     return e
+
+
+async def post_announcement(title: str, text: str, channel_id: Optional[int], role_id: Optional[int], partners: bool,
+                            by_name: str, by_id=None, image_url: Optional[str] = None) -> dict:
+    """A one-off announcement from the dashboard: an embed in our channel (optionally tagging a role) and, if wanted,
+    the same post in every promoter server (never with a tag there)."""
+    title, text = (title or "").strip()[:200], (text or "").strip()[:3800]
+    if len(text) < 2:
+        raise ValueError("Write the announcement first.")
+    g = bot.get_guild(GUILD_ID)
+    ch = g.get_channel(int(channel_id)) if channel_id and g else (chan("announce_channel_id") or chan("patchnotes_channel_id"))
+    if ch is None:
+        raise ValueError("Choose the channel to post in.")
+    role = g.get_role(int(role_id)) if role_id and g else None
+
+    def embed():
+        e = discord.Embed(title=title or None, description=text, color=0x7DE3F4)
+        if image_url and image_url.lower().startswith("https://"):
+            e.set_image(url=image_url)
+        e.set_footer(text=brand())
+        return e
+    msg = await ch.send(content=role.mention if role else None, embed=embed(),
+                        allowed_mentions=discord.AllowedMentions(roles=[role] if role else [], everyone=False, users=False))
+    n = 0
+    if partners:
+        n = await partner_send("ann", lambda gg: {"embed": embed()})
+    store.put_raw("announce_channel_last", str(ch.id))
+    log_event("admin", f"Announcement “{title or text[:40]}” posted in #{ch.name}" + (f" and {n} promoter server{'s' if n != 1 else ''}" if n else "")
+              + f" by {by_name}", by_id, by_name)
+    push_soon("news", ("📢 " + (title or brand()))[:80], text[:140], "index.html")
+    return {"url": msg.jump_url, "channel": ch.name, "partners": n}
 
 
 async def post_weekly(force: bool = False):
