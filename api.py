@@ -611,11 +611,43 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                         secure=c["redirect"].startswith("https://"))
         raise resp
 
-    def page(msg: str, status: int = 403):
-        body = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><title>Login</title>"
+    def page(msg: str, status: int = 403, back: bool = True):
+        body = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><title>WOS EU1</title>"
                 "<body style='font:16px system-ui;background:#0b1220;color:#eef3fb;display:grid;place-items:center;min-height:90vh'>"
-                f"<div style='max-width:420px;text-align:center'><p>{msg}</p><p><a style='color:#8cb8f2' href='{oauth_conf()['return_to']}'>Back to the dashboard</a></p></div>")
+                f"<div style='max-width:440px;text-align:center;line-height:1.5'><p>{msg}</p>"
+                + (f"<p><a style='color:#8cb8f2' href='{oauth_conf()['return_to']}'>Back to the dashboard</a></p>" if back else "") + "</div>")
         return web.Response(text=body, content_type="text/html", status=status)
+
+    async def partner_callback(request, state: str, code: str):
+        """A promoter added the bot with their personal link: Discord sends them here with the server it was added to."""
+        import aiohttp
+        import html as _html
+        c = oauth_conf()
+        inv = store.partner_invite(state[2:])
+        if inv is None:
+            return page("This link has expired or was already used. Ask the team for a new one.", 400, back=False)
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
+            async with s.post(f"{DISCORD_API}/oauth2/token", data={
+                    "client_id": client_id(), "client_secret": c["secret"], "grant_type": "authorization_code",
+                    "code": code, "redirect_uri": c["redirect"]}) as r:
+                tok = await r.json(content_type=None)
+            if r.status != 200 or "access_token" not in tok:
+                return page("Discord didn't confirm the link. Please try again.", 400, back=False)
+            async with s.get(f"{DISCORD_API}/users/@me", headers={"Authorization": "Bearer " + tok["access_token"]}) as r:
+                user = await r.json(content_type=None)
+        gid = request.query.get("guild_id") or (tok.get("guild") or {}).get("id")
+        if not gid or not str(gid).isdigit():
+            return page("Pick a server when Discord asks – the bot wasn't added anywhere.", 400, back=False)
+        gid = int(gid)
+        if gid == guild_id:
+            return page("That's our own server – pick your server instead.", 400, back=False)
+        store.partner_invite_use(state[2:], gid)
+        name = (user.get("global_name") or user.get("username") or str(user.get("id")))[:60]
+        await hooks["partner_claim"](gid, inv["promoter"], int(user["id"]), name)
+        server = _html.escape((tok.get("guild") or {}).get("name") or "your server")
+        return page(f"✅ The bot was added to <b>{server}</b>.<br>It has sent you a direct message on Discord – pick the channels for "
+                    "announcements and gift codes there.<br><br><small style='color:#8a96ad'>No message? Allow direct messages from "
+                    "server members (Privacy settings) and ask the team to send it again.</small>", 200, back=False)
 
     @routes.get("/api/auth/callback")
     async def auth_callback(request):
@@ -624,6 +656,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         state, code = request.query.get("state", ""), request.query.get("code", "")
         if request.query.get("error"):
             return page("Login was cancelled.", 400)
+        if state.startswith("p.") and code:
+            return await partner_callback(request, state, code)
         if not state or state != request.cookies.get("wos_state") or pending_logins.pop(state, None) is None:
             return page("This login link expired. Please try again.", 400)
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
@@ -1829,6 +1863,77 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if d.get("dismiss"):
             hooks["spike_dismiss"](str(d["dismiss"]))
         return web.json_response({"spikes": hooks["active_spikes"]()})
+
+    # ------------------------------------------------ promoter servers (admins)
+    PARTNER_PERMS = 379904
+
+    def partner_link(token: str) -> str:
+        from urllib.parse import urlencode
+        return "https://discord.com/oauth2/authorize?" + urlencode({
+            "client_id": client_id(), "scope": "bot identify", "permissions": str(PARTNER_PERMS), "response_type": "code",
+            "redirect_uri": oauth_conf()["redirect"], "state": "p." + token, "disable_guild_select": "false"})
+
+    def partners_payload():
+        return {"ready": bool(oauth_conf()["secret"] and oauth_conf()["redirect"]),
+                "items": [hooks["partner_info"](p) for p in store.partners() if not p["left_ts"]],
+                "left": [{"id": str(p["guild_id"]), "name": p["name"] or "?", "promoter": p["promoter"] or "", "left_ts": p["left_ts"]}
+                         for p in store.partners() if p["left_ts"]][:20],
+                "invites": [{"id": i["id"], "promoter": i["promoter"], "created_ts": i["created_ts"], "created_by": i["created_by"] or "",
+                             "expires_ts": i["expires_ts"]} for i in store.partner_invites_open()]}
+
+    def partner_or_404(request):
+        gid = request.match_info["id"]
+        if not gid.isdigit() or store.get_partner(int(gid)) is None:
+            raise ApiError(404, "Unknown promoter server.")
+        return int(gid)
+
+    @routes.get("/api/partners")
+    async def partners_list(request):
+        return web.json_response(partners_payload())
+
+    @routes.post("/api/partners/invite")
+    async def partners_invite(request):
+        c = oauth_conf()
+        if not (c["secret"] and c["redirect"]):
+            raise ApiError(400, "Set up “Log in with Discord” first (Settings → Bot profile) – the link uses the same redirect address.")
+        promoter = clean((await body_json(request)).get("promoter"), 60)
+        if len(promoter) < 2:
+            raise ApiError(400, "Write the promoter's name.")
+        token = store.partner_invite_new(promoter, who(request))
+        store.log_event("admin", f"{who(request)} made a bot link for promoter {promoter}", who_id(request), who(request))
+        return web.json_response(dict(partners_payload(), url=partner_link(token), days=store.PARTNER_INVITE_DAYS))
+
+    @routes.delete("/api/partners/invites/{iid}")
+    async def partners_invite_del(request):
+        store.partner_invite_revoke(int_param(request, "iid"))
+        return web.json_response(partners_payload())
+
+    @routes.put("/api/partners/{id}")
+    async def partner_put(request):
+        gid = partner_or_404(request)
+        d = await body_json(request)
+        num = lambda v: None if v is None else int(v or 0)  # noqa: E731
+        try:
+            await hooks["partner_set"](gid, num(d.get("ann")), num(d.get("gift")), d.get("paused"), who(request))
+        except (TypeError, ValueError) as exc:
+            raise ApiError(400, str(exc) or "Bad channel.")
+        return web.json_response(partners_payload())
+
+    @routes.post("/api/partners/{id}/test")
+    async def partner_post_test(request):
+        done = await hooks["partner_test"](partner_or_404(request))
+        return web.json_response({"ok": True, "where": done})
+
+    @routes.post("/api/partners/{id}/dm")
+    async def partner_dm(request):
+        if not await hooks["send_partner_setup"](partner_or_404(request)):
+            raise ApiError(400, "The DM didn't arrive – the promoter has direct messages from server members turned off. Pick the channels here instead.")
+        return web.json_response({"ok": True})
+
+    @routes.delete("/api/partners/{id}")
+    async def partner_del(request):
+        await hooks["partner_remove"](partner_or_404(request), who(request))
+        return web.json_response(partners_payload())
 
     # ------------------------------------------------ player card, staff notes, deleted messages
     def msg_dict(m):

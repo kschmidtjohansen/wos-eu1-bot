@@ -427,6 +427,8 @@
 .w-fold[open] > summary::before{transform:rotate(90deg)}
 .w-fold[open] > summary{margin-bottom:10px}
 .w-more summary{cursor:pointer;color:var(--w-muted);font-size:13.5px}
+.w-ptrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:10px}.w-ptrow label{gap:8px}
+.w-ptic{width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;background:var(--w-surface-2);font-size:12px;font-weight:700;text-transform:uppercase;object-fit:cover}
 .w-plink{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:var(--w-border-strong);text-underline-offset:3px}
 .w-plink:hover{text-decoration-color:var(--w-accent)}
 .w-pfind{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
@@ -836,7 +838,7 @@ const NAV = [
   ['codes', 'Gift codes', 'gift', 'Daily work'], ['players', 'Players', 'users', 'Daily work'], ['queue', 'Reports & appeals', 'shield', 'Daily work'], ['msglog', 'Deleted messages', 'list', 'Daily work'], ['warnings', 'Warnings', 'alert', 'Daily work'], ['mod', 'Moderation', 'shield', 'Daily work'],
   ['welcome', 'Welcome', 'userplus', 'Community'], ['access', 'Access & languages', 'globe', 'Community'], ['rolemenus', 'Role menus', 'tag', 'Community'],
   ['giveaways', 'Giveaways', 'party', 'Community'], ['timers', 'Timed messages', 'clock', 'Community'], ['invites', 'Invites', 'userplus', 'Community'],
-  ['info', 'Info channel', 'list', 'Posts'], ['patch', 'Patch notes & posts', 'wrench', 'Posts'],
+  ['info', 'Info channel', 'list', 'Posts'], ['patch', 'Patch notes & posts', 'wrench', 'Posts'], ['partners', 'Promoter servers', 'users', 'Posts'],
   ['insights', 'Insights', 'chart', 'How it is going'], ['moderators', 'Moderators', 'timer', 'How it is going'], ['status', 'Server status', 'pulse', 'How it is going'], ['log', 'Activity log', 'list', 'How it is going'],
   ['panel', 'Bug bot', 'bug', 'Set up'], ['channels', 'Channels', 'hash', 'Set up'], ['translations', 'Translations', 'globe', 'Set up'],
   ['bot', 'Bot profile', 'bot', 'Set up'], ['data', 'Data & backups', 'db', 'Set up']
@@ -847,10 +849,10 @@ const HUBS = [
   ['overview', 'Overview', 'grid', ['overview']], ['bugs', 'Bugs', 'bug', ['bugs']], ['suggestions', 'Suggestions', 'bulb', ['suggestions']],
   ['codes', 'Gift codes', 'gift', ['codes']], ['players', 'Players', 'users', ['players']], '|',
   ['moderation', 'Moderation', 'shield', ['queue', 'msglog', 'warnings', 'mod']], ['members', 'Members', 'userplus', ['welcome', 'access', 'rolemenus', 'invites']],
-  ['events', 'Events', 'party', ['giveaways', 'timers']], ['posts', 'Posts', 'list', ['info', 'patch']], '|',
+  ['events', 'Events', 'party', ['giveaways', 'timers']], ['posts', 'Posts', 'list', ['info', 'patch', 'partners']], '|',
   ['stats', 'Stats', 'chart', ['insights', 'moderators', 'status', 'log']], ['setup', 'Settings', 'wrench', ['panel', 'channels', 'translations', 'bot', 'data']]
 ];
-const HUB_LABEL = { queue: 'Reports & appeals', msglog: 'Deleted messages', warnings: 'Warnings', mod: 'Auto-mod & replies', welcome: 'Welcome', access: 'Access & languages', rolemenus: 'Role menus', invites: 'Invites',
+const HUB_LABEL = { partners: 'Promoter servers', queue: 'Reports & appeals', msglog: 'Deleted messages', warnings: 'Warnings', mod: 'Auto-mod & replies', welcome: 'Welcome', access: 'Access & languages', rolemenus: 'Role menus', invites: 'Invites',
   giveaways: 'Giveaways', timers: 'Timed messages', info: 'Info channel', patch: 'Patch notes & posts', insights: 'Insights', moderators: 'Moderators',
   status: 'Server status', log: 'Activity log', panel: 'Bug bot', channels: 'Channels', translations: 'Translations', bot: 'Bot profile', data: 'Data & backups' };
 const allowed = t => !isMod() || MOD_TABS.includes(t);
@@ -2064,6 +2066,46 @@ function playerModal() {
 }
 async function openPlayer(id) { S.player = await call('GET', '/api/players/' + id); S.detail = null; showPlayer(); }
 function showPlayer() { const m = $('#wmodal'); if (m) m.remove(); root.insertAdjacentHTML('beforeend', String(playerModal())); const c = $('#m-close'); if (c) c.focus(); }
+/* ------------------------------------------------ promoter servers: our announcements and gift codes in their Discord */
+const PT_BADGE = { ok: ['ok', 'Posting'], setup: ['warn', 'Needs channels'], problem: ['bad', 'Problem'], paused: ['todo', 'Paused'], left: ['todo', 'Removed'] };
+function ptChannel(p, kind) {
+  const cur = p[kind];
+  return html`<select class="w-select" data-pt="${kind}" data-id="${p.id}" aria-label="${kind === 'ann' ? 'Announcements' : 'Gift codes'} channel in ${p.name}" style="width:auto;max-width:220px">
+    <option value="0" ${cur ? '' : 'selected'}>Off</option>${p.channels.map(c => html`<option value="${c.id}" ${cur && cur.id === c.id ? 'selected' : ''}>#${c.name}</option>`)}
+    ${cur && !p.channels.some(c => c.id === cur.id) ? html`<option value="${cur.id}" selected>#${cur.name} (no access)</option>` : ''}</select>`;
+}
+function viewPartners() {
+  const P = S.partners;
+  if (!P) return html`<div class="w-pagehead"><h2>Promoter servers</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  return html`
+    <div class="w-pagehead"><h2>Promoter servers</h2><p>Promoters can have the bot in their own Discord server. It posts our patch notes, the weekly post and new gift codes there – nothing else (no moderation, no commands, no logging).</p></div>
+    ${P.ready ? '' : html`<div class="w-card w-banner warn">${icon('alert')}<div><b>Set up “Log in with Discord” first</b><div class="w-sub">The promoter link uses the same Discord app settings (Client Secret and redirect address) as the staff login.</div></div></div>`}
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Add a promoter</h3></div>
+      <ol class="w-steps" style="margin:0 0 12px"><li>Write the promoter’s name and make their link.</li><li>Send them the link. They open it, pick their server and press “Authorise”.</li>
+        <li>The bot joins and sends them a direct message where they pick the channel for announcements and the one for gift codes. You can also pick them here.</li></ol>
+      <div class="w-inline"><input class="w-input" id="pt-name" maxlength="60" placeholder="Promoter name, e.g. Nordic Alliance" style="max-width:300px" aria-label="Promoter name">
+        <button class="w-btn primary" data-act="ptInvite" ${P.ready ? '' : 'disabled'}>Make link</button></div>
+      ${S.ptLink ? html`<div class="w-linkbox" style="margin-top:12px"><input class="w-input" id="pt-link" readonly value="${S.ptLink}" aria-label="Link for the promoter"><button class="w-btn primary" data-act="ptCopy">Copy link</button></div>
+        <p class="w-hint" style="margin:6px 0 0">Works once, for ${P.days || 7} days. Only someone with “Manage Server” on their server can add the bot. Servers added without a link are left again automatically.</p>` : ''}
+      ${P.invites.length ? html`<div class="w-sect"><span class="w-label">Links not used yet</span>${P.invites.map(i => html`<div class="w-item"><div><b>${i.promoter}</b><div class="w-sub">made by ${i.created_by || '–'} ${ago(i.created_ts)} · expires ${full(i.expires_ts)}</div></div>
+        <button class="w-btn small" data-act="ptRevoke" data-id="${i.id}">Cancel link</button></div>`)}</div>` : ''}
+    </section>
+    <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Servers <span class="w-badge ${P.items.length ? 'ok' : 'todo'}">${P.items.length}</span></h3></div>
+      ${P.items.length ? P.items.map(p => { const b = PT_BADGE[p.status] || PT_BADGE.setup; return html`<article class="w-qcard">
+        <div class="w-qhead">${p.icon ? html`<img class="w-ptic" src="${p.icon}" alt="">` : html`<span class="w-ptic">${p.name.slice(0, 2)}</span>`}<b>${p.name}</b>
+          <span class="w-badge ${b[0]}">${b[1]}</span><span class="w-hint">${p.promoter}${p.members != null ? ' · ' + p.members.toLocaleString('en') + ' members' : ''} · added ${ago(p.added_ts)}${p.added_by ? ' by ' + p.added_by : ''}</span></div>
+        ${p.problem ? html`<p class="w-hint" style="color:var(--w-bad,#ff6b7a);margin:6px 0 0">⚠️ ${p.problem}</p>` : ''}
+        <div class="w-ptrow" style="margin-top:10px"><label class="w-inline"><span class="w-hint">📢 Announcements</span>${ptChannel(p, 'ann')}</label>
+          <label class="w-inline"><span class="w-hint">🎁 Gift codes</span>${ptChannel(p, 'gift')}</label></div>
+        <div class="w-ptrow"><span class="w-hint" style="flex:1">${p.posts ? p.posts + ' post' + (p.posts === 1 ? '' : 's') + ', last ' + ago(p.last_post_ts) : 'Nothing posted yet'}</span>
+          <button class="w-btn small" data-act="ptTest" data-id="${p.id}" ${p.ann || p.gift ? '' : 'disabled'}>Test post</button>
+          <button class="w-btn small" data-act="ptDm" data-id="${p.id}">Send setup DM again</button>
+          <button class="w-btn small" data-act="ptPause" data-id="${p.id}" data-on="${p.paused ? 0 : 1}">${p.paused ? 'Resume' : 'Pause'}</button>
+          <button class="w-btn small danger" data-act="ptRemove" data-id="${p.id}">Remove bot</button></div></article>`; })
+        : html`<div class="w-empty">No promoter servers yet. Make a link above and send it to a promoter.</div>`}
+      ${P.left.length ? html`<details class="w-fold"><summary><b>Removed</b><span class="w-hint">${P.left.length}</span></summary>${P.left.map(l => html`<div class="w-caseline"><span>${l.name}</span><i class="w-hint">${l.promoter}</i><time>${ago(l.left_ts)}</time></div>`)}</details>` : ''}
+    </section>`;
+}
 function viewWarnings() {
   const C = S.cases;
   if (!C) return html`<div class="w-pagehead"><h2>Warnings</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
@@ -2765,7 +2807,7 @@ async function loadLogs(reset, silent) {
 }
 
 /* ============================================================ rendering */
-const VIEWS = { queue: withSettings(viewQueue, ['staffq'], 'Settings'), msglog: withSettings(viewMsgLog, ['msglog'], 'Settings'), access: viewAccess, warnings: withSettings(viewWarnings, ['warnings'], 'Escalation settings'), rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: withSettings(viewInvites, ['invites']), players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
+const VIEWS = { partners: viewPartners, queue: withSettings(viewQueue, ['staffq'], 'Settings'), msglog: withSettings(viewMsgLog, ['msglog'], 'Settings'), access: viewAccess, warnings: withSettings(viewWarnings, ['warnings'], 'Escalation settings'), rolemenus: viewRoleMenus, giveaways: viewGiveaways, timers: viewTimers, invites: withSettings(viewInvites, ['invites']), players: viewPlayers, moderators: viewModerators, info: viewInfo, overview: viewOverview, status: viewStatus, codes: viewCodes, translations: viewTranslations, bugs: viewBugs, suggestions: viewSuggestions, insights: viewInsights, panel: viewPanel, channels: viewChannels,
   features: viewPanel, welcome: viewWelcome, patch: viewPatch, mod: withSettings(viewMod, ['automod', 'guard'], 'Auto-mod & scam guard'), bot: viewBot, data: viewData, log: viewLog };
 const LOADERS = {
   status: async () => { S.status = await call('GET', '/api/status'); },
@@ -2786,6 +2828,7 @@ const LOADERS = {
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
   msglog: async () => { const k = (S.msglog && S.msglog.kind) || 'deleted', q = (S.msglog && S.msglog.q) || ''; S.msglog = Object.assign(await call('GET', '/api/msglog?kind=' + k + '&q=' + encodeURIComponent(q)), { q }); },
+  partners: async () => { S.partners = Object.assign(S.partners || {}, await call('GET', '/api/partners')); },
   queue: async () => { const st = S.queueDone ? 'done' : 'open'; const [r, a] = await Promise.all([call('GET', '/api/reports?status=' + st), call('GET', '/api/appeals?status=' + st)]); S.reports = r; S.appeals = a; },
   panel: async () => { if (isMod()) { S.langs = null; return; } const [l, d] = await Promise.all([call('GET', '/api/bugs/languages').catch(() => null), call('GET', '/api/devpage').catch(() => null)]); S.langs = l; S.devpage = d; },
   insights: async () => { S.insights = await call('GET', '/api/insights'); },
@@ -3618,6 +3661,15 @@ root.addEventListener('click', async e => {
     else if (act === 'msglogSearch') { S.msglog.q = $('#ml-q').value.trim(); loadTab('msglog'); }
     else if (act === 'gameCheck') { busy(el, true, 'Checking…');
       try { const r = await call('POST', '/api/game/check'); if (S.status) S.status.game = r.game; toast(r.game && r.game.game ? 'Game server: ' + r.game.game : 'Checked.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'ptInvite') { const n = $('#pt-name').value.trim(); if (n.length < 2) { $('#pt-name').focus(); return toast('Write the promoter’s name first.', 'err'); } busy(el, true, '…');
+      try { const r = await call('POST', '/api/partners/invite', { promoter: n }); S.ptLink = r.url; S.partners = r; renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'ptCopy') { const i = $('#pt-link'); try { await navigator.clipboard.writeText(i.value); toast('Link copied – send it to the promoter.'); } catch (e) { i.select(); toast('Press Ctrl+C to copy.'); } }
+    else if (act === 'ptRevoke') { busy(el, true, '…'); try { Object.assign(S.partners, await call('DELETE', '/api/partners/invites/' + el.dataset.id)); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'ptTest') { busy(el, true, 'Posting…'); try { const r = await call('POST', '/api/partners/' + el.dataset.id + '/test'); toast('Test post sent to ' + r.where.join(', ') + '.'); } catch (err) { toast(err.message, 'err'); } busy(el, false); }
+    else if (act === 'ptDm') { busy(el, true, 'Sending…'); try { await call('POST', '/api/partners/' + el.dataset.id + '/dm'); toast('Setup message sent.'); } catch (err) { toast(err.message, 'err'); } busy(el, false); }
+    else if (act === 'ptPause') { busy(el, true, '…'); try { Object.assign(S.partners, await call('PUT', '/api/partners/' + el.dataset.id, { paused: el.dataset.on === '1' })); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'ptRemove') { if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Sure? The bot leaves their server'; return; } busy(el, true, '…');
+      try { Object.assign(S.partners, await call('DELETE', '/api/partners/' + el.dataset.id)); toast('The bot left the server.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'raidSet') { busy(el, true, '…');
       try { const r = await call('POST', '/api/raid', { active: el.dataset.on === '1' }); if (S.queue) S.queue.raid = r; toast(r.active ? 'Raid mode is on.' : 'Raid mode lifted.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'spikeKnown' || act === 'spikeDismiss') { busy(el, true, '…');
@@ -3713,6 +3765,13 @@ let logTimer;
 function onInput(e) {
   if ((e.target.id === 'bnfile' || e.target.id === 'avfile') && e.type !== 'change') return;   // file pickers fire both events
   const el = e.target;
+  if (el.dataset.pt) {                                  // promoter server channel picker – saves straight away
+    if (e.type !== 'change') return;
+    el.disabled = true;
+    call('PUT', '/api/partners/' + el.dataset.id, { [el.dataset.pt]: el.value }).then(r => { Object.assign(S.partners, r); toast('Saved.'); renderMain(); },
+      err => { el.disabled = false; toast(err.message, 'err'); });
+    return;
+  }
   if (el.dataset.k) {                                   // channels + features
     const k = el.dataset.k; let v;
     if (el.type === 'checkbox') v = el.checked;
@@ -4101,6 +4160,24 @@ function makeMock() {
     if (p === '/api/replies') { replies.push({ id: nextReply++, title: body.title, text: body.text }); return { id: nextReply - 1 }; }
     m = p.match(/^\/api\/replies\/(\d+)$/);
     if (m) { const i = replies.findIndex(r => r.id === +m[1]); if (method === 'DELETE') { if (i >= 0) replies.splice(i, 1); } else if (i >= 0) Object.assign(replies[i], { title: body.title, text: body.text }); return { ok: true }; }
+    if (p.startsWith('/api/partners')) {
+      const M = (window.__mockPt = window.__mockPt || { ready: true, days: 7, left: [], invites: [{ id: 1, promoter: 'Iron Wolves', created_ts: now - 7200, created_by: 'Kasper', expires_ts: now + 6 * 86400 }],
+        items: [{ id: '900000000000000001', name: 'Nordic Alliance', icon: '', members: 1840, promoter: 'Nordic Alliance', added_by: 'Freya', added_by_id: '1', added_ts: now - 5 * 86400,
+            ann: { id: '11', name: 'announcements' }, gift: { id: '12', name: 'gift-codes' }, paused: false, problem: '', status: 'ok', last_post_ts: now - 3600, posts: 14,
+            channels: [{ id: '11', name: 'announcements' }, { id: '12', name: 'gift-codes' }, { id: '13', name: 'general' }] },
+          { id: '900000000000000002', name: 'Frost Legion', icon: '', members: 420, promoter: 'Frost Legion', added_by: 'Bjorn', added_by_id: '2', added_ts: now - 3600,
+            ann: null, gift: null, paused: false, problem: '', status: 'setup', last_post_ts: null, posts: 0, channels: [{ id: '21', name: 'news' }, { id: '22', name: 'chat' }] }] });
+      const one = p.match(/^\/api\/partners\/(\d+)(\/\w+)?$/);
+      if (p === '/api/partners/invite') { M.invites.unshift({ id: Date.now(), promoter: body.promoter, created_ts: now, created_by: 'You', expires_ts: now + 7 * 86400 }); return Object.assign({ url: 'https://discord.com/oauth2/authorize?client_id=123&scope=bot+identify&permissions=379904&response_type=code&state=p.demo' }, M); }
+      if (/\/invites\/\d+$/.test(p)) { M.invites = M.invites.filter(i => String(i.id) !== p.split('/').pop()); return M; }
+      if (one) { const x = M.items.find(i => i.id === one[1]);
+        if (one[2] === '/test') return { ok: true, where: [x.ann, x.gift].filter(Boolean).map(c => '#' + c.name) };
+        if (one[2] === '/dm') return { ok: true };
+        if (method === 'DELETE') { M.items = M.items.filter(i => i !== x); M.left.unshift({ id: x.id, name: x.name, promoter: x.promoter, left_ts: now }); return M; }
+        ['ann', 'gift'].forEach(k => { if (k in body) x[k] = +body[k] ? x.channels.find(c => c.id === body[k]) : null; });
+        if ('paused' in body) x.paused = body.paused;
+        x.status = x.paused ? 'paused' : x.ann || x.gift ? 'ok' : 'setup'; return M; }
+      return M; }
     if (p === '/api/msglog') { const ed = /kind=edited/.test(path);
       return { kind: ed ? 'edited' : 'deleted', enabled: true, days: 7, items: ed ? [{ id: '5', channel: 'general', author_id: '100000000000000001', author: 'Grimnir', content: 'sorry, that came out wrong', attachments: 0, ts: now - 4000, deleted_ts: null, deleted_by: '', edits: [{ text: 'you are all idiots', ts: now - 3900 }], url: '#' }]
         : [{ id: '6', channel: 'general', author_id: '100000000000000001', author: 'Grimnir', content: 'uninstall the game, nobody wants you here', attachments: 0, ts: now - 2400, deleted_ts: now - 2300, deleted_by: '', edits: [], url: '#' },

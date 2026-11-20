@@ -1586,7 +1586,8 @@ class WosBot(discord.Client):
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
-                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
+                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
+                         "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
                          "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
                          "decide_suggestion": decide_suggestion, "version_info": version_info,
@@ -1652,7 +1653,7 @@ class WosBot(discord.Client):
                 await handle_gate(interaction)
             except Exception as exc:  # noqa: BLE001
                 print(f"[device question] {exc!r}")
-        for prefix, fn, label in (("spike:", handle_spike_button, "spike alert"), ("mr:", handle_msg_report_button, "message report"),
+        for prefix, fn, label in (("pt:", handle_partner_setup, "promoter setup"), ("spike:", handle_spike_button, "spike alert"), ("mr:", handle_msg_report_button, "message report"),
                                   ("ap:", handle_appeal_button, "appeal"), ("raid:", handle_raid_button, "raid mode")):
             if cid.startswith(prefix):
                 try:
@@ -1733,8 +1734,8 @@ class WosBot(discord.Client):
             _snapshot_invites()
 
     async def on_message(self, message: discord.Message):
-        if message.author.bot:
-            return
+        if message.author.bot or (message.guild is not None and message.guild.id != GUILD_ID):
+            return                                           # promoter servers: we only post there
         try:
             remember_message(message)
         except Exception as exc:  # noqa: BLE001
@@ -1757,6 +1758,16 @@ class WosBot(discord.Client):
         if not isinstance(message.channel, discord.Thread):
             return
         await handle_ticket_message(message)
+
+    async def on_guild_join(self, guild: discord.Guild):
+        if guild.id != GUILD_ID:
+            asyncio.create_task(safe_task(partner_joined(guild), "promoter server"))
+
+    async def on_guild_remove(self, guild: discord.Guild):
+        p = store.get_partner(guild.id)
+        if p is not None and not p["left_ts"]:
+            store.save_partner(guild.id, left_ts=int(time.time()))
+            log_event("system", f"The bot was removed from promoter server {p['name']}", None, brand())
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if payload.guild_id != GUILD_ID or payload.user_id == self.user.id:
@@ -2726,6 +2737,10 @@ async def add_gift_codes(items, by_name: str, by_id=None, announce: bool = True)
         await safe_refresh_gift_list()
         start_redeem()
         if announce:
+            try:
+                await partner_codes(rows)
+            except Exception as exc:  # noqa: BLE001 – promoters must never block our own announcement
+                print(f"[promoter codes] {exc!r}")
             first = rows[0]
             push_soon("codes", "🎁 New gift code" + ("s" if len(rows) > 1 else "") + "!",
                       (first["code"] + (f" – {first['reward']}" if first["reward"] else "")) if len(rows) == 1
@@ -4446,7 +4461,12 @@ async def post_weekly(force: bool = False):
     ch = chan("weekly_channel_id")
     if ch is None:
         raise ValueError("Choose a channel for the weekly post first (Channels page).")
-    await ch.send(embed=weekly_embed(store.weekly_data()), allowed_mentions=discord.AllowedMentions.none())
+    data = store.weekly_data()
+    await ch.send(embed=weekly_embed(data), allowed_mentions=discord.AllowedMentions.none())
+    try:
+        await partner_send("ann", lambda g: {"embed": weekly_embed(data)})
+    except Exception as exc:  # noqa: BLE001
+        print(f"[promoter weekly] {exc!r}")
     log_event("system", "Weekly post published" + (" (sent manually)" if force else ""), None, brand())
     if not force:
         push_soon("news", "❄️ This week in " + brand(), "Fixes, new gift codes and more – have a look.", "index.html")
@@ -5796,6 +5816,343 @@ async def lift_temp_bans(now: Optional[int] = None) -> int:
     return n
 
 
+# --------------------------------------------------------------- promoter (partner) servers
+# A promoter adds the bot to their own server with a personal link from the dashboard. The bot DMs them two pickers
+# (announcements channel, gift-codes channel) and then copies our patch notes, weekly post and new gift codes there.
+# Nothing else runs in those servers – no moderation, welcome, logging or commands.
+PARTNER_PERMS = 379904           # View Channel, Send Messages, Embed Links, Attach Files, Read History, External Emojis
+PARTNER_GRACE = 180              # seconds a server may wait for its link to be confirmed before the bot leaves
+_partner_claims: dict = {}       # guild_id -> (promoter, user_id) from the add link, waiting for on_guild_join
+
+
+def is_partner_guild(g) -> bool:
+    return g is not None and g.id != GUILD_ID
+
+
+def partner_channels(g) -> list:
+    """Text and announcement channels in a partner server the bot can post in, most likely first (max 25)."""
+    me = g.me
+    out = []
+    for c in g.channels:
+        if getattr(c, "type", None) not in (discord.ChannelType.text, discord.ChannelType.news):
+            continue
+        p = c.permissions_for(me)
+        if p.view_channel and p.send_messages and p.embed_links:
+            out.append(c)
+    words = ("gift", "code", "kod", "announce", "news", "ogłosz", "info", "update", "wos", "whiteout")
+    out.sort(key=lambda c: (not any(w in c.name.lower() for w in words), c.position))
+    return out
+
+
+def partner_status(p) -> str:
+    if p["left_ts"]:
+        return "left"
+    if p["paused"]:
+        return "paused"
+    if p["problem"]:
+        return "problem"
+    return "ok" if (p["ann_channel"] or p["gift_channel"]) else "setup"
+
+
+class PartnerSetupView(discord.ui.View):
+    """Sent by DM to the promoter: two channel pickers and a test button. Persistent (custom ids carry the server id)."""
+
+    def __init__(self, g, lg=None):
+        super().__init__(timeout=None)
+        p = store.get_partner(g.id)
+        chans = partner_channels(g)
+        for kind, row in (("ann", 0), ("gift", 1)):
+            cur = p[f"{kind}_channel"] if p else None
+            opts = [discord.SelectOption(label=T("partner.none", lg)[:100], value="0", emoji="🚫", default=not cur)]
+            opts += [discord.SelectOption(label=("#" + c.name)[:100], value=str(c.id), default=cur == c.id,
+                                          description=(c.category.name[:100] if c.category else None)) for c in chans[:24]]
+            sel = discord.ui.Select(placeholder=T(f"partner.{kind}", lg)[:150], options=opts, row=row,
+                                    custom_id=f"pt:{kind}:{g.id}")
+            self.add_item(sel)
+        self.add_item(discord.ui.Button(label=T("partner.test", lg)[:80], emoji="🧪", style=discord.ButtonStyle.secondary,
+                                        custom_id=f"pt:test:{g.id}", row=2))
+
+
+def partner_setup_text(g, lg=None) -> str:
+    text = T("partner.hello", lg, bot=bot.user.display_name if bot.user else brand(), server=g.name)
+    if len(partner_channels(g)) > 24:
+        text += "\n" + T("partner.more", lg)
+    return text
+
+
+async def send_partner_setup(guild_id: int, user_id: Optional[int] = None, problem: Optional[str] = None) -> bool:
+    """DM the promoter the channel pickers. True if it arrived."""
+    g = bot.get_guild(guild_id)
+    p = store.get_partner(guild_id)
+    if g is None or p is None:
+        return False
+    uid = user_id or p["added_by"] or g.owner_id
+    lg = lang_for(uid)
+    text = partner_setup_text(g, lg) if not problem else T("partner.problem", lg, server=g.name, problem=problem)
+    try:
+        user = bot.get_user(uid) or await bot.fetch_user(uid)
+        await user.send(text, view=PartnerSetupView(g, lg))
+        return True
+    except discord.HTTPException:
+        return False
+
+
+def _can_manage(user_id: int, g) -> bool:
+    p = store.get_partner(g.id)
+    m = g.get_member(user_id)
+    return bool((p and p["added_by"] == user_id) or (m and (m.guild_permissions.manage_guild or m.guild_permissions.administrator)))
+
+
+async def handle_partner_setup(interaction: discord.Interaction):
+    _, what, gid = interaction.data["custom_id"].split(":")
+    g = bot.get_guild(int(gid))
+    lg = ilang(interaction)
+    p = store.get_partner(int(gid))
+    if g is None or p is None or p["left_ts"]:
+        return await interaction.response.send_message("I'm no longer in that server.", ephemeral=True)
+    if not _can_manage(interaction.user.id, g):
+        return await interaction.response.send_message(T("partner.only_admin", lg, server=g.name), ephemeral=True)
+    if what in ("ann", "gift"):
+        val = int((interaction.data.get("values") or ["0"])[0])
+        ch = g.get_channel(val) if val else None
+        if val and (ch is None or not (ch.permissions_for(g.me).send_messages and ch.permissions_for(g.me).embed_links)):
+            return await interaction.response.send_message(T("partner.no_perm", lg, where="#" + (ch.name if ch else "?")), ephemeral=True)
+        p = store.save_partner(g.id, **{f"{what}_channel": val or None, "problem": None, "problem_ts": None})
+        log_event("admin", f"Promoter server {g.name}: {'announcements' if what == 'ann' else 'gift codes'} → "
+                  f"{'#' + ch.name if ch else 'off'} (by {interaction.user.display_name})", interaction.user.id, interaction.user.display_name)
+        name = lambda cid: "#" + g.get_channel(cid).name if cid and g.get_channel(cid) else "–"  # noqa: E731
+        try:
+            await interaction.response.edit_message(view=PartnerSetupView(g, lg))
+        except discord.HTTPException:
+            await interaction.response.defer()
+        await interaction.followup.send(T("partner.saved", lg, ann=name(p["ann_channel"]), gift=name(p["gift_channel"])), ephemeral=False)
+        if what == "gift" and ch is not None:
+            asyncio.create_task(safe_task(partner_backfill_codes(g.id), "promoter codes"))
+        return
+    # test post
+    targets = {c for c in (p["ann_channel"], p["gift_channel"]) if c}
+    if not targets:
+        return await interaction.response.send_message(T("partner.ann", lg) + " / " + T("partner.gift", lg), ephemeral=True)
+    await interaction.response.defer()
+    done = []
+    for cid in targets:
+        ch = g.get_channel(cid)
+        try:
+            await ch.send(T("partner.test_text", None, bot=bot.user.display_name if bot.user else brand(), home=brand()),
+                          allowed_mentions=discord.AllowedMentions.none())
+            done.append("#" + ch.name)
+        except (discord.HTTPException, AttributeError):
+            await interaction.followup.send(T("partner.no_perm", lg, where="#" + (ch.name if ch else "?")))
+    if done:
+        await interaction.followup.send(T("partner.tested", lg, where=", ".join(done)))
+
+
+async def partner_problem(p, text: str):
+    """A post failed: remember why and tell the promoter once a day."""
+    now = int(time.time())
+    first = not p["problem_ts"] or now - p["problem_ts"] > 86400
+    store.save_partner(p["guild_id"], problem=text[:200], problem_ts=now if first else p["problem_ts"])
+    if first:
+        log_event("system", f"Promoter server {p['name']}: {text}", None, brand())
+        await send_partner_setup(p["guild_id"], problem=text)
+
+
+async def partner_send(kind: str, build, ref=None) -> int:
+    """Send to every active promoter server that wants this kind ('ann' or 'gift'). build(guild) -> dict for channel.send.
+    Returns how many servers got it."""
+    n = 0
+    for p in store.partners(active_only=True):
+        cid = p[f"{kind}_channel"]
+        if p["paused"] or not cid:
+            continue
+        g = bot.get_guild(p["guild_id"])
+        ch = g.get_channel(cid) if g else None
+        if ch is None:
+            await partner_problem(p, "the chosen channel no longer exists")
+            continue
+        try:
+            msg = await ch.send(**build(g), allowed_mentions=discord.AllowedMentions.none())
+            store.partner_post_add(g.id, ch.id, msg.id, kind, ref)
+            n += 1
+        except discord.Forbidden:
+            await partner_problem(p, f"no permission to post in #{ch.name}")
+        except discord.HTTPException as exc:
+            print(f"[promoter post] {p['guild_id']}: {exc!r}")
+    return n
+
+
+async def partner_codes(rows) -> int:
+    """New gift codes → promoter servers (the same text and 📋 Copy button, without our role ping)."""
+    if not rows:
+        return 0
+    ids = [r["id"] for r in rows]
+    parts = _chunks((T("gift.new_one") if len(rows) == 1 else T("gift.new_many", n=len(rows))) + "\n", [gift_block(r) for r in rows])
+    total = 0
+    for part in parts:
+        def build(g, part=part):
+            return {"content": part, "view": GiftCopyView()}
+        total += await partner_send("gift", build, ids)
+    return total
+
+
+async def partner_backfill_codes(guild_id: int):
+    """A promoter just picked a gift-codes channel: post the codes that are active right now, once."""
+    p = store.get_partner(guild_id)
+    if p is None or not p["gift_channel"] or db.execute("SELECT 1 FROM partner_posts WHERE guild_id=? AND kind='gift'", (guild_id,)).fetchone():
+        return
+    rows = store.active_gift_codes()
+    if not rows:
+        return
+    g = bot.get_guild(guild_id)
+    ch = g.get_channel(p["gift_channel"]) if g else None
+    if ch is None:
+        return
+    for part in _chunks(T("gift.new_many", n=len(rows)) + "\n" if len(rows) > 1 else T("gift.new_one") + "\n", [gift_block(r) for r in rows]):
+        try:
+            msg = await ch.send(content=part, view=GiftCopyView(), allowed_mentions=discord.AllowedMentions.none())
+            store.partner_post_add(guild_id, ch.id, msg.id, "gift", [r["id"] for r in rows])
+        except discord.HTTPException:
+            return
+
+
+async def partner_clean_codes(now: Optional[int] = None) -> int:
+    """Remove promoter gift-code posts whose codes have all expired."""
+    now = now or int(time.time())
+    active = {r["id"] for r in store.active_gift_codes(now)}
+    n = 0
+    for pp in store.partner_gift_posts():
+        ids = json.loads(pp["ref"] or "[]")
+        if not ids or any(i in active for i in ids):
+            continue
+        g = bot.get_guild(pp["guild_id"])
+        ch = g.get_channel(pp["channel_id"]) if g else None
+        try:
+            if ch is not None:
+                await ch.get_partial_message(pp["message_id"]).delete()
+        except discord.HTTPException:
+            pass
+        store.partner_post_drop(pp["id"])
+        n += 1
+    return n
+
+
+async def partner_claim(guild_id: int, promoter: str, user_id: int, user_name: str) -> bool:
+    """The add link came back from Discord: tie the server to the promoter and send the setup DM."""
+    _partner_claims[guild_id] = (promoter, user_id, user_name)
+    g = bot.get_guild(guild_id)
+    if g is None:                                         # on_guild_join hasn't arrived yet – it will finish the job
+        return True
+    return await partner_welcome(g)
+
+
+async def partner_welcome(g) -> bool:
+    claim = _partner_claims.pop(g.id, None)
+    old = store.get_partner(g.id)
+    if claim is None and (old is None or old["left_ts"]):
+        return False
+    promoter, uid, uname = claim if claim else (old["promoter"], old["added_by"], old["added_name"])
+    store.save_partner(g.id, name=g.name[:100], icon=str(g.icon.url) if g.icon else None, promoter=promoter, added_by=uid,
+                       added_name=uname, left_ts=None, problem=None, problem_ts=None)
+    log_event("admin", f"Promoter {promoter} added the bot to their server {g.name} ({g.member_count} members)", uid, uname)
+    if not await send_partner_setup(g.id, uid):
+        log_event("system", f"Promoter server {g.name}: couldn't DM {uname} – they have DMs from server members closed. "
+                  "Pick the channels on the dashboard instead.", None, brand())
+    return True
+
+
+async def partner_joined(g):
+    """on_guild_join for any server but ours. Unknown servers (no valid link) are left after a short wait."""
+    if await partner_welcome(g):
+        return
+    for _ in range(PARTNER_GRACE // 5):
+        await asyncio.sleep(5)
+        if g.id in _partner_claims:
+            await partner_welcome(g)
+            return
+    p = store.get_partner(g.id)
+    if p is not None and not p["left_ts"]:
+        return
+    log_event("system", f"Someone added the bot to {g.name} without a promoter link – left it again.", None, brand())
+    try:
+        owner = bot.get_user(g.owner_id) or await bot.fetch_user(g.owner_id)
+        await owner.send(T("partner.unknown", None, home=brand(), server=g.name))
+    except (discord.HTTPException, AttributeError):
+        pass
+    try:
+        await g.leave()
+    except discord.HTTPException:
+        pass
+
+
+async def partner_remove(guild_id: int, by: str) -> bool:
+    g = bot.get_guild(guild_id)
+    store.save_partner(guild_id, left_ts=int(time.time()))
+    log_event("admin", f"Promoter server {(store.get_partner(guild_id) or {'name': guild_id})['name']} removed by {by}", None, by)
+    if g is not None:
+        try:
+            await g.leave()
+        except discord.HTTPException:
+            return False
+    return True
+
+
+async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str = "Dashboard") -> dict:
+    """Change a promoter server from the dashboard. ann / gift: channel id, 0 = off, None = unchanged."""
+    g = bot.get_guild(guild_id)
+    p = store.get_partner(guild_id)
+    if p is None:
+        raise ValueError("Unknown server.")
+    upd = {}
+    for k, v in (("ann_channel", ann), ("gift_channel", gift)):
+        if v is None:
+            continue
+        if v and (g is None or g.get_channel(int(v)) is None):
+            raise ValueError("That channel isn't in their server.")
+        upd[k] = int(v) or None
+    if paused is not None:
+        upd["paused"] = 1 if paused else 0
+    if upd:
+        upd.update(problem=None, problem_ts=None)
+        store.save_partner(guild_id, **upd)
+        log_event("admin", f"Promoter server {p['name']} changed by {by}", None, by)
+        if upd.get("gift_channel"):
+            asyncio.create_task(safe_task(partner_backfill_codes(guild_id), "promoter codes"))
+    return partner_info(store.get_partner(guild_id))
+
+
+def partner_info(p) -> dict:
+    g = bot.get_guild(p["guild_id"])
+    ch = lambda cid: {"id": str(cid), "name": g.get_channel(cid).name} if cid and g and g.get_channel(cid) else None  # noqa: E731
+    return {"id": str(p["guild_id"]), "name": (g.name if g else p["name"]) or "?", "icon": (str(g.icon.url) if g and g.icon else p["icon"]) or "",
+            "members": g.member_count if g else None, "promoter": p["promoter"] or "", "added_by": p["added_name"] or "",
+            "added_by_id": str(p["added_by"]) if p["added_by"] else None, "added_ts": p["added_ts"],
+            "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "paused": bool(p["paused"]), "problem": p["problem"] or "",
+            "status": partner_status(p) if g or p["left_ts"] else "left", "last_post_ts": p["last_post_ts"], "posts": p["posts"],
+            "channels": [{"id": str(c.id), "name": c.name} for c in partner_channels(g)] if g else []}
+
+
+async def partner_test(guild_id: int) -> list:
+    p = store.get_partner(guild_id)
+    g = bot.get_guild(guild_id)
+    if p is None or g is None:
+        raise ValueError("The bot isn't in that server.")
+    done = []
+    for cid in {c for c in (p["ann_channel"], p["gift_channel"]) if c}:
+        ch = g.get_channel(cid)
+        if ch is None:
+            continue
+        try:
+            await ch.send(T("partner.test_text", None, bot=bot.user.display_name if bot.user else brand(), home=brand()),
+                          allowed_mentions=discord.AllowedMentions.none())
+            done.append("#" + ch.name)
+        except discord.HTTPException:
+            await partner_problem(p, f"no permission to post in #{ch.name}")
+            raise ValueError(f"I can't post in #{ch.name} – they need to give the bot access.")
+    if not done:
+        raise ValueError("No channels are picked yet.")
+    return done
+
+
 # --------------------------------------------------------------- the game's website: download + server status
 GAME_EVERY = 600                 # seconds between checks
 _STATE_WORDS = {"online": "online", "up": "online", "operational": "online", "running": "online", "ok": "online",
@@ -6060,6 +6417,10 @@ async def run_schedules(now=None):
     from datetime import datetime, timedelta
     now = now or datetime.now(store.tz())
     done = []
+    try:
+        await partner_clean_codes()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[promoter codes] {exc!r}")
     try:
         store.purge_msg_log(cfg("msglog_days"))
     except Exception as exc:  # noqa: BLE001
@@ -6335,6 +6696,10 @@ async def publish_patchnotes(title: Optional[str], actor_name: str, actor_id: Op
     title = (title or "").strip()[:100] or default_patch_title()
     msg = await ch.send(embeds=patchnotes_embeds(bugs, title))
     store.mark_patched([x["id"] for x in bugs], title, actor_name)
+    try:
+        await partner_send("ann", lambda g: {"embeds": patchnotes_embeds(bugs, title)})
+    except Exception as exc:  # noqa: BLE001
+        print(f"[promoter patch notes] {exc!r}")
     log_event("patch", f"Patch notes “{title}” published with {len(bugs)} fixed bug(s) by {actor_name}",
               actor_id, actor_name)
     push_soon("news", f"🩹 {title}"[:80], f"{len(bugs)} bug{'s' if len(bugs) != 1 else ''} fixed – see what changed.", "changelog.html")

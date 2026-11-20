@@ -262,6 +262,30 @@ db.executescript(
     );
     CREATE INDEX IF NOT EXISTS msg_log_author ON msg_log (author_id, ts);
     CREATE INDEX IF NOT EXISTS msg_log_changed ON msg_log (deleted_ts);
+    CREATE TABLE IF NOT EXISTS partners (      -- promoters' own Discord servers that get our announcements and gift codes
+        guild_id INTEGER PRIMARY KEY,
+        name TEXT, icon TEXT,
+        promoter TEXT,                             -- the name staff gave the promoter
+        added_by INTEGER, added_name TEXT,         -- who added the bot (gets the setup DM)
+        added_ts INTEGER NOT NULL,
+        ann_channel INTEGER, gift_channel INTEGER, -- where announcements / gift codes go
+        paused INTEGER NOT NULL DEFAULT 0,
+        problem TEXT, problem_ts INTEGER,          -- last thing that went wrong (missing permission, channel deleted …)
+        last_post_ts INTEGER, posts INTEGER NOT NULL DEFAULT 0,
+        left_ts INTEGER                            -- the bot was removed from the server
+    );
+    CREATE TABLE IF NOT EXISTS partner_invites ( -- personal "add the bot" links made on the dashboard
+        token_hash TEXT PRIMARY KEY,
+        promoter TEXT NOT NULL,
+        created_ts INTEGER NOT NULL, created_by TEXT,
+        expires_ts INTEGER NOT NULL,
+        used_guild INTEGER, used_ts INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS partner_posts (   -- what we posted in partner servers (so expired gift codes can be removed)
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, message_id INTEGER NOT NULL,
+        kind TEXT NOT NULL, ref TEXT, ts INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS giveaways (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         channel_id INTEGER NOT NULL, message_id INTEGER,
@@ -2121,6 +2145,79 @@ def previous_month() -> str:
     from datetime import datetime
     n = datetime.now(tz())
     return f"{n.year - (n.month == 1):04d}-{(n.month - 2) % 12 + 1:02d}"
+
+
+# ------------------------------------------------------------- partner (promoter) servers
+PARTNER_INVITE_DAYS = 7
+
+
+def partner_invite_new(promoter: str, by: str) -> str:
+    """A single-use link token for one promoter. Only its hash is kept."""
+    token = _secrets.token_urlsafe(18)
+    now = int(time.time())
+    db.execute("INSERT INTO partner_invites (token_hash, promoter, created_ts, created_by, expires_ts) VALUES (?,?,?,?,?)",
+               (_th(token), promoter.strip()[:60], now, (by or "")[:60], now + PARTNER_INVITE_DAYS * 86400))
+    db.commit()
+    return token
+
+
+def partner_invite(token: str):
+    """The unused, unexpired invite for this token, or None."""
+    if not token:
+        return None
+    return db.execute("SELECT * FROM partner_invites WHERE token_hash=? AND used_guild IS NULL AND expires_ts>?",
+                      (_th(token), int(time.time()))).fetchone()
+
+
+def partner_invites_open() -> list:
+    return db.execute("SELECT rowid AS id, * FROM partner_invites WHERE used_guild IS NULL AND expires_ts>? ORDER BY created_ts DESC",
+                      (int(time.time()),)).fetchall()
+
+
+def partner_invite_revoke(rowid: int) -> bool:
+    cur = db.execute("DELETE FROM partner_invites WHERE rowid=? AND used_guild IS NULL", (rowid,))
+    db.commit()
+    return cur.rowcount > 0
+
+
+def partner_invite_use(token: str, guild_id: int):
+    db.execute("UPDATE partner_invites SET used_guild=?, used_ts=? WHERE token_hash=?", (guild_id, int(time.time()), _th(token)))
+    db.commit()
+
+
+def get_partner(guild_id: int):
+    return db.execute("SELECT * FROM partners WHERE guild_id=?", (guild_id,)).fetchone()
+
+
+def partners(active_only: bool = False) -> list:
+    sql = "SELECT * FROM partners" + (" WHERE left_ts IS NULL" if active_only else "") + " ORDER BY added_ts DESC"
+    return db.execute(sql).fetchall()
+
+
+def save_partner(guild_id: int, **fields):
+    if get_partner(guild_id) is None:
+        db.execute("INSERT INTO partners (guild_id, added_ts) VALUES (?,?)", (guild_id, int(time.time())))
+    if fields:
+        cols = ", ".join(f"{k}=?" for k in fields)
+        db.execute(f"UPDATE partners SET {cols} WHERE guild_id=?", (*fields.values(), guild_id))
+    db.commit()
+    return get_partner(guild_id)
+
+
+def partner_post_add(guild_id: int, channel_id: int, message_id: int, kind: str, ref=None):
+    db.execute("INSERT INTO partner_posts (guild_id, channel_id, message_id, kind, ref, ts) VALUES (?,?,?,?,?,?)",
+               (guild_id, channel_id, message_id, kind, json.dumps(ref) if ref is not None else None, int(time.time())))
+    db.execute("UPDATE partners SET last_post_ts=?, posts=posts+1, problem=NULL, problem_ts=NULL WHERE guild_id=?", (int(time.time()), guild_id))
+    db.commit()
+
+
+def partner_gift_posts() -> list:
+    return db.execute("SELECT * FROM partner_posts WHERE kind='gift' ORDER BY id").fetchall()
+
+
+def partner_post_drop(pid: int):
+    db.execute("DELETE FROM partner_posts WHERE id=?", (pid,))
+    db.commit()
 
 
 # ------------------------------------------------------------- player card
