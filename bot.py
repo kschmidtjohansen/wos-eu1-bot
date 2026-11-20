@@ -5874,18 +5874,22 @@ def is_partner_guild(g) -> bool:
     return g is not None and g.id != GUILD_ID
 
 
-def partner_channels(g) -> list:
-    """Text and announcement channels in a partner server the bot can post in, most likely first (max 25)."""
-    me = g.me
-    out = []
-    for c in g.channels:
-        if getattr(c, "type", None) not in (discord.ChannelType.text, discord.ChannelType.news):
-            continue
-        p = c.permissions_for(me)
-        if p.view_channel and p.send_messages and p.embed_links:
-            out.append(c)
-    words = ("gift", "code", "kod", "announce", "news", "ogłosz", "info", "update", "wos", "whiteout")
-    out.sort(key=lambda c: (not any(w in c.name.lower() for w in words), c.position))
+def partner_can_post(c, g=None) -> bool:
+    p = c.permissions_for((g or c.guild).me)
+    return bool(p.view_channel and p.send_messages and p.embed_links)
+
+
+def partner_channels(g, postable: bool = False) -> list:
+    """Every text and announcement channel in a partner server, in Discord's own order (category, then position).
+    postable=True keeps only those the bot can post in already."""
+    out = [c for c in g.channels if getattr(c, "type", None) in (discord.ChannelType.text, discord.ChannelType.news)]
+    if postable:
+        out = [c for c in out if partner_can_post(c, g)]
+
+    def order(c):
+        cat = getattr(c, "category", None)
+        return (getattr(cat, "position", -1) if cat else -1, getattr(c, "position", 0))
+    out.sort(key=order)
     return out
 
 
@@ -5899,29 +5903,49 @@ def partner_status(p) -> str:
     return "ok" if (p["ann_channel"] or p["gift_channel"]) else "setup"
 
 
-class PartnerSetupView(discord.ui.View):
-    """Sent by DM to the promoter: two channel pickers and a test button. Persistent (custom ids carry the server id)."""
+PARTNER_PAGE = 23                    # channels per page in the DM (Discord allows 25 options: + "Don't post this" + current)
 
-    def __init__(self, g, lg=None):
+
+class PartnerSetupView(discord.ui.View):
+    """Sent by DM to the promoter: two channel pickers, a test button and ◀ ▶ when the server has more channels than
+    fit in one list. Persistent (custom ids carry the server id and the page)."""
+
+    def __init__(self, g, lg=None, page: int = 0):
         super().__init__(timeout=None)
         p = store.get_partner(g.id)
         chans = partner_channels(g)
+        pages = max(1, -(-len(chans) // PARTNER_PAGE))
+        page = min(max(0, page), pages - 1)
+        shown = chans[page * PARTNER_PAGE:(page + 1) * PARTNER_PAGE]
+        cant = T("partner.cant", lg)
         for kind, row in (("ann", 0), ("gift", 1)):
             cur = p[f"{kind}_channel"] if p else None
             opts = [discord.SelectOption(label=T("partner.none", lg)[:100], value="0", emoji="🚫", default=not cur)]
-            opts += [discord.SelectOption(label=("#" + c.name)[:100], value=str(c.id), default=cur == c.id,
-                                          description=(c.category.name[:100] if c.category else None)) for c in chans[:24]]
-            sel = discord.ui.Select(placeholder=T(f"partner.{kind}", lg)[:150], options=opts, row=row,
-                                    custom_id=f"pt:{kind}:{g.id}")
-            self.add_item(sel)
+            cur_ch = g.get_channel(cur) if cur else None
+            if cur_ch is not None and cur_ch not in shown:
+                opts.append(discord.SelectOption(label=("#" + cur_ch.name)[:100], value=str(cur_ch.id), default=True, emoji="✅"))
+            for c in shown:
+                cat = c.category.name if getattr(c, "category", None) else ""
+                desc = (cat + (" · " if cat else "") + cant) if not partner_can_post(c, g) else cat
+                opts.append(discord.SelectOption(label=("#" + c.name)[:100], value=str(c.id), default=cur == c.id,
+                                                 description=desc[:100] or None))
+            ph = T(f"partner.{kind}", lg) + (f" ({page + 1}/{pages})" if pages > 1 else "")
+            self.add_item(discord.ui.Select(placeholder=ph[:150], options=opts, row=row, custom_id=f"pt:{kind}:{g.id}:{page}"))
         self.add_item(discord.ui.Button(label=T("partner.test", lg)[:80], emoji="🧪", style=discord.ButtonStyle.secondary,
-                                        custom_id=f"pt:test:{g.id}", row=2))
+                                        custom_id=f"pt:test:{g.id}:{page}", row=2))
+        if pages > 1:
+            self.add_item(discord.ui.Button(emoji="◀", style=discord.ButtonStyle.secondary, disabled=page == 0,
+                                            custom_id=f"pt:page:{g.id}:{page - 1}", row=2))
+            self.add_item(discord.ui.Button(label=f"{page + 1} / {pages}", style=discord.ButtonStyle.secondary, disabled=True,
+                                            custom_id=f"pt:noop:{g.id}:{page}", row=2))
+            self.add_item(discord.ui.Button(emoji="▶", style=discord.ButtonStyle.secondary, disabled=page >= pages - 1,
+                                            custom_id=f"pt:page:{g.id}:{page + 1}", row=2))
 
 
 def partner_setup_text(g, lg=None) -> str:
     text = T("partner.hello", lg, bot=bot.user.display_name if bot.user else brand(), server=g.name)
-    if len(partner_channels(g)) > 24:
-        text += "\n" + T("partner.more", lg)
+    if len(partner_channels(g)) > PARTNER_PAGE:
+        text += "\n" + T("partner.pages", lg)
     return text
 
 
@@ -5949,7 +5973,9 @@ def _can_manage(user_id: int, g) -> bool:
 
 
 async def handle_partner_setup(interaction: discord.Interaction):
-    _, what, gid = interaction.data["custom_id"].split(":")
+    parts = interaction.data["custom_id"].split(":")
+    what, gid = parts[1], parts[2]
+    page = int(parts[3]) if len(parts) > 3 and parts[3].lstrip("-").isdigit() else 0
     g = bot.get_guild(int(gid))
     lg = ilang(interaction)
     p = store.get_partner(int(gid))
@@ -5957,6 +5983,10 @@ async def handle_partner_setup(interaction: discord.Interaction):
         return await interaction.response.send_message("I'm no longer in that server.", ephemeral=True)
     if not _can_manage(interaction.user.id, g):
         return await interaction.response.send_message(T("partner.only_admin", lg, server=g.name), ephemeral=True)
+    if what == "page":
+        return await interaction.response.edit_message(view=PartnerSetupView(g, lg, page))
+    if what == "noop":
+        return await interaction.response.defer()
     if what in ("ann", "gift"):
         val = int((interaction.data.get("values") or ["0"])[0])
         ch = g.get_channel(val) if val else None
@@ -5967,7 +5997,7 @@ async def handle_partner_setup(interaction: discord.Interaction):
                   f"{'#' + ch.name if ch else 'off'} (by {interaction.user.display_name})", interaction.user.id, interaction.user.display_name)
         name = lambda cid: "#" + g.get_channel(cid).name if cid and g.get_channel(cid) else "–"  # noqa: E731
         try:
-            await interaction.response.edit_message(view=PartnerSetupView(g, lg))
+            await interaction.response.edit_message(view=PartnerSetupView(g, lg, page))
         except discord.HTTPException:
             await interaction.response.defer()
         await interaction.followup.send(T("partner.saved", lg, ann=name(p["ann_channel"]), gift=name(p["gift_channel"])), ephemeral=False)
@@ -6173,7 +6203,8 @@ def partner_info(p) -> dict:
             "added_by_id": str(p["added_by"]) if p["added_by"] else None, "added_ts": p["added_ts"],
             "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "paused": bool(p["paused"]), "problem": p["problem"] or "",
             "status": partner_status(p) if g or p["left_ts"] else "left", "last_post_ts": p["last_post_ts"], "posts": p["posts"],
-            "channels": [{"id": str(c.id), "name": c.name} for c in partner_channels(g)] if g else []}
+            "channels": [{"id": str(c.id), "name": c.name, "ok": partner_can_post(c, g),
+                          "category": c.category.name if getattr(c, "category", None) else ""} for c in partner_channels(g)] if g else []}
 
 
 async def partner_test(guild_id: int) -> list:

@@ -2112,7 +2112,7 @@ const PT_BADGE = { ok: ['ok', 'Posting'], setup: ['warn', 'Needs channels'], pro
 function ptChannel(p, kind) {
   const cur = p[kind];
   return html`<select class="w-select" data-pt="${kind}" data-id="${p.id}" aria-label="${kind === 'ann' ? 'Announcements' : 'Gift codes'} channel in ${p.name}" style="width:auto;max-width:220px">
-    <option value="0" ${cur ? '' : 'selected'}>Off</option>${p.channels.map(c => html`<option value="${c.id}" ${cur && cur.id === c.id ? 'selected' : ''}>#${c.name}</option>`)}
+    <option value="0" ${cur ? '' : 'selected'}>Off</option>${p.channels.map(c => html`<option value="${c.id}" ${cur && cur.id === c.id ? 'selected' : ''}>#${c.name}${c.category ? ' · ' + c.category : ''}${c.ok === false ? ' (bot can’t post yet)' : ''}</option>`)}
     ${cur && !p.channels.some(c => c.id === cur.id) ? html`<option value="${cur.id}" selected>#${cur.name} (no access)</option>` : ''}</select>`;
 }
 function viewPartners() {
