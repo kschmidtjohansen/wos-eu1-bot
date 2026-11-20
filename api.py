@@ -1981,7 +1981,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         num = lambda v: int(v) if str(v or "").isdigit() else None  # noqa: E731
         try:
             r = await hooks["post_announcement"](clean(d.get("title"), 200), str(d.get("text") or ""), num(d.get("channel_id")),
-                                                 num(d.get("role_id")), bool(d.get("partners", True)), who(request), who_id(request),
+                                                 (str(d.get("role_id")) if str(d.get("role_id") or "") in ("everyone", "here") else num(d.get("role_id"))), bool(d.get("partners", True)), who(request), who_id(request),
                                                  clean(d.get("image"), 500) or None)
         except ValueError as exc:
             raise ApiError(400, str(exc))

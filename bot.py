@@ -4480,7 +4480,9 @@ async def post_announcement(title: str, text: str, channel_id: Optional[int], ro
     ch = g.get_channel(int(channel_id)) if channel_id and g else (chan("announce_channel_id") or chan("patchnotes_channel_id"))
     if ch is None:
         raise ValueError("Choose the channel to post in.")
-    role = g.get_role(int(role_id)) if role_id and g else None
+    tag = str(role_id or "").strip().lstrip("@")
+    role = g.get_role(int(tag)) if tag.isdigit() and g else None
+    ping = "@everyone" if tag == "everyone" else "@here" if tag == "here" else role.mention if role else None
 
     def embed():
         e = discord.Embed(title=title or None, description=text, color=0x7DE3F4)
@@ -4488,13 +4490,13 @@ async def post_announcement(title: str, text: str, channel_id: Optional[int], ro
             e.set_image(url=image_url)
         e.set_footer(text=brand())
         return e
-    msg = await ch.send(content=role.mention if role else None, embed=embed(),
-                        allowed_mentions=discord.AllowedMentions(roles=[role] if role else [], everyone=False, users=False))
+    msg = await ch.send(content=ping, embed=embed(),
+                        allowed_mentions=discord.AllowedMentions(roles=[role] if role else [], everyone=tag in ("everyone", "here"), users=False))
     n = 0
     if partners:
         n = await partner_send("ann", lambda gg: {"embed": embed()})
     store.put_raw("announce_channel_last", str(ch.id))
-    log_event("admin", f"Announcement “{title or text[:40]}” posted in #{ch.name}" + (f" and {n} promoter server{'s' if n != 1 else ''}" if n else "")
+    log_event("admin", f"Announcement “{title or text[:40]}” posted in #{ch.name}" + (f" tagging {ping}" if ping else "") + (f" and {n} promoter server{'s' if n != 1 else ''}" if n else "")
               + f" by {by_name}", by_id, by_name)
     push_soon("news", ("📢 " + (title or brand()))[:80], text[:140], "index.html")
     return {"url": msg.jump_url, "channel": ch.name, "partners": n}
