@@ -185,7 +185,7 @@ if [[ "$WEB" == nginx ]]; then
     echo "location = /bugs  { return 301 /bugs/; }"
     echo "# wos-front: the players' website at the server's own address (/bugs/ keeps working for old links)"
     echo "location = / { root $WWW/bugs; try_files /index.html =404; add_header Cache-Control \"no-cache\"; }"
-    echo "location ~ ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev)\\.html|sw\\.js|app\\.js|config\\.js|style\\.css|manifest\\.json|(?:icons|fonts)/[\\w.-]+)\$ { alias $WWW/bugs/\$1; }"
+    echo "location ~ ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev|terms|privacy)\\.html|sw\\.js|app\\.js|config\\.js|style\\.css|manifest\\.json|(?:icons|fonts)/[\\w.-]+)\$ { alias $WWW/bugs/\$1; }"
     echo "location ^~ /bugs/ { alias $WWW/bugs/; index index.html; }"
     echo "location = /staff { return 301 /staff/; }"
     if ((STAFF_AUTH)); then
@@ -232,7 +232,7 @@ elif [[ "$WEB" == apache ]]; then
     echo "<Location /public/>"; echo "  LimitRequestBody 27262976"; echo "</Location>"
     echo "RedirectMatch 301 ^/(bugs|staff)\$ /\$1/"
     echo "AliasMatch ^/\$ $WWW/bugs/index.html"
-    echo "AliasMatch ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev)\\.html|sw\\.js|app\\.js|config\\.js|style\\.css|manifest\\.json|(?:icons|fonts)/[\\w.-]+)\$ $WWW/bugs/\$1"
+    echo "AliasMatch ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev|terms|privacy)\\.html|sw\\.js|app\\.js|config\\.js|style\\.css|manifest\\.json|(?:icons|fonts)/[\\w.-]+)\$ $WWW/bugs/\$1"
     echo "Alias /bugs/ $WWW/bugs/"
     echo "Alias /staff/ $WWW/staff/"
     echo "<Directory $WWW>"; echo "  Require all granted"; echo "  DirectoryIndex index.html"; echo "</Directory>"

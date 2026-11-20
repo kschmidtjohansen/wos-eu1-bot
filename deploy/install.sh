@@ -184,13 +184,23 @@ if [[ -f $NGX ]] && ! grep -q 'wos-front' $NGX; then
     {
       echo "# wos-front: the players' website at the server's own address (/bugs/ keeps working for old links)"
       echo "location = / { root $BUGSDIR; try_files /index.html =404; add_header Cache-Control \"no-cache\"; }"
-      echo 'location ~ ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev)\.html|sw\.js|app\.js|config\.js|style\.css|manifest\.json|(?:icons|fonts)/[\w.-]+)$ { alias '"$BUGSDIR"'/$1; }'
+      echo 'location ~ ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev|terms|privacy)\.html|sw\.js|app\.js|config\.js|style\.css|manifest\.json|(?:icons|fonts)/[\w.-]+)$ { alias '"$BUGSDIR"'/$1; }'
     } >> $NGX
     if nginx -t >/dev/null 2>&1; then systemctl reload nginx; ok "The website now opens on the server's own address (http://<server>/)"
     else cp -p /tmp/wos-bot.conf.bak $NGX; systemctl reload nginx 2>/dev/null || true
       warn "Couldn't put the website on the server's own address – the site already has its own front page. Left as it was (the website is still on /bugs/)"; fi
   fi
 fi
+# Pages added later (Terms of Service, Privacy Policy) on servers that already have the front-page rule.
+for f in /etc/nginx/snippets/wos-bot.conf /etc/apache2/conf-available/wos-bot.conf; do
+  [[ -f $f ]] && grep -q 'appeal|dev)' "$f" || continue
+  cp -p "$f" "$f.bak"; sed -i 's/appeal|dev)/appeal|dev|terms|privacy)/g' "$f"
+  if [[ $f == *nginx* ]]; then
+    if nginx -t >/dev/null 2>&1; then systemctl reload nginx; ok "Terms of Service and Privacy Policy pages are online"; else cp -p "$f.bak" "$f"; systemctl reload nginx 2>/dev/null || true; fi
+  else
+    if apache2ctl configtest >/dev/null 2>&1; then systemctl reload apache2; ok "Terms of Service and Privacy Policy pages are online"; else cp -p "$f.bak" "$f"; fi
+  fi
+done
 APC=/etc/apache2/conf-available/wos-bot.conf
 if [[ -f $APC ]] && ! grep -q 'AliasMatch' $APC; then
   BUGSDIR="$(grep -oE '^Alias /bugs/ [^ ]+' $APC | awk '{print $3}')"; BUGSDIR="${BUGSDIR%/}"
@@ -198,7 +208,7 @@ if [[ -f $APC ]] && ! grep -q 'AliasMatch' $APC; then
     cp -p $APC /tmp/wos-bot-apache.bak
     {
       echo "AliasMatch ^/$ $BUGSDIR/index.html"
-      echo 'AliasMatch ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev)\.html|sw\.js|app\.js|config\.js|style\.css|manifest\.json|(?:icons|fonts)/[\w.-]+)$ '"$BUGSDIR"'/$1'
+      echo 'AliasMatch ^/((?:index|codes|known-issues|report|changelog|status|my|appeal|dev|terms|privacy)\.html|sw\.js|app\.js|config\.js|style\.css|manifest\.json|(?:icons|fonts)/[\w.-]+)$ '"$BUGSDIR"'/$1'
     } >> $APC
     if apache2ctl configtest >/dev/null 2>&1; then systemctl reload apache2; else cp -p /tmp/wos-bot-apache.bak $APC; fi
   fi

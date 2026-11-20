@@ -5,7 +5,7 @@
     en: { nav_home: 'Home', nav_report: 'Report a bug', nav_known: 'Known issues', nav_fixed: "What's fixed", nav_codes: 'Gift codes', nav_my: 'My reports', tab_my: 'Mine', langLabel: 'Language', nav_status: 'Status', tab_status: 'Status', getGame: 'Get the game', getGameS: 'Game',
       st_online: 'Online', st_offline: 'Offline', st_maintenance: 'Maintenance', st_degraded: 'Having problems', st_unknown: 'Unknown',
       tab_home: 'Home', tab_codes: 'Codes', tab_known: 'Issues', tab_report: 'Report', tab_fixed: 'Fixed',
-      newBadge: 'NEW', discord: 'Join our Discord', status: 'Server status', skip: 'Skip to content', rights: 'Made for the players of',
+      newBadge: 'NEW', discord: 'Join our Discord', status: 'Server status', skip: 'Skip to content', rights: 'Made for the players of', terms: 'Terms', privacy: 'Privacy',
       netErr: 'Could not reach the server. Please try again later.', install: 'Install app', copy: 'Copy', copied: 'Copied',
       left: 'Expires in', never: 'Never expires', d: 'd', h: 'h', m: 'min',
       iosHint: 'On iPhone: tap the Share button, then “Add to Home Screen”.', offline: 'You are offline – showing what was saved last time.',
@@ -15,7 +15,7 @@
     pl: { nav_home: 'Start', nav_report: 'Zgłoś błąd', nav_known: 'Znane problemy', nav_fixed: 'Co naprawiono', nav_codes: 'Kody', nav_my: 'Moje zgłoszenia', tab_my: 'Moje', langLabel: 'Język', nav_status: 'Status', tab_status: 'Status', getGame: 'Pobierz grę', getGameS: 'Gra',
       st_online: 'Online', st_offline: 'Offline', st_maintenance: 'Przerwa techniczna', st_degraded: 'Problemy', st_unknown: 'Nieznany',
       tab_home: 'Start', tab_codes: 'Kody', tab_known: 'Problemy', tab_report: 'Zgłoś', tab_fixed: 'Poprawki',
-      newBadge: 'NOWE', discord: 'Dołącz do Discorda', status: 'Status serwera', skip: 'Przejdź do treści', rights: 'Stworzone dla graczy',
+      newBadge: 'NOWE', discord: 'Dołącz do Discorda', status: 'Status serwera', skip: 'Przejdź do treści', rights: 'Stworzone dla graczy', terms: 'Regulamin', privacy: 'Prywatność',
       netErr: 'Nie można połączyć się z serwerem. Spróbuj później.', install: 'Zainstaluj aplikację', copy: 'Kopiuj', copied: 'Skopiowano',
       left: 'Wygasa za', never: 'Nie wygasa', d: 'd', h: 'godz.', m: 'min',
       iosHint: 'Na iPhonie: stuknij Udostępnij, a potem „Do ekranu początkowego”.', offline: 'Jesteś offline – pokazujemy ostatnio zapisane dane.',
@@ -186,7 +186,7 @@
       W.el('a', { class: 'tab', href: f, 'data-k': k, id: 'tab-' + k, ...cur(f) }, W.icon(k), W.el('span', { 'data-i': 'tab_' + k }))));
     document.body.prepend(W.el('a', { class: 'skip', href: '#main', 'data-i': 'skip' }), hdr);
     const ftr = W.el('footer', {}, W.el('div', { class: 'ftr' }, W.el('span', {}, W.t('rights') + ' ' + (C.SERVER_NAME || '')),
-      W.el('nav', {}, W.el('a', { href: 'status.html', 'data-i': 'status' }), ...(C.DISCORD_URL ? [W.el('a', { href: C.DISCORD_URL, rel: 'noopener', 'data-i': 'discord' })] : []))));
+      W.el('nav', {}, W.el('a', { href: 'status.html', 'data-i': 'status' }), W.el('a', { href: 'terms.html', 'data-i': 'terms' }), W.el('a', { href: 'privacy.html', 'data-i': 'privacy' }), ...(C.DISCORD_URL ? [W.el('a', { href: C.DISCORD_URL, rel: 'noopener', 'data-i': 'discord' })] : []))));
     hdr.append(tabs);                 // on phones the tabs sit in the header at the top (the browser's bar covers the bottom)
     document.body.append(ftr);
     document.getElementById('lang-sel').onchange = e => W.setLang(e.target.value, true);

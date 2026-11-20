@@ -1,7 +1,7 @@
 /* WOS EU1 app: works offline with what was loaded last time, and always tries the network first
    so players see new codes and fixes straight away. Bump VERSION when the file list changes. */
-const VERSION = 'wos-eu1-v5';
-const SHELL = ['index.html', 'codes.html', 'known-issues.html', 'report.html', 'changelog.html', 'my.html', 'status.html', 'style.css', 'app.js', 'config.js',
+const VERSION = 'wos-eu1-v6';
+const SHELL = ['index.html', 'codes.html', 'known-issues.html', 'report.html', 'changelog.html', 'my.html', 'status.html', 'terms.html', 'privacy.html', 'style.css', 'app.js', 'config.js',
   'manifest.json', 'fonts/unbounded.woff2', 'fonts/figtree.woff2', 'fonts/figtree-ext.woff2', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
