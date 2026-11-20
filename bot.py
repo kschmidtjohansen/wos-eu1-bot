@@ -147,13 +147,25 @@ def has_role(user, role_id: int) -> bool:
     return isinstance(user, discord.Member) and any(x.id == role_id for x in user.roles)
 
 
+def _in_home(user) -> bool:
+    """A member of our own server (not a promoter's server, not a DM)."""
+    gid = getattr(getattr(user, "guild", None), "id", None)
+    return isinstance(user, discord.Member) and not (isinstance(gid, int) and gid != GUILD_ID)
+
+
 def is_mod(user) -> bool:
-    return has_role(user, MOD_ROLE_ID) or has_role(user, ADMIN_ROLE_ID)
+    if not _in_home(user):
+        return False
+    return has_role(user, MOD_ROLE_ID) or is_admin(user)
 
 
 def is_admin(user) -> bool:
-    return has_role(user, ADMIN_ROLE_ID) or (
-        isinstance(user, discord.Member) and user.guild_permissions.administrator)
+    """Only the admin role in our own server (and its owner) – Discord's “Administrator” permission alone isn't enough,
+    and nobody in a promoter's server ever counts as staff."""
+    if not _in_home(user):
+        return False
+    owner = getattr(getattr(user, "guild", None), "owner_id", None)
+    return has_role(user, ADMIN_ROLE_ID) or (isinstance(owner, int) and user.id == owner)
 
 
 async def dm(user_id: int, text: str, embed: Optional[discord.Embed] = None, file: Optional[discord.File] = None):

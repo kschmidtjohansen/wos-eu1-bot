@@ -172,8 +172,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 return None
         ids = {r.id for r in getattr(m, "roles", [])}
         rm = role_matches(g)
-        if m.guild_permissions.administrator or roles.get("Admin role") in ids or any(r.id in ids for r in rm["admin"]):
-            return "admin"
+        if m.id == g.owner_id or roles.get("Admin role") in ids or any(r.id in ids for r in rm["admin"]):
+            return "admin"                      # Discord's “Administrator” permission alone doesn't open the dashboard
         if roles.get("Moderator role") in ids or any(r.id in ids for r in rm["mod"]):
             return "mod"
         return None
@@ -1863,6 +1863,89 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if d.get("dismiss"):
             hooks["spike_dismiss"](str(d["dismiss"]))
         return web.json_response({"spikes": hooks["active_spikes"]()})
+
+    # ------------------------------------------------ who can see bugs and suggestions in Discord
+    STAFF_CHANNELS = {"mod_channel_id": "Mod channel", "admin_channel_id": "Admin channel", "suggestions_channel_id": "Suggestions channel",
+                      "alerts_channel_id": "Staff alerts channel", "devlist_channel_id": "Developers' list channel",
+                      "digest_channel_id": "Weekly digest channel", "backup_channel_id": "Backup channel", "log_channel_id": "Bot log channel"}
+
+    def staff_role_ids(g) -> set:
+        rm = role_matches(g)
+        return {r.id for r in rm["admin"] + rm["mod"]} | {x for x in (roles.get("Admin role"), roles.get("Moderator role")) if x}
+
+    def access_audit() -> dict:
+        """Every channel with bugs or suggestions in it, and who outside the staff roles can still read it."""
+        g = get_guild()
+        staff = staff_role_ids(g)
+        out = []
+        checks = [(k, v, "view") for k, v in STAFF_CHANNELS.items()] + [("report_channel_id", "Bug report channel – private tickets", "threads")]
+        for key, label, what in checks:
+            cid = store.cfg(key)
+            ch = g.get_channel(int(cid)) if cid else None
+            if ch is None:
+                continue
+            leaks, admins = [], []
+            for r in g.roles:
+                if r.id in staff or r.managed:
+                    continue
+                pr = ch.permissions_for(r)
+                sees = pr.view_channel if what == "view" else (pr.view_channel and pr.manage_threads)
+                if not sees:
+                    continue
+                n = sum(1 for m in r.members if not m.bot and not staff.intersection(x.id for x in m.roles)) if not r.is_default() else None
+                (admins if r.permissions.administrator else leaks).append({"id": str(r.id), "name": r.name, "everyone": r.is_default(), "people": n})
+            people = [{"id": str(t.id), "name": t.display_name} for t, ow in ch.overwrites.items()
+                      if isinstance(t, discord.Member) and not t.bot and ow.view_channel and not staff.intersection(x.id for x in t.roles)]
+            out.append({"key": key, "label": label, "channel": ch.name, "kind": what, "roles": leaks, "admins": admins, "people": people,
+                        "ok": not leaks and not people})
+        return {"channels": out, "staff_roles": [r.name for r in g.roles if r.id in staff],
+                "can_fix": bool(g.me.guild_permissions.manage_roles and g.me.guild_permissions.manage_channels),
+                "partner_note": "Promoter servers only ever get announcements and gift codes."}
+
+    @routes.get("/api/staff-audit")
+    async def access_audit_get(request):
+        return web.json_response(access_audit())
+
+    @routes.post("/api/staff-audit/fix")
+    async def access_audit_fix(request):
+        """Close the channels to everyone except the staff roles (and the bot). Roles with “Administrator” can't be kept out by Discord."""
+        g = get_guild()
+        staff = staff_role_ids(g)
+        done, failed = [], []
+        for c in access_audit()["channels"]:
+            if c["ok"]:
+                continue
+            ch = g.get_channel(int(store.cfg(c["key"])))
+            try:
+                if c["kind"] == "view":
+                    await ch.set_permissions(g.default_role, view_channel=False, reason="Bug data is for staff only")
+                    for rid in staff:
+                        r = g.get_role(rid)
+                        if r is not None:
+                            await ch.set_permissions(r, view_channel=True, send_messages=True, read_message_history=True, reason="Staff channel")
+                    await ch.set_permissions(g.me, view_channel=True, send_messages=True, embed_links=True, attach_files=True,
+                                             read_message_history=True, manage_messages=True, reason="The bot posts here")
+                    for x in c["roles"]:
+                        r = g.get_role(int(x["id"]))
+                        if r is not None and not r.is_default():
+                            await ch.set_permissions(r, view_channel=False, reason="Bug data is for staff only")
+                    for x in c["people"]:
+                        mm = g.get_member(int(x["id"]))
+                        if mm is not None:
+                            await ch.set_permissions(mm, overwrite=None, reason="Bug data is for staff only")
+                else:                                           # bug tickets: only staff may open other people's private threads
+                    for x in c["roles"]:
+                        r = g.get_role(int(x["id"]))
+                        if r is not None:
+                            ow = ch.overwrites_for(r)
+                            ow.manage_threads = False
+                            await ch.set_permissions(r, overwrite=ow, reason="Bug tickets are for staff only")
+                done.append(c["label"])
+            except discord.HTTPException as exc:
+                failed.append(f"{c['label']}: {getattr(exc, 'text', '') or exc}")
+        store.log_event("settings", f"{who(request)} closed the staff channels to everyone but staff ({', '.join(done) or 'nothing to change'})",
+                        who_id(request), who(request))
+        return web.json_response(dict(access_audit(), done=done, failed=failed))
 
     # ------------------------------------------------ promoter servers (admins)
     PARTNER_PERMS = 379904

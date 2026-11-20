@@ -1133,9 +1133,24 @@ function badgeFor(k) {
   if (c && c.missing.length) return html`<span class="w-badge warn">Bot is missing: ${c.missing.join(', ')}</span>`;
   return html`<span class="w-badge ok">${icon('check')} Bot has access</span>`;
 }
+// Who outside the staff roles can read the channels with bugs and suggestions in them.
+function accessCard() {
+  const A = S.audit; if (!A) return '';
+  const bad = A.channels.filter(c => !c.ok), adm = A.channels.flatMap(c => c.admins.map(r => r.name)).filter((v, i, a) => a.indexOf(v) === i);
+  const who = c => c.roles.map(r => r.everyone ? 'everyone' : r.name + (r.people ? ' (' + r.people + ' ' + (r.people === 1 ? 'person' : 'people') + ')' : '')).concat(c.people.map(x => x.name));
+  return html`<section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Who can see bugs and suggestions</h3>
+      <span class="w-badge ${bad.length ? 'bad' : 'ok'}">${bad.length ? bad.length + ' channel' + (bad.length === 1 ? '' : 's') + ' open to others' : 'Staff only'}</span></div>
+    <p class="w-hint" style="margin:0 0 10px">Only ${A.staff_roles.length ? A.staff_roles.join(', ') : 'the moderator and admin roles'} should read these. The dashboard already only lets those roles in; this checks the Discord channels. ${A.partner_note}</p>
+    ${A.channels.map(c => html`<div class="w-check"><div class="w-check-ic ${c.ok ? 'ok' : 'bad'}">${icon(c.ok ? 'check' : 'alert')}</div>
+      <div><div class="w-check-label">${c.label} · #${c.channel}</div><div class="w-check-detail">${c.ok ? 'Staff only' : (c.kind === 'threads' ? 'Can open private bug tickets: ' : 'Also visible to: ') + who(c).join(', ')}</div></div></div>`)}
+    ${adm.length ? html`<p class="w-hint" style="margin:10px 0 0">⚠️ ${adm.join(', ')} ${adm.length === 1 ? 'has' : 'have'} Discord’s “Administrator” permission, so Discord shows them every channel no matter what. Remove that permission from roles that aren’t staff.</p>` : ''}
+    ${bad.length ? html`<div class="w-actions" style="margin-top:12px"><button class="w-btn primary" data-act="auditFix" ${A.can_fix ? '' : 'disabled'}>Close these channels to everyone but staff</button>
+      ${A.can_fix ? '' : html`<span class="w-hint">The bot needs “Manage Roles” and “Manage Channels” to do it.</span>`}</div>` : ''}</section>`;
+}
 function viewChannels() {
   return html`
     <div class="w-pagehead"><h2>Channels</h2><p>Choose where the bot reads and posts. Changes apply as soon as you save.</p></div>
+    ${accessCard()}
     <section class="w-card w-pad">
       ${CHANNELS.map(([k, label, desc]) => html`<div class="w-row chan">
         <div><div class="w-row-label">${label}</div><div class="w-row-desc">${desc}</div></div>
@@ -2828,6 +2843,7 @@ const LOADERS = {
   suggestions: () => loadSugs(true),
   data: async () => { S.data = await call('GET', '/api/data'); },
   msglog: async () => { const k = (S.msglog && S.msglog.kind) || 'deleted', q = (S.msglog && S.msglog.q) || ''; S.msglog = Object.assign(await call('GET', '/api/msglog?kind=' + k + '&q=' + encodeURIComponent(q)), { q }); },
+  channels: async () => { S.audit = await call('GET', '/api/staff-audit').catch(() => null); },
   partners: async () => { S.partners = Object.assign(S.partners || {}, await call('GET', '/api/partners')); },
   queue: async () => { const st = S.queueDone ? 'done' : 'open'; const [r, a] = await Promise.all([call('GET', '/api/reports?status=' + st), call('GET', '/api/appeals?status=' + st)]); S.reports = r; S.appeals = a; },
   panel: async () => { if (isMod()) { S.langs = null; return; } const [l, d] = await Promise.all([call('GET', '/api/bugs/languages').catch(() => null), call('GET', '/api/devpage').catch(() => null)]); S.langs = l; S.devpage = d; },
@@ -3661,6 +3677,9 @@ root.addEventListener('click', async e => {
     else if (act === 'msglogSearch') { S.msglog.q = $('#ml-q').value.trim(); loadTab('msglog'); }
     else if (act === 'gameCheck') { busy(el, true, 'Checking…');
       try { const r = await call('POST', '/api/game/check'); if (S.status) S.status.game = r.game; toast(r.game && r.game.game ? 'Game server: ' + r.game.game : 'Checked.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'auditFix') { busy(el, true, 'Closing…');
+      try { const r = await call('POST', '/api/staff-audit/fix'); S.audit = r; toast(r.failed.length ? 'Some channels failed: ' + r.failed.join('; ') : 'Done – only staff can read them now.', r.failed.length ? 'err' : undefined); renderMain(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'ptInvite') { const n = $('#pt-name').value.trim(); if (n.length < 2) { $('#pt-name').focus(); return toast('Write the promoter’s name first.', 'err'); } busy(el, true, '…');
       try { const r = await call('POST', '/api/partners/invite', { promoter: n }); S.ptLink = r.url; S.partners = r; renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'ptCopy') { const i = $('#pt-link'); try { await navigator.clipboard.writeText(i.value); toast('Link copied – send it to the promoter.'); } catch (e) { i.select(); toast('Press Ctrl+C to copy.'); } }
@@ -4160,6 +4179,14 @@ function makeMock() {
     if (p === '/api/replies') { replies.push({ id: nextReply++, title: body.title, text: body.text }); return { id: nextReply - 1 }; }
     m = p.match(/^\/api\/replies\/(\d+)$/);
     if (m) { const i = replies.findIndex(r => r.id === +m[1]); if (method === 'DELETE') { if (i >= 0) replies.splice(i, 1); } else if (i >= 0) Object.assign(replies[i], { title: body.title, text: body.text }); return { ok: true }; }
+    if (p.startsWith('/api/staff-audit')) {
+      const fixed = p.endsWith('/fix') || window.__auditFixed; window.__auditFixed = fixed;
+      const ch = (key, label, channel, extra) => ({ key, label, channel, kind: key === 'report_channel_id' ? 'threads' : 'view', roles: fixed ? [] : extra, admins: [], people: [], ok: fixed || !extra.length });
+      return { staff_roles: ['Admin', 'Boss', 'Developer', 'Senior Moderator', 'Moderator'], can_fix: true, partner_note: 'Promoter servers only ever get announcements and gift codes.', done: [], failed: [],
+        channels: [ch('mod_channel_id', 'Mod channel', 'mod-bugs', []), ch('admin_channel_id', 'Admin channel', 'admin-bugs', []),
+          ch('suggestions_channel_id', 'Suggestions channel', 'suggestions', [{ id: '1', name: '@everyone', everyone: true, people: null }]),
+          ch('log_channel_id', 'Bot log channel', 'bot-log', [{ id: '2', name: 'Event Helper', everyone: false, people: 4 }]),
+          ch('report_channel_id', 'Bug report channel – private tickets', 'report-a-bug', [])] }; }
     if (p.startsWith('/api/partners')) {
       const M = (window.__mockPt = window.__mockPt || { ready: true, days: 7, left: [], invites: [{ id: 1, promoter: 'Iron Wolves', created_ts: now - 7200, created_by: 'Kasper', expires_ts: now + 6 * 86400 }],
         items: [{ id: '900000000000000001', name: 'Nordic Alliance', icon: '', members: 1840, promoter: 'Nordic Alliance', added_by: 'Freya', added_by_id: '1', added_ts: now - 5 * 86400,
