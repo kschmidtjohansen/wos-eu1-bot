@@ -107,17 +107,16 @@ h1{font-size:clamp(26px,4vw,38px);margin-bottom:8px}
     const ed = editing && editing.id === b.id ? editing.kind : null;
     const work = el('button', { class: 'btn', type: 'button', 'aria-pressed': String(st === 'working') }, 'Working on it');
     work.onclick = () => answer(b, st === 'working' ? '' : 'working');
-    const fix = el('button', { class: 'btn', type: 'button', 'aria-expanded': String(ed === 'fixed') }, 'Fixed in version…');
+    const fix = el('button', { class: 'btn', type: 'button', 'aria-expanded': String(ed === 'fixed') }, 'Fixed');
     fix.onclick = () => { editing = ed === 'fixed' ? null : { id: b.id, kind: 'fixed' }; draw(); };
     const ask = el('button', { class: 'btn', type: 'button', 'aria-pressed': String(st === 'need_info'), 'aria-expanded': String(ed === 'need_info') }, 'Need more info');
     ask.onclick = () => { editing = ed === 'need_info' ? null : { id: b.id, kind: 'need_info' }; draw(); };
     ans.append(work, fix, ask);
     if (ed === 'fixed') {
-      const v = el('input', { id: 'ver-' + b.id, placeholder: 'e.g. 1.4.2', maxlength: '30', value: data.version || '', 'aria-label': 'Version with the fix' });
-      const ok = el('button', { class: 'btn pri', type: 'submit' }, 'Mark as fixed');
-      const f = el('form', { class: 'ask ver' }, v, ok, el('span', { class: 'muted', style: 'font-size:13.5px' }, 'The bug is closed as fixed and the player gets a message.'));
-      f.onsubmit = e => { e.preventDefault(); ok.disabled = true; answer(b, 'fixed', { version: v.value.trim() }); };
-      ans.append(f); setTimeout(() => v.focus(), 0);
+      const ok = el('button', { class: 'btn pri', type: 'submit' }, 'Yes, it’s fixed');
+      const f = el('form', { class: 'ask ver' }, ok, el('span', { class: 'muted', style: 'font-size:13.5px' }, 'The bug is closed as fixed and the player gets a message.'));
+      f.onsubmit = e => { e.preventDefault(); ok.disabled = true; answer(b, 'fixed'); };
+      ans.append(f); setTimeout(() => ok.focus(), 0);
     }
     if (ed === 'need_info') {
       const ta = el('textarea', { maxlength: '600', placeholder: 'What do you need to know? The server team gets this and asks the player.', 'aria-label': 'Your question' }); ta.value = st === 'need_info' ? b.dev.note : '';
