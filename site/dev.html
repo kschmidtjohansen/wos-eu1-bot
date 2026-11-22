@@ -28,6 +28,8 @@ h1{font-size:clamp(26px,4vw,38px);margin-bottom:8px}
 .ans .btn{padding:9px 14px;border-radius:12px;font-size:14.5px}
 .ans .btn[aria-pressed=true]{border-color:var(--ice);background:var(--ice-soft);color:var(--ice)}
 .ans .said{flex:1 1 100%;font-size:14px;color:var(--muted)}
+.said small{font-size:13px}
+.said.reply{padding:10px 12px;border-radius:12px;background:rgba(46,204,113,.08);border:1px solid rgba(46,204,113,.28);color:var(--text)}
 .ans .said b{color:var(--text)}
 .ask{flex:1 1 100%;display:grid;gap:8px;grid-template-columns:1fr auto;align-items:start}
 .ask textarea{min-height:64px}
@@ -90,7 +92,7 @@ h1{font-size:clamp(26px,4vw,38px);margin-bottom:8px}
   function alertBox(text) { const m = $('err') || el('div', { class: 'msg err', id: 'err', role: 'alert' }); m.textContent = text; $('list').prepend(m); m.scrollIntoView({ block: 'center' }); }
   function card(b, done) {
     const st = b.dev.state, kids = [];
-    kids.push(el('div', { class: 'bug-h' }, el('span', { class: 'n' }, '#' + b.id), el('h2', {}, b.title), ...(st ? [el('span', { class: 'st ' + (st === 'working' ? 'being_investigated' : st === 'fixed' ? 'fixed' : 'passed') }, LABEL[st] + (st === 'fixed' && b.dev.version ? ' in ' + b.dev.version : ''))] : [])));
+    kids.push(el('div', { class: 'bug-h' }, el('span', { class: 'n' }, '#' + b.id), el('h2', {}, b.title), ...(st ? [el('span', { class: 'st ' + (st === 'working' ? 'being_investigated' : st === 'fixed' ? 'fixed' : 'passed') }, LABEL[st] + (st === 'fixed' && b.dev.version ? ' in ' + b.dev.version : '') + (st === 'need_info' && b.dev.reply ? ' · answered' : ''))] : [])));
     kids.push(el('div', { class: 'meta' }, el('span', {}, 'Reported ', el('b', {}, date(b.reported))), ...(b.area ? [el('span', {}, 'Area ', el('b', {}, b.area))] : []), ...(b.version ? [el('span', {}, 'Game version ', el('b', {}, b.version))] : []),
       ...(b.affected > 1 ? [el('span', {}, el('b', {}, String(b.affected)), ' players affected')] : []), ...(b.chief || b.uid ? [el('span', {}, 'Chief ', el('b', {}, b.chief || '–'), ' · UID ', el('b', {}, b.uid || '–'))] : [])));
     kids.push(el('div', { class: 'txt' }, b.text || '(no text)'));
@@ -103,7 +105,11 @@ h1{font-size:clamp(26px,4vw,38px);margin-bottom:8px}
     })));
     if (done) return el('article', { class: 'card bug fixed' }, kids);
     const ans = el('div', { class: 'ans' });
-    if (st === 'need_info' && b.dev.note) ans.append(el('div', { class: 'said' }, 'You asked: ', el('b', {}, b.dev.note)));
+    if (st === 'need_info' && b.dev.note) {
+      ans.append(el('div', { class: 'said' }, 'You asked: ', el('b', {}, b.dev.note),
+        el('small', {}, b.dev.reply ? '' : b.dev.asked ? ' · Sent to the player. Their answer shows up here.' : ' · The server team will ask the player.')));
+      if (b.dev.reply) ans.append(el('div', { class: 'said reply' }, 'The player answered ' + date(b.dev.reply_ts) + ': ', el('b', {}, b.dev.reply)));
+    }
     const ed = editing && editing.id === b.id ? editing.kind : null;
     const work = el('button', { class: 'btn', type: 'button', 'aria-pressed': String(st === 'working') }, 'Working on it');
     work.onclick = () => answer(b, st === 'working' ? '' : 'working');

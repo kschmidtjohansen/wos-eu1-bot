@@ -336,7 +336,7 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "ai_checked INTEGER"), ("bug_reports", "ai_dup INTEGER"), ("bug_reports", "ai_conf INTEGER"),
                      ("bug_reports", "ai_reason TEXT"), ("bug_reports", "match_en TEXT"), ("bug_reports", "match_lang TEXT"), ("bug_reports", "dev_state TEXT"), ("bug_reports", "dev_note TEXT"),
                      ("bug_reports", "dev_version TEXT"), ("bug_reports", "dev_ts INTEGER"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
-                     ("bug_reports", "mod_pinged INTEGER"),
+                     ("bug_reports", "mod_pinged INTEGER"), ("bug_reports", "dev_reply TEXT"), ("bug_reports", "dev_reply_ts INTEGER"), ("bug_reports", "dev_asked INTEGER"), ("bug_reports", "known_off INTEGER"), ("gift_codes", "reminded INTEGER"), ("partners", "fails INTEGER NOT NULL DEFAULT 0"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
                      ("tickets", "area TEXT"), ("tickets", "title TEXT"), ("tickets", "chief_name TEXT"),
@@ -453,6 +453,7 @@ SCHEMA = {
     "ticket_details_required": {"type": "bool", "default": True},
     "web_form_enabled": {"type": "bool", "default": False},
     "known_issues_enabled": {"type": "bool", "default": False},
+    "known_auto_players": {"type": "int", "default": 3, "min": 0, "max": 100},
     "reminder_critical_hours": {"type": "int", "default": 4, "min": 1, "max": 72},
     "keep_attachments": {"type": "bool", "default": True},
     "attachment_keep_days": {"type": "int", "default": 0, "min": 0, "max": 3650},
@@ -544,6 +545,8 @@ SCHEMA = {
     "redeem_body": {"type": "text", "default": '{"uid": "{uid}", "code": "{code}"}', "min": 0, "max": 1000},
     "redeem_ok_text": {"type": "text", "default": "", "min": 0, "max": 100},
     "redeem_already_text": {"type": "text", "default": "already", "min": 0, "max": 100},
+    "redeem_expired_text": {"type": "text", "default": "time error|expired", "min": 0, "max": 100},
+    "giftcodes_remind_hours": {"type": "int", "default": 0, "min": 0, "max": 72},
     "redeem_delay": {"type": "int", "default": 2, "min": 0, "max": 60},
     "redeem_dm": {"type": "bool", "default": False},
     "info_channel_id": {"type": "channel", "default": None},
@@ -1551,6 +1554,21 @@ def known_issues(limit_fixed: int = 30):
              "affected": votes.get(r["id"], 0) + len(duplicates_of(r["id"]))} for r in rows]
 
 
+def affected_players(bug_id: int) -> int:
+    """The reporter + everyone who said "I have this too" + reports closed as duplicates of it."""
+    return 1 + vote_count(bug_id) + len(duplicates_of(bug_id))
+
+
+def auto_known_candidates() -> list:
+    """Open bugs that are not on the known issues list yet, weren't taken off it by staff, and have enough players affected."""
+    need = int(cfg("known_auto_players") or 0)
+    if need <= 0:
+        return []
+    rows = db.execute("SELECT * FROM bug_reports WHERE public=0 AND COALESCE(known_off,0)=0 AND duplicate_of IS NULL "
+                      "AND status IN ('passed','being_investigated')").fetchall()
+    return [r for r in rows if affected_players(r["id"]) >= need]
+
+
 def ideas_added(limit: int = 30):
     """Accepted player suggestions that staff have marked as added, with what was changed (newest first)."""
     rows = db.execute("SELECT * FROM suggestions WHERE status='accepted' AND changes IS NOT NULL AND changes<>'' "
@@ -2127,6 +2145,10 @@ def tz():
 PARTNER_INVITE_DAYS = 7
 
 
+def partner_posts_since(guild_id: int, since: int) -> int:
+    return db.execute("SELECT COUNT(*) FROM partner_posts WHERE guild_id=? AND ts>=?", (guild_id, since)).fetchone()[0]
+
+
 def partner_invite_new(promoter: str, by: str) -> str:
     """A single-use link token for one promoter. Only its hash is kept."""
     token = _secrets.token_urlsafe(18)
@@ -2216,6 +2238,32 @@ def delete_player_note(note_id: int) -> bool:
 
 def player_bugs(user_id: int, limit: int = 40) -> list:
     return db.execute("SELECT * FROM bug_reports WHERE reporter_id=? ORDER BY id DESC LIMIT ?", (user_id, limit)).fetchall()
+
+
+def reporter_record(user_id: int) -> dict:
+    """How a player's bug reports turned out, over all of them: accepted (passed on / fixed), duplicates, rejected, waiting."""
+    rows = db.execute("SELECT status, duplicate_of FROM bug_reports WHERE reporter_id=?", (user_id,)).fetchall()
+    rec = {"total": len(rows), "accepted": 0, "fixed": 0, "duplicates": 0, "rejected": 0, "waiting": 0}
+    for r in rows:
+        if r["duplicate_of"]:
+            rec["duplicates"] += 1
+        elif r["status"] in ("passed", "being_investigated", "fixed"):
+            rec["accepted"] += 1
+            rec["fixed"] += r["status"] == "fixed"
+        elif r["status"] in ("rejected", "admin_rejected"):
+            rec["rejected"] += 1
+        else:
+            rec["waiting"] += 1
+    decided = rec["accepted"] + rec["duplicates"] + rec["rejected"]
+    rec["decided"] = decided
+    rec["accepted_pct"] = round(100 * rec["accepted"] / decided) if decided else None
+    rec["label"] = None
+    if decided >= 5:
+        if rec["accepted"] / decided >= 0.7:
+            rec["label"] = "reliable"
+        elif rec["rejected"] / decided >= 0.6:
+            rec["label"] = "often_rejected"
+    return rec
 
 
 def player_suggestions(user_id: int, limit: int = 40) -> list:

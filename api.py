@@ -510,7 +510,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 raise ApiError(400, "Pick one of the areas from the Features tab.")
             store.set_bug(r["id"], area=area or None)
         if "public" in data:
-            store.set_bug(r["id"], public=1 if data["public"] else 0)
+            store.set_bug(r["id"], public=1 if data["public"] else 0, known_off=0 if data["public"] else 1)
         if "fixed_version" in data:
             store.set_bug(r["id"], fixed_version=str(data["fixed_version"] or "").strip()[:30] or None)
         if "game_version" in data:
@@ -1060,7 +1060,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
 
     # ---------------------------------------------------------- automatic gift-code redeem
     REDEEM_KEYS = ("redeem_enabled", "redeem_url", "redeem_method", "redeem_body", "redeem_ok_text",
-                   "redeem_already_text", "redeem_delay", "redeem_dm")
+                   "redeem_already_text", "redeem_expired_text", "redeem_delay", "redeem_dm")
 
     def redeem_payload():
         summary = store.redemption_summary()
@@ -1954,8 +1954,13 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             "redirect_uri": oauth_conf()["redirect"], "state": "p." + token, "disable_guild_select": "false"})
 
     def partners_payload():
+        items = [hooks["partner_info"](p) for p in store.partners() if not p["left_ts"]]
+        live = [x for x in items if x["status"] not in ("left", "paused")]
         return {"ready": bool(oauth_conf()["secret"] and oauth_conf()["redirect"]),
-                "items": [hooks["partner_info"](p) for p in store.partners() if not p["left_ts"]],
+                "summary": {"servers": len(live), "members": sum(x["members"] or 0 for x in live),
+                            "posts_30d": sum(x.get("posts_30d", 0) for x in items),
+                            "attention": sum(1 for x in items if x.get("issues") or x["status"] in ("problem", "setup"))},
+                "items": items,
                 "left": [{"id": str(p["guild_id"]), "name": p["name"] or "?", "promoter": p["promoter"] or "", "left_ts": p["left_ts"]}
                          for p in store.partners() if p["left_ts"]][:20],
                 "invites": [{"id": i["id"], "promoter": i["promoter"], "created_ts": i["created_ts"], "created_by": i["created_by"] or "",
@@ -2080,7 +2085,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             "warnings": store.active_warnings(uid), "cases": [case_dict(c) for c in cases_],
             "bugs": [{"id": b["id"], "summary": store.bug_summary(b), "status": b["status"], "created_at": b["created_at"],
                       "duplicate_of": b["duplicate_of"]} for b in bugs_],
-            "bug_counts": st,
+            "bug_counts": st, "record": store.reporter_record(uid),
             "suggestions": [{"id": x["id"], "text": (x["text"] or "")[:160], "status": x["status"], "created_at": x["created_at"]} for x in sugs_],
             "appeals": [{"id": a["id"], "kind": a["kind"], "status": a["status"], "ts": a["ts"], "text": a["text"][:300], "note": a["note"] or ""}
                         for a in store.player_appeals(uid)],
@@ -2489,7 +2494,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 "files": [{"id": f["id"], "name": f["filename"],
                            "kind": "video" if f["filename"].lower().endswith(MEDIA_VIDEO) else "image"} for f in store.bug_files(r["id"])],
                 "dev": {"state": r["dev_state"] or "", "note": r["dev_note"] or "", "version": r["dev_version"] or r["fixed_version"] or "",
-                        "ts": r["dev_ts"]}}
+                        "ts": r["dev_ts"], "asked": bool(r["dev_asked"]), "reply": r["dev_reply"] or "", "reply_ts": r["dev_reply_ts"]}}
 
     @routes.get("/public/dev/list")
     async def dev_list(request):
@@ -2510,8 +2515,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         d = await body_json(request)
         state = str(d.get("state") or "") or None
         r = await hooks["dev_update"](r, state, clean(d.get("version"), 30), clean(d.get("note"), 600))
-        return web.json_response({"ok": True, "status": r["status"], "dev": {"state": r["dev_state"] or "", "note": r["dev_note"] or "",
-                                                                              "version": r["dev_version"] or "", "ts": r["dev_ts"]}})
+        return web.json_response({"ok": True, "status": r["status"], "dev": dev_bug({"r": r, "passed_at": None, "dups": [], "affected": 1})["dev"]})
 
     @routes.get("/public/dev/files/{id}/{fid}")
     async def dev_file(request):

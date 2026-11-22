@@ -720,6 +720,7 @@ class MatchButton(discord.ui.Button):
                   interaction.user.id, interaction.user.display_name)
         self.owner.stop()
         await sync_bug_messages(r)
+        await auto_known(r["id"])
         await safe_refresh_board()
 
 
@@ -1644,7 +1645,7 @@ class WosBot(discord.Client):
             except Exception as exc:  # noqa: BLE001
                 print(f"[device question] {exc!r}")
         for prefix, fn, label in (("pt:", handle_partner_setup, "promoter setup"), ("spike:", handle_spike_button, "spike alert"), ("mr:", handle_msg_report_button, "message report"),
-                                  ("ap:", handle_appeal_button, "appeal"), ("raid:", handle_raid_button, "raid mode")):
+                                  ("ap:", handle_appeal_button, "appeal"), ("dq:", handle_dev_question_button, "developer question"), ("raid:", handle_raid_button, "raid mode")):
             if cid.startswith(prefix):
                 try:
                     await fn(interaction)
@@ -1908,6 +1909,10 @@ async def apply_bug_status(r, new: str, actor_name: str, actor_id: Optional[int]
         await sync_bug_messages(dup)             # the original now shows how many others hit the same bug
     if new == "fixed":
         await notify_followers(r)
+    try:                                         # enough players now? -> known issue by itself
+        await auto_known(dup["id"] if dup else r["id"] if new in ("passed", "being_investigated") else -1)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[auto known] {exc!r}")
     await safe_refresh_board()
     return r
 
@@ -2798,6 +2803,39 @@ def import_seed_codes():
                   None, brand())
 
 
+async def end_expired_code(code: str):
+    """Auto-redeem found out the game no longer accepts this code: end it everywhere right away."""
+    for r in store.active_gift_codes():
+        if r["code"].lower() == code.lower():
+            store.set_gift_code(r["id"], expires_at=int(time.time()), expired_noted=1)
+            if r["msg_id"]:
+                await sync_announcement(r["msg_id"])
+            await safe_refresh_gift_list()
+            log_event("system", f"Gift code {r['code']} ended by itself – the game says it has expired", None, brand())
+
+
+async def remind_ending_codes(now=None):
+    """'Last chance' post in the gift-codes channel this many hours before a code expires (Gift codes → Settings; 0 = off)."""
+    hours = int(cfg("giftcodes_remind_hours") or 0)
+    ch = chan("giftcodes_channel_id")
+    if hours <= 0 or ch is None:
+        return 0
+    now, sent = now or int(time.time()), 0
+    for r in store.active_gift_codes(now):
+        exp = r["expires_at"]
+        if not exp or r["reminded"] or exp - now > hours * 3600 or exp <= now:
+            continue
+        store.set_gift_code(r["id"], reminded=1)
+        if r["created_at"] > exp - hours * 3600:
+            continue                                    # it never lived longer than the reminder: the announcement is enough
+        try:
+            await ch.send(T("gift.ending", code=r["code"], relative=f"<t:{exp}:R>"), allowed_mentions=discord.AllowedMentions.none())
+            sent += 1
+        except discord.HTTPException:
+            pass
+    return sent
+
+
 async def end_gift_code(cid: int, by_name: str, by_id=None):
     r = store.get_gift_code(cid)
     store.set_gift_code(cid, expires_at=int(time.time()), expired_noted=1)
@@ -3079,7 +3117,7 @@ def _redeem_headers() -> dict:
 
 async def redeem_one(code: str, uid: str, session=None):
     """Ask the game server to redeem one code for one player. Returns (status, message):
-    ok | already | failed."""
+    ok | already | expired | failed."""
     import aiohttp
     from urllib.parse import quote
     url = (cfg("redeem_url") or "").strip().replace("{uid}", quote(uid)).replace("{code}", quote(code))
@@ -3108,6 +3146,8 @@ async def redeem_one(code: str, uid: str, session=None):
         if own:
             await session.close()
     low = text.lower()
+    if any(x.strip() and x.strip() in low for x in (cfg("redeem_expired_text") or "").lower().split("|")):
+        return "expired", text[:200]
     already, ok_text = (cfg("redeem_already_text") or "").strip().lower(), (cfg("redeem_ok_text") or "").strip().lower()
     if already and already in low:
         return "already", text[:200]
@@ -3139,7 +3179,7 @@ def redeem_queue(limit: int = 250) -> list:
 async def run_redeem(limit: int = 250) -> dict:
     """Work through the queue (one at a time, with the delay from the dashboard). Returns counts."""
     import aiohttp
-    counts = {"ok": 0, "already": 0, "failed": 0}
+    counts = {"ok": 0, "already": 0, "expired": 0, "failed": 0}
     if not redeem_ready() or _redeem_lock.locked():
         return counts
     async with _redeem_lock:
@@ -3148,15 +3188,21 @@ async def run_redeem(limit: int = 250) -> dict:
             return counts
         per_code = {}
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
+            ended = set()
             for i, (code, uid, did) in enumerate(todo):
                 if not redeem_ready():
                     break
+                if code in ended:
+                    continue
                 if i:
                     await asyncio.sleep(cfg("redeem_delay"))
                 status, msg = await redeem_one(code, uid, session)
                 store.save_redemption(code, uid, did, status, msg)
                 counts[status] += 1
-                per_code.setdefault(code, {"ok": 0, "already": 0, "failed": 0})[status] += 1
+                per_code.setdefault(code, {"ok": 0, "already": 0, "expired": 0, "failed": 0})[status] += 1
+                if status == "expired":
+                    ended.add(code)
+                    await end_expired_code(code)
                 if status == "ok" and cfg("redeem_dm") and did:
                     await dm_t(did, "dm.redeemed", code=code)
         for code, c in per_code.items():
@@ -3568,7 +3614,7 @@ async def handle_known_button(interaction: discord.Interaction):
     if r["duplicate_of"] or r["status"] in ("rejected", "admin_rejected"):
         return await interaction.response.send_message(f"Bug #{r['id']} is closed – open the original bug instead.", ephemeral=True)
     on = not r["public"]
-    set_bug(r["id"], public=1 if on else 0)
+    set_bug(r["id"], public=1 if on else 0, known_off=0 if on else 1)
     who = interaction.user.display_name
     log_event("bug", f"Bug #{r['id']} {'marked as a known issue' if on else 'removed from the known issues'} by {who}", interaction.user.id, who)
     await interaction.response.send_message(
@@ -5327,6 +5373,9 @@ async def dev_update(r, state: Optional[str], version: Optional[str] = None, not
     if state == "need_info" and not note:
         raise ValueError("Write what you need to know.")
     set_bug(r["id"], dev_state=state, dev_note=note, dev_version=version if state == "fixed" else None, dev_ts=int(time.time()))
+    new_question = state == "need_info" and (note != r["dev_note"] or r["dev_state"] != "need_info")
+    if new_question:
+        set_bug(r["id"], dev_reply=None, dev_reply_ts=None, dev_asked=None)     # a new question waits for a new answer
     if state == "working" and r["status"] == "passed":
         await apply_bug_status(r, "being_investigated", who, log_kind="bug")
     elif state == "fixed":
@@ -5336,15 +5385,23 @@ async def dev_update(r, state: Optional[str], version: Optional[str] = None, not
             set_bug(r["id"], fixed_version=version)
     r = get_bug(r["id"])
     if state == "need_info":
+        if not new_question:
+            return get_bug(r["id"])                     # same question again: the player already has it
         log_event("bug", f"Developers need more info on bug #{r['id']}: “{note[:160]}”", None, who)
+        asked = await ask_reporter(r, note)
+        if asked:
+            set_bug(r["id"], dev_asked=int(time.time()))
+        how = ("I asked the player by DM – their answer shows up here and on the developers’ page." if asked else
+               "I couldn’t DM the player (report from the website, or DMs closed) – please ask them.")
         ch = chan("admin_channel_id")
         if ch is not None:
             try:
                 ref = ch.get_partial_message(r["admin_msg_id"]) if r["admin_msg_id"] else None
-                await ch.send(f"💬 **The developers need more info on bug #{r['id']}** – {store.bug_summary(r)[:80]}\n>>> {note}",
+                await ch.send(f"💬 **The developers need more info on bug #{r['id']}** – {store.bug_summary(r)[:80]}\n>>> {note}\n-# {how}",
                               reference=ref, mention_author=False, allowed_mentions=discord.AllowedMentions.none())
             except discord.HTTPException:
                 pass
+        r = get_bug(r["id"])
     elif state is None:
         log_event("bug", f"Developers cleared their answer on bug #{r['id']}", None, who)
     try:
@@ -5352,6 +5409,67 @@ async def dev_update(r, state: Optional[str], version: Optional[str] = None, not
     except discord.HTTPException:
         pass
     return r
+
+
+# --------------------------------------------------------------- developers ask the player
+async def ask_reporter(r, question: str) -> bool:
+    """DM the player who reported the bug the developers' question, with an Answer button. False if that's not possible."""
+    uid = r["reporter_id"]
+    if not uid or r["source"] == "web":
+        return False
+    lg = store.lang_for(uid)
+    e = discord.Embed(title=T("devq.title", lg, id=r["id"]), description=f">>> {question[:1500]}", color=0x5865F2)
+    e.add_field(name=T("devq.report", lg), value=store.bug_summary(r)[:200] or f"#{r['id']}", inline=False)
+    e.set_footer(text=T("devq.how", lg).replace("**", "")[:200])
+    v = discord.ui.View(timeout=None)
+    v.add_item(discord.ui.Button(label=T("devq.button", lg)[:80], emoji="✍️", style=discord.ButtonStyle.primary, custom_id=f"dq:{r['id']}"))
+    try:
+        user = bot.get_user(uid) or await bot.fetch_user(uid)
+        await user.send(embed=e, view=v)
+        return True
+    except (discord.HTTPException, AttributeError):
+        return False
+
+
+class DevAnswerModal(discord.ui.Modal):
+    def __init__(self, bug_id: int, lg: str):
+        super().__init__(title=T("devq.modal", lg, id=bug_id)[:45], timeout=1800)
+        self.bug_id, self.lg = bug_id, lg
+        self.answer = discord.ui.TextInput(label=T("devq.label", lg)[:45], style=discord.TextStyle.paragraph, min_length=3, max_length=1000)
+        self.add_item(self.answer)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await save_dev_answer(interaction, self.bug_id, str(self.answer.value), self.lg)
+
+
+async def save_dev_answer(interaction, bug_id: int, text: str, lg: str):
+    r = get_bug(bug_id)
+    if r is None or r["dev_state"] != "need_info":
+        return await interaction.response.send_message(T("devq.closed", lg))
+    text = text.strip()[:1000]
+    set_bug(bug_id, dev_reply=text, dev_reply_ts=int(time.time()))
+    await interaction.response.send_message(T("devq.thanks", lg))
+    name = getattr(interaction.user, "display_name", "The player")
+    log_event("bug", f"{name} answered the developers on bug #{bug_id}: “{text[:160]}”", interaction.user.id, name)
+    ch = chan("admin_channel_id")
+    if ch is not None:
+        try:
+            ref = ch.get_partial_message(r["admin_msg_id"]) if r["admin_msg_id"] else None
+            await ch.send(f"✍️ **{name} answered the developers on bug #{bug_id}**\n>>> {text}", reference=ref, mention_author=False,
+                          allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+
+
+async def handle_dev_question_button(interaction: discord.Interaction):
+    bug_id = int(interaction.data["custom_id"].split(":")[1])
+    lg = store.lang_for(interaction.user.id)
+    r = get_bug(bug_id)
+    if r is None or r["dev_state"] != "need_info":
+        return await interaction.response.send_message(T("devq.closed", lg))
+    if r["reporter_id"] != interaction.user.id:
+        return await interaction.response.send_message(T("devq.notyours", lg))
+    await interaction.response.send_modal(DevAnswerModal(bug_id, lg))
 
 
 # --------------------------------------------------------------- spike alert
@@ -5417,6 +5535,21 @@ async def check_spike(r) -> bool:
     put_raw("spike_state", json.dumps(st))
     log_event("bug", f"Spike: {len(rows)} reports about “{name}” in {minutes} minutes", None, brand())
     return True
+
+
+async def auto_known(bug_id: Optional[int] = None) -> list:
+    """Put bugs on the known issues list by themselves once enough players have them (Bugs → Settings).
+    Checks one bug, or all open ones. Returns the ids that were added."""
+    added = []
+    for r in store.auto_known_candidates():
+        if bug_id is not None and r["id"] != bug_id:
+            continue
+        set_bug(r["id"], public=1)
+        added.append(r["id"])
+        log_event("bug", f"Bug #{r['id']} is now a known issue by itself – {store.affected_players(r['id'])} players have it", None, brand())
+    if added:
+        await safe_refresh_board()
+    return added
 
 
 async def make_known(r, who: str, who_id=None) -> bool:
@@ -5952,10 +6085,48 @@ async def partner_problem(p, text: str):
     """A post failed: remember why and tell the promoter once a day."""
     now = int(time.time())
     first = not p["problem_ts"] or now - p["problem_ts"] > 86400
-    store.save_partner(p["guild_id"], problem=text[:200], problem_ts=now if first else p["problem_ts"])
+    store.save_partner(p["guild_id"], problem=text[:200], problem_ts=now if first else p["problem_ts"], fails=(p["fails"] or 0) + 1)
     if first:
         log_event("system", f"Promoter server {p['name']}: {text}", None, brand())
         await send_partner_setup(p["guild_id"], problem=text)
+        ch = chan("admin_channel_id")
+        if ch is not None:
+            try:
+                await ch.send(f"⚠️ **Promoter server {p['name'] or p['guild_id']}** ({p['promoter'] or 'no name'}): {text}. "
+                              "I sent the promoter the setup message again. See Posts → Promoter servers.",
+                              allowed_mentions=discord.AllowedMentions.none())
+            except discord.HTTPException:
+                pass
+
+
+def partner_issues(p, g=None) -> list:
+    """What would stop our next post in this promoter server right now (checked live)."""
+    g = g or bot.get_guild(p["guild_id"])
+    if g is None or p["paused"]:
+        return []
+    out = []
+    for kind, label in (("ann", "announcements"), ("gift", "gift codes")):
+        cid = p[f"{kind}_channel"]
+        if not cid:
+            continue
+        ch = g.get_channel(cid)
+        if ch is None:
+            out.append(f"the {label} channel no longer exists")
+        elif not partner_can_post(ch, g):
+            out.append(f"no permission to post in #{ch.name}")
+    return out
+
+
+async def partner_check():
+    """Every 30 minutes: warn about promoter servers where the bot lost access, and clear the warning once it's back."""
+    for p in store.partners(active_only=True):
+        issues = partner_issues(p)
+        if issues:
+            if not p["problem"]:
+                await partner_problem(p, "; ".join(issues))
+        elif p["problem"] and bot.get_guild(p["guild_id"]) is not None:
+            store.save_partner(p["guild_id"], problem=None, problem_ts=None)
+            log_event("system", f"Promoter server {p['name']}: posting works again", None, brand())
 
 
 async def partner_send(kind: str, build, ref=None) -> int:
@@ -6123,12 +6294,18 @@ async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str =
 
 def partner_info(p) -> dict:
     g = bot.get_guild(p["guild_id"])
+    issues = partner_issues(p, g)
+    status = partner_status(p) if g or p["left_ts"] else "left"
+    if issues and status == "ok":
+        status = "problem"
     ch = lambda cid: {"id": str(cid), "name": g.get_channel(cid).name} if cid and g and g.get_channel(cid) else None  # noqa: E731
     return {"id": str(p["guild_id"]), "name": (g.name if g else p["name"]) or "?", "icon": (str(g.icon.url) if g and g.icon else p["icon"]) or "",
             "members": g.member_count if g else None, "promoter": p["promoter"] or "", "added_by": p["added_name"] or "",
             "added_by_id": str(p["added_by"]) if p["added_by"] else None, "added_ts": p["added_ts"],
             "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "paused": bool(p["paused"]), "problem": p["problem"] or "",
-            "status": partner_status(p) if g or p["left_ts"] else "left", "last_post_ts": p["last_post_ts"], "posts": p["posts"],
+            "status": status, "last_post_ts": p["last_post_ts"], "posts": p["posts"],
+            "posts_30d": store.partner_posts_since(p["guild_id"], int(time.time()) - 30 * 86400), "fails": p["fails"] or 0,
+            "issues": issues,
             "channels": [{"id": str(c.id), "name": c.name, "ok": partner_can_post(c, g),
                           "category": c.category.name if getattr(c, "category", None) else ""} for c in partner_channels(g)] if g else []}
 
@@ -6491,6 +6668,7 @@ async def gift_loop():
     try:
         if cfg("giftcodes_enabled"):
             await sync_gift_messages()
+            await remind_ending_codes()
     except Exception as exc:  # noqa: BLE001
         print(f"[gift codes] {exc!r}")
     try:
@@ -6865,6 +7043,14 @@ async def reminder_loop():
         await run_reminders()
     except Exception as exc:  # noqa: BLE001 – a failed reminder must never stop the loop
         print(f"[reminders] {exc!r}")
+    try:
+        await auto_known()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[auto known] {exc!r}")
+    try:
+        await partner_check()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[promoter check] {exc!r}")
 
 
 @reminder_loop.before_loop
