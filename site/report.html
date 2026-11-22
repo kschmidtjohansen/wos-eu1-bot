@@ -81,7 +81,11 @@ WOS.init(S).then(c => {
   cfg = c; fillAreas(); WOS.onLang.push(fillAreas);
   if (c.version && !$('ver').value) $('ver').value = c.version;
   if (c.known_issues === false) $('ki').hidden = true;
-  if (c.enabled === false) { say(WOS.t('off'), 'err'); $('go').disabled = true; }
+  if (c.enabled === false) {                         // closed: say so first instead of under a form nobody can send
+    const dc = (window.WOS_CONFIG || {}).DISCORD_URL;
+    f.replaceChildren(WOS.el('p', { class: 'closed', 'data-i': 'off' }, WOS.t('off')),
+      ...(dc ? [WOS.el('div', { class: 'btns' }, WOS.el('a', { class: 'btn pri', href: dc, rel: 'noopener' }, 'Discord'))] : []));
+  }
   if (!c.areas) { say(WOS.t('netErr'), 'err'); }
 });
 WOS.onLang.push(() => { $('go').textContent = WOS.t('send'); });

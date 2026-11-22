@@ -627,10 +627,6 @@ def set_cfg(key: str, value: Any):
     return v
 
 
-def all_cfg() -> dict:
-    return {k: cfg(k) for k in SCHEMA}
-
-
 def get_raw(key: str) -> Optional[str]:
     """Internal bot state that is not a user-facing setting (e.g. the panel message id)."""
     row = db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
@@ -1435,11 +1431,6 @@ def recently_fixed_public(days: int = 7, limit: int = 8):
 
 
 # ------------------------------------------------------------ gift-code redeem
-def redemption_done(code: str, uid: str) -> bool:
-    return db.execute("SELECT 1 FROM redemptions WHERE code=? AND uid=? AND status IN ('ok','already')",
-                      (code, uid)).fetchone() is not None
-
-
 def save_redemption(code: str, uid: str, discord_id, status: str, message: str = ""):
     db.execute("INSERT OR REPLACE INTO redemptions (code, uid, discord_id, status, message, ts) VALUES (?,?,?,?,?,?)",
                (code, uid, discord_id, status, (message or "")[:300], int(time.time())))
@@ -2132,22 +2123,6 @@ def tz():
         return timezone.utc
 
 
-def month_range(month: Optional[str] = None):
-    """(start_ts, end_ts, 'YYYY-MM') of a calendar month in the configured timezone; default = this month."""
-    from datetime import datetime
-    now = datetime.now(tz())
-    y, m = (int(month[:4]), int(month[5:7])) if month else (now.year, now.month)
-    start = datetime(y, m, 1, tzinfo=tz())
-    end = datetime(y + (m == 12), m % 12 + 1, 1, tzinfo=tz())
-    return int(start.timestamp()), int(end.timestamp()), f"{y:04d}-{m:02d}"
-
-
-def previous_month() -> str:
-    from datetime import datetime
-    n = datetime.now(tz())
-    return f"{n.year - (n.month == 1):04d}-{(n.month - 2) % 12 + 1:02d}"
-
-
 # ------------------------------------------------------------- partner (promoter) servers
 PARTNER_INVITE_DAYS = 7
 
@@ -2744,11 +2719,6 @@ def gift_code_state(r, now=None) -> str:
     if r["expires_at"] is not None and r["expires_at"] <= now:
         return "expired"
     return "new" if now - r["created_at"] < cfg("giftcodes_new_hours") * 3600 else "active"
-
-
-def expired_unnoted_gift_codes(now=None):
-    now = now or int(time.time())
-    return db.execute("SELECT * FROM gift_codes WHERE expires_at IS NOT NULL AND expires_at<=? AND expired_noted=0", (now,)).fetchall()
 
 
 # ----------------------------------------------------------------- translations

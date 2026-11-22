@@ -92,7 +92,7 @@ h2{font-size:clamp(20px,2.6vw,26px);line-height:1.2;margin:0 0 6px}
 h3{margin:0 0 4px;font-size:17px;font-weight:700}
 .lead{color:var(--muted);font-size:18px;line-height:1.55;max-width:60ch;margin:0 0 26px}
 .muted{color:var(--muted)}
-.crumb{color:var(--muted);font-size:14px;margin-bottom:12px}
+
 .sec{margin-top:48px}
 .sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:14px;flex-wrap:wrap}
 .sec-h p{margin:0}
@@ -104,8 +104,8 @@ h3{margin:0 0 4px;font-size:17px;font-weight:700}
   background:radial-gradient(380px circle at var(--mx,50%) var(--my,50%),rgba(125,227,244,.09),transparent 45%)}
 .card.lit::before{opacity:1}
 .grid{display:grid;gap:14px}
-.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
-@media (max-width:860px){.g3,.g2{grid-template-columns:1fr}}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:860px){.g2{grid-template-columns:1fr}}
 
 /* ---- buttons ---- */
 .btns{display:flex;gap:10px;flex-wrap:wrap}
@@ -263,3 +263,5 @@ footer{border-top:1px solid var(--line);color:var(--muted);font-size:14px}
 .legal b{color:var(--text,#e8f1ff);font-weight:600}
 .legal a{color:var(--ice,#7de3f4)}
 @media (max-width:600px){.legal .card{padding:4px 18px 20px}}
+.closed{margin:0;font-size:17px;line-height:1.55;color:var(--text)}
+.closed + .btns{margin-top:18px}

@@ -1423,10 +1423,6 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(502, "Discord didn't accept the message – check the channel and the bot's permissions.")
         return web.json_response({"ok": True})
 
-    @routes.get("/api/reasons")
-    async def reasons(request):
-        return web.json_response({"items": [{"key": k, "text": v} for k, v in store.REJECT_PRESETS.items() if v]})
-
     @routes.get("/api/emojis")
     async def emojis(request):
         return web.json_response(hooks["emoji_status"]())

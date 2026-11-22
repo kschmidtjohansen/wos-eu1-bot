@@ -774,28 +774,6 @@ async def send_form_report(interaction: discord.Interaction, report: dict, lg: O
     await interaction.edit_original_response(content=done, view=None)
 
 
-class SimilarView(discord.ui.View):
-    """'This may already be reported' – send anyway or drop it."""
-
-    def __init__(self, lg, report, similar=None):
-        super().__init__(timeout=900)
-        self.lg, self.report = lg, report
-        self.send.label, self.drop.label = T("form.send_anyway", lg)[:80], T("form.cancel", lg)[:80]
-        if any(s["status"] in ("passed", "being_investigated") for s in (similar or [])):
-            self.add_item(SimilarVoteSelect(lg, similar, self))
-
-    @discord.ui.button(style=discord.ButtonStyle.primary, label="Send anyway")
-    async def send(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content=T("form.sending", self.lg), view=None)
-        await send_form_report(interaction, self.report, self.lg)
-        self.stop()
-
-    @discord.ui.button(style=discord.ButtonStyle.secondary, label="Don't send")
-    async def drop(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content=T("form.cancelled", self.lg), view=None)
-        self.stop()
-
-
 class IdeaFormModal(discord.ui.Modal):
     def __init__(self, lg: Optional[str]):
         super().__init__(title=T("form.idea_title", lg)[:45], timeout=1800)
@@ -2609,20 +2587,6 @@ async def check_info_tickets(now: Optional[float] = None):
 # the same as the website's "New" section). After that they leave the announcement – which is deleted when it
 # is empty – and join the "Active gift codes" list. An expired code disappears from wherever it is.
 
-def gift_embed(r, state: Optional[str] = None, lang: Optional[str] = None) -> discord.Embed:
-    """Embed for one code (used by /codes-style displays and tests)."""
-    state = state or store.gift_code_state(r)
-    if state == "expired":
-        e = discord.Embed(title=T("gift.expired", lang), description=f"~~`{r['code']}`~~", color=0x5C6370)
-    else:
-        e = discord.Embed(title=T("gift.new", lang), description=f"## `{r['code']}`", color=0xF1C40F)
-    if r["reward"]:
-        e.add_field(name=T("gift.reward", lang), value=r["reward"], inline=False)
-    e.add_field(name=T("gift.valid", lang), value=(f"<t:{r['expires_at']}:f>" if r["expires_at"] else T("gift.never", lang)), inline=False)
-    e.set_footer(text=f"{brand()} · {T('gift.footer', lang)}")
-    return e
-
-
 def gift_ping():
     """(content, allowed_mentions) for the announcement, from the dashboard setting."""
     p, role = cfg("giftcodes_ping"), (cfg("giftcodes_role_id") or "").strip()
@@ -2708,11 +2672,6 @@ def gift_codes_from_message(msg) -> list:
         for e in msg.embeds:
             found += re.findall(r"`([^`\s]+)`", e.description or "")
     return found
-
-
-def gift_code_from_message(msg) -> Optional[str]:
-    codes = gift_codes_from_message(msg)
-    return codes[0] if codes else None
 
 
 async def add_gift_codes(items, by_name: str, by_id=None, announce: bool = True):
@@ -2825,10 +2784,6 @@ async def sync_gift_messages(now=None):
         if any(store.gift_code_state(r, now) != "new" for r in rows):
             await sync_announcement(mid, now)
     await safe_refresh_gift_list()
-
-
-async def expire_gift_codes():
-    await sync_gift_messages()
 
 
 def import_seed_codes():
@@ -3101,31 +3056,6 @@ async def safe_refresh_board(force: bool = False):
         await refresh_board(force)
     except Exception as exc:  # noqa: BLE001 – the board must never break a status change
         print(f"[board] {exc!r}")
-
-
-class SimilarVoteSelect(discord.ui.Select):
-    """In the "this may already be reported" answer: pick the matching bug instead of sending a new report."""
-
-    def __init__(self, lg, similar, parent):
-        opts = [discord.SelectOption(label=f"#{s['id']} {s['title']}"[:100], value=str(s["id"]))
-                for s in similar if s["status"] in ("passed", "being_investigated")][:25]
-        super().__init__(placeholder=T("form.metoo", lg)[:150], options=opts or [discord.SelectOption(label="–", value="0")],
-                         disabled=not opts, row=1)
-        self.lg, self.owner = lg, parent
-
-    async def callback(self, interaction: discord.Interaction):
-        bug_id = int(self.values[0])
-        r = get_bug(bug_id) if bug_id else None
-        if r is None or r["status"] not in ("passed", "being_investigated"):
-            return await interaction.response.edit_message(content=T("board.gone", self.lg), view=self.owner)
-        store.add_vote(bug_id, interaction.user.id)
-        n = store.vote_count(bug_id)
-        await interaction.response.edit_message(content=T("board.voted", self.lg, n=n, id=bug_id), view=None)
-        log_event("bug", f"{interaction.user.display_name} also has bug #{bug_id} (from the report form, {n} affected)",
-                  interaction.user.id, interaction.user.display_name)
-        self.owner.stop()
-        await sync_bug_messages(r)
-        await safe_refresh_board()
 
 
 # ------------------------------------------------------------ automatic gift-code redeem
@@ -5868,10 +5798,6 @@ async def lift_temp_bans(now: Optional[int] = None) -> int:
 PARTNER_PERMS = 379904           # View Channel, Send Messages, Embed Links, Attach Files, Read History, External Emojis
 PARTNER_GRACE = 180              # seconds a server may wait for its link to be confirmed before the bot leaves
 _partner_claims: dict = {}       # guild_id -> (promoter, user_id) from the add link, waiting for on_guild_join
-
-
-def is_partner_guild(g) -> bool:
-    return g is not None and g.id != GUILD_ID
 
 
 def partner_can_post(c, g=None) -> bool:
