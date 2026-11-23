@@ -1017,14 +1017,32 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
                 reporter = await guild.fetch_member(r["reporter_id"])
             except discord.HTTPException:
                 reporter = None
-        thread = await channel.create_thread(
+        # The thread must live in a channel the player can see – Discord won't add anyone to a private thread
+        # in a channel they can't open (like the moderators' channel). Players' own tickets live in the report channel.
+        home = channel
+        rep_ch = chan("report_channel_id")
+        if reporter and rep_ch is not None and rep_ch.permissions_for(reporter).view_channel:
+            home = rep_ch
+        elif reporter and not channel.permissions_for(reporter).view_channel:
+            await channel.send(f"🔍 {member.mention} I can't open a ticket with {reporter.display_name}: they can't see this channel, "
+                               "and no bug report channel they can see is set (Settings → Channels).", delete_after=30)
+            return
+        thread = await home.create_thread(
             name=f"ticket-bug-{r['id']}", type=discord.ChannelType.private_thread,
             invitable=False, auto_archive_duration=4320,
         )
         await thread.add_user(member)
+        added = False
         if reporter:
-            await thread.add_user(reporter)
+            try:
+                await thread.add_user(reporter)
+                added = True
+            except discord.HTTPException as exc:
+                print(f"[ticket] could not add {reporter.id} to {thread.id}: {exc!r}")
         mention = reporter.mention if reporter else f"<@{r['reporter_id']}> (left the server)"
+        if reporter and not added:
+            await channel.send(f"⚠️ {member.mention} I opened {thread.mention} but couldn't add {reporter.display_name} to it.",
+                               delete_after=60)
         await thread.send(T("info.ticket", lang_for(r["reporter_id"]), id=r["id"], mod=member.mention, player=mention,
                             link=msg.jump_url))
         set_bug(r["id"], status="investigating", ticket_thread_id=thread.id)
