@@ -2068,7 +2068,7 @@ function showPlayer() { const m = $('#wmodal'); if (m) m.remove(); root.insertAd
 const PT_BADGE = { ok: ['ok', 'Posting'], setup: ['warn', 'Needs channels'], problem: ['bad', 'Problem'], paused: ['todo', 'Paused'], left: ['todo', 'Removed'] };
 function ptChannel(p, kind) {
   const cur = p[kind];
-  return html`<select class="w-select" data-pt="${kind}" data-id="${p.id}" aria-label="${kind === 'ann' ? 'Announcements' : 'Gift codes'} channel in ${p.name}" style="width:auto;max-width:220px">
+  return html`<select class="w-select" data-pt="${kind}" data-id="${p.id}" aria-label="${{ ann: 'Announcements', gift: 'Gift codes', bug: 'Bug reports' }[kind]} channel in ${p.name}" style="width:auto;max-width:220px">
     <option value="0" ${cur ? '' : 'selected'}>Off</option>${p.channels.map(c => html`<option value="${c.id}" ${cur && cur.id === c.id ? 'selected' : ''}>#${c.name}${c.category ? ' · ' + c.category : ''}${c.ok === false ? ' (bot can’t post yet)' : ''}</option>`)}
     ${cur && !p.channels.some(c => c.id === cur.id) ? html`<option value="${cur.id}" selected>#${cur.name} (no access)</option>` : ''}</select>`;
 }
@@ -2076,7 +2076,7 @@ function viewPartners() {
   const P = S.partners;
   if (!P) return html`<div class="w-pagehead"><h2>Promoter servers</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
   return html`
-    <div class="w-pagehead"><h2>Promoter servers</h2><p>Promoters can have the bot in their own Discord server. It posts our patch notes, the weekly post and new gift codes there – nothing else (no moderation, no commands, no logging).</p></div>
+    <div class="w-pagehead"><h2>Promoter servers</h2><p>Promoters can have the bot in their own Discord server. It posts our patch notes, the weekly post and new gift codes there, and can show a “Report a bug” button whose reports land in our moderator channel – nothing else (no moderation, no commands, no logging).</p></div>
     ${P.ready ? '' : html`<div class="w-card w-banner warn">${icon('alert')}<div><b>Set up “Log in with Discord” first</b><div class="w-sub">The promoter link uses the same Discord app settings (Client Secret and redirect address) as the staff login.</div></div></div>`}
     <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Add a promoter</h3></div>
       <ol class="w-steps" style="margin:0 0 12px"><li>Write the promoter’s name and make their link.</li><li>Send them the link. They open it, pick their server and press “Authorise”.</li>
@@ -2099,7 +2099,8 @@ function viewPartners() {
           <span class="w-badge ${b[0]}">${b[1]}</span><span class="w-hint">${p.promoter}${p.members != null ? ' · ' + p.members.toLocaleString('en') + ' members' : ''} · added ${ago(p.added_ts)}${p.added_by ? ' by ' + p.added_by : ''}</span></div>
         ${(p.issues && p.issues.length ? p.issues : p.problem ? [p.problem] : []).map(x => html`<p class="w-hint" style="color:var(--w-bad,#ff6b7a);margin:6px 0 0">⚠️ ${x[0].toUpperCase() + x.slice(1)}. The promoter has been sent the setup message again.</p>`)}
         <div class="w-ptrow" style="margin-top:10px"><label class="w-inline"><span class="w-hint">📢 Announcements</span>${ptChannel(p, 'ann')}</label>
-          <label class="w-inline"><span class="w-hint">🎁 Gift codes</span>${ptChannel(p, 'gift')}</label></div>
+          <label class="w-inline"><span class="w-hint">🎁 Gift codes</span>${ptChannel(p, 'gift')}</label>
+          <label class="w-inline"><span class="w-hint">🐞 Bug reports</span>${ptChannel(p, 'bug')}</label>${p.reports ? html`<span class="w-hint">${p.reports} report${p.reports === 1 ? '' : 's'} from here</span>` : ''}</div>
         <div class="w-ptrow"><span class="w-hint" style="flex:1">${p.posts ? p.posts + ' post' + (p.posts === 1 ? '' : 's') + ' (' + (p.posts_30d || 0) + ' in 30 days), last ' + ago(p.last_post_ts) : 'Nothing posted yet'}${p.fails ? ' · ' + p.fails + ' failed' : ''}</span>
           <button class="w-btn small" data-act="ptTest" data-id="${p.id}" ${p.ann || p.gift ? '' : 'disabled'}>Test post</button>
           <button class="w-btn small" data-act="ptDm" data-id="${p.id}">Send setup DM again</button>
@@ -2113,12 +2114,18 @@ function viewPartners() {
 function quickBar() {
   if (isMod()) return '';
   return html`<div class="w-quick"><button class="w-btn primary" data-act="qOpen" data-k="code">${icon('gift')} New gift code</button>
-    <button class="w-btn primary" data-act="qOpen" data-k="ann">${icon('send')} New announcement</button></div>`;
+    <button class="w-btn primary" data-act="qOpen" data-k="ann">${icon('send')} New announcement</button>
+    <button class="w-btn" data-act="qOpen" data-k="ver">${icon('wrench')} Game version: <b>${S.settings.game_version || 'not set'}</b></button></div>`;
 }
 function quickModal() {
   const Q = S.quick, set = S.settings;
   const shell = (title, body) => html`<div class="w-modal" id="wmodal" data-act="modalBg"><div class="w-modal-card w-qmodal" role="dialog" aria-modal="true" aria-label="${title}">
     <div class="w-modal-head"><h3>${title}</h3><button class="w-btn small" data-act="closeModal" id="m-close">Close</button></div>${body}</div></div>`;
+  if (Q.kind === 'ver') return shell('Game version', html`
+      <div class="w-field"><label class="w-label" for="q-ver">Current game version</label>
+        <input class="w-input" id="q-ver" maxlength="30" value="${set.game_version || ''}" placeholder="e.g. V5 · 1.33.9" autocomplete="off">
+        <div class="w-hint">Filled in on new bug reports, shown on the website, and written on a bug as “fixed in” when it is marked fixed. Bugs already reported keep their version.</div></div>
+      <div class="w-actions"><button class="w-btn primary" data-act="qVer">Save version</button></div>`);
   if (Q.kind === 'code') {
     const ch = chanName(set.giftcodes_channel_id), pt = (S.queue && S.queue.partners) || 0;
     return shell('New gift code', html`
@@ -2145,12 +2152,12 @@ async function openQuick(kind) {
   showQuick();
   try {
     if (kind === 'code') S.quick.durations = (await call('GET', '/api/giftcodes')).durations;
-    else S.quick.roles = (await call('GET', '/api/roles')).roles;
+    else if (kind === 'ann') S.quick.roles = (await call('GET', '/api/roles')).roles;
   } catch (e) { /* the form still works */ }
   if (S.quick && S.quick.kind === kind) { const keep = {}; ['q-code', 'q-reward', 'q-title', 'q-text', 'q-img'].forEach(i => { const x = document.getElementById(i); if (x) keep[i] = x.value; });
     showQuick(); Object.entries(keep).forEach(([i, v]) => { const x = document.getElementById(i); if (x) x.value = v; }); }
 }
-function showQuick() { const m = $('#wmodal'); if (m) m.remove(); root.insertAdjacentHTML('beforeend', String(quickModal())); const f = $(S.quick.kind === 'code' ? '#q-code' : '#q-title'); if (f) f.focus(); }
+function showQuick() { const m = $('#wmodal'); if (m) m.remove(); root.insertAdjacentHTML('beforeend', String(quickModal())); const f = $(S.quick.kind === 'code' ? '#q-code' : S.quick.kind === 'ver' ? '#q-ver' : '#q-title'); if (f) f.focus(); }
 function viewWarnings() {
   const C = S.cases;
   if (!C) return html`<div class="w-pagehead"><h2>Warnings</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
@@ -3707,6 +3714,10 @@ root.addEventListener('click', async e => {
     else if (act === 'gameCheck') { busy(el, true, 'Checking…');
       try { const r = await call('POST', '/api/game/check'); if (S.status) S.status.game = r.game; toast(r.game && r.game.game ? 'Game server: ' + r.game.game : 'Checked.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'qOpen') openQuick(el.dataset.k);
+    else if (act === 'qVer') { const v = $('#q-ver').value.trim(); busy(el, true, 'Saving…');
+      try { const r = await call('PUT', '/api/settings', { game_version: v }); S.settings = r.settings; S.draft = Object.assign({}, r.settings);
+        closeModal(); toast(v ? 'Game version is now ' + v + '.' : 'Game version cleared.'); renderMain(); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'qCode') { const code = $('#q-code').value.trim(), dur = $('#q-dur').value;
       if (!code) { $('#q-code').focus(); return toast('Type the code first.', 'err'); } busy(el, true, 'Adding…');
       try { const r = await call('POST', '/api/giftcodes', { code, reward: $('#q-reward').value.trim(), hours: dur ? parseInt(dur, 10) : null, announce: $('#q-announce').checked });
@@ -4231,7 +4242,7 @@ function makeMock() {
     if (p.startsWith('/api/partners')) {
       const M = (window.__mockPt = window.__mockPt || { ready: true, days: 7, left: [], summary: { servers: 2, members: 2620, posts_30d: 9, attention: 1 }, invites: [{ id: 1, promoter: 'Iron Wolves', created_ts: now - 7200, created_by: 'Kasper', expires_ts: now + 6 * 86400 }],
         items: [{ id: '900000000000000001', name: 'Nordic Alliance', icon: '', members: 1840, promoter: 'Nordic Alliance', added_by: 'Freya', added_by_id: '1', added_ts: now - 5 * 86400,
-            ann: { id: '11', name: 'announcements' }, gift: { id: '12', name: 'gift-codes' }, paused: false, problem: '', status: 'ok', last_post_ts: now - 3600, posts: 14, posts_30d: 9, fails: 0, issues: [],
+            ann: { id: '11', name: 'announcements' }, gift: { id: '12', name: 'gift-codes' }, bug: { id: '13', name: 'general' }, reports: 4, paused: false, problem: '', status: 'ok', last_post_ts: now - 3600, posts: 14, posts_30d: 9, fails: 0, issues: [],
             channels: [{ id: '11', name: 'announcements' }, { id: '12', name: 'gift-codes' }, { id: '13', name: 'general' }] },
           { id: '900000000000000002', name: 'Frost Legion', icon: '', members: 420, promoter: 'Frost Legion', added_by: 'Bjorn', added_by_id: '2', added_ts: now - 3600,
             ann: null, gift: null, paused: false, problem: '', status: 'setup', last_post_ts: null, posts: 0, posts_30d: 0, fails: 0, issues: [], channels: [{ id: '21', name: 'news' }, { id: '22', name: 'chat' }] }] });

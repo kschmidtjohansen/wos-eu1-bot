@@ -112,8 +112,12 @@ def bug_embed(r, note: Optional[str] = None) -> discord.Embed:
     e = discord.Embed(title=f"Bug #{r['id']} – {store.bug_summary(r)}"[:256], description=r["text"][:4000], color=color)
     if r["extra"]:
         e.add_field(name="Attachment links", value=r["extra"], inline=False)
+    via = ""
+    if r["via_guild"]:
+        vp = store.get_partner(r["via_guild"])
+        via = f"\nvia promoter server **{(vp['name'] if vp else None) or r['via_guild']}**"
     e.add_field(name="Reporter", value=(f"<@{r['reporter_id']}>" if r["reporter_id"]
-                                        else f"{r['chief_name'] or 'Unknown'} (website)"), inline=True)
+                                        else f"{r['chief_name'] or 'Unknown'} (website)") + via, inline=True)
     e.add_field(name="Status", value=label, inline=True)
     if r["severity"]:
         e.add_field(name="Severity", value=SEVERITY[r["severity"]], inline=True)
@@ -669,7 +673,8 @@ class BugFormModal(discord.ui.Modal):
         if cfg("ticket_details_required") and len(title) < 5:
             return await interaction.response.send_message(T("form.need_title", lg), ephemeral=True)
         report = {"title": title or None, "area": (self.area.values or [None])[0], "game_version": cfg("game_version") or None,
-                  "chief_name": chief, "player_uid": uid, "text": str(self.desc.value).strip(), "files": list(self.files.values)[:4]}
+                  "chief_name": chief, "player_uid": uid, "text": str(self.desc.value).strip(), "files": list(self.files.values)[:4],
+                  "via_guild": interaction.guild_id if interaction.guild_id and interaction.guild_id != GUILD_ID else None}
         await interaction.response.defer(ephemeral=True, thinking=True)
         matches, hashes = [], []
         for att in report["files"]:
@@ -870,7 +875,8 @@ async def submit_bug(member: discord.Member, text: str, atts, details=None):
     if channel is None:
         raise NotConfigured("mod channel")
     d = {k: (details[k] if details is not None else None) for k in ("title", "area", "game_version", "chief_name", "player_uid")}
-    guild = member.guild
+    via = (details or {}).get("via_guild") if isinstance(details, dict) else None
+    guild = channel.guild if via else member.guild          # upload limit of OUR server (a report may come from a promoter's)
     small = [a for a in atts if a.size <= guild.filesize_limit]
     big = [a for a in atts if a.size > guild.filesize_limit]
     used_links = bool(big)
@@ -878,9 +884,9 @@ async def submit_bug(member: discord.Member, text: str, atts, details=None):
 
     cur = db.execute(
         "INSERT INTO bug_reports (reporter_id, text, extra, created_at, reporter_name, summary, area, "
-        "game_version, chief_name, player_uid) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "game_version, chief_name, player_uid, via_guild) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (member.id, text or "*(no text)*", extra, int(time.time()), member.display_name,
-         d["title"], d["area"], d["game_version"], d["chief_name"], d["player_uid"]),
+         d["title"], d["area"], d["game_version"], d["chief_name"], d["player_uid"], via),
     )
     db.commit()
     bug_id = cur.lastrowid
@@ -1017,6 +1023,12 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
                 reporter = await guild.fetch_member(r["reporter_id"])
             except discord.HTTPException:
                 reporter = None
+        if reporter is None and r["via_guild"]:
+            vp = store.get_partner(r["via_guild"])
+            await channel.send(f"🔍 {member.mention} This report came from the promoter server **{(vp['name'] if vp else None) or '?'}** and the "
+                               "player isn't on our server, so I can't open a ticket with them. Pass it on or reject it with a reason – "
+                               "they get a DM either way.", delete_after=40)
+            return
         # The thread must live in a channel the player can see – Discord won't add anyone to a private thread
         # in a channel they can't open (like the moderators' channel). Players' own tickets live in the report channel.
         home = channel
@@ -1663,7 +1675,7 @@ class WosBot(discord.Client):
             except Exception as exc:  # noqa: BLE001
                 print(f"[device question] {exc!r}")
         for prefix, fn, label in (("pt:", handle_partner_setup, "promoter setup"), ("spike:", handle_spike_button, "spike alert"), ("mr:", handle_msg_report_button, "message report"),
-                                  ("ap:", handle_appeal_button, "appeal"), ("dq:", handle_dev_question_button, "developer question"), ("raid:", handle_raid_button, "raid mode")):
+                                  ("ap:", handle_appeal_button, "appeal"), ("ptbug:", handle_partner_bug, "promoter bug report"), ("dq:", handle_dev_question_button, "developer question"), ("raid:", handle_raid_button, "raid mode")):
             if cid.startswith(prefix):
                 try:
                     await fn(interaction)
@@ -5984,8 +5996,9 @@ PARTNER_PAGE = 23                    # channels per page in the DM (Discord allo
 
 
 class PartnerSetupView(discord.ui.View):
-    """Sent by DM to the promoter: two channel pickers, a test button and ◀ ▶ when the server has more channels than
-    fit in one list. Persistent (custom ids carry the server id and the page)."""
+    """Sent by DM to the promoter: three channel pickers (announcements, gift codes, bug reports), a test button and ◀ ▶
+    when the server has more channels than fit in one list. Every option says which list it belongs to, so the chosen
+    channel reads "📢 Announcements → #news" and the lists can't be mixed up. Persistent (custom ids carry server + page)."""
 
     def __init__(self, g, lg=None, page: int = 0):
         super().__init__(timeout=None)
@@ -5995,28 +6008,72 @@ class PartnerSetupView(discord.ui.View):
         page = min(max(0, page), pages - 1)
         shown = chans[page * PARTNER_PAGE:(page + 1) * PARTNER_PAGE]
         cant = T("partner.cant", lg)
-        for kind, row in (("ann", 0), ("gift", 1)):
+        for kind, row in (("ann", 0), ("gift", 1), ("bug", 2)):
             cur = p[f"{kind}_channel"] if p else None
-            opts = [discord.SelectOption(label=T("partner.none", lg)[:100], value="0", emoji="🚫", default=not cur)]
+            tag = T(f"partner.{kind}_short", lg)
+            opts = [discord.SelectOption(label=f"{tag} → {T('partner.none', lg)}"[:100], value="0", default=not cur)]
             cur_ch = g.get_channel(cur) if cur else None
             if cur_ch is not None and cur_ch not in shown:
-                opts.append(discord.SelectOption(label=("#" + cur_ch.name)[:100], value=str(cur_ch.id), default=True, emoji="✅"))
+                opts.append(discord.SelectOption(label=f"{tag} → #{cur_ch.name}"[:100], value=str(cur_ch.id), default=True))
             for c in shown:
                 cat = c.category.name if getattr(c, "category", None) else ""
                 desc = (cat + (" · " if cat else "") + cant) if not partner_can_post(c, g) else cat
-                opts.append(discord.SelectOption(label=("#" + c.name)[:100], value=str(c.id), default=cur == c.id,
+                opts.append(discord.SelectOption(label=f"{tag} → #{c.name}"[:100], value=str(c.id), default=cur == c.id,
                                                  description=desc[:100] or None))
             ph = T(f"partner.{kind}", lg) + (f" ({page + 1}/{pages})" if pages > 1 else "")
             self.add_item(discord.ui.Select(placeholder=ph[:150], options=opts, row=row, custom_id=f"pt:{kind}:{g.id}:{page}"))
         self.add_item(discord.ui.Button(label=T("partner.test", lg)[:80], emoji="🧪", style=discord.ButtonStyle.secondary,
-                                        custom_id=f"pt:test:{g.id}:{page}", row=2))
+                                        custom_id=f"pt:test:{g.id}:{page}", row=3))
         if pages > 1:
             self.add_item(discord.ui.Button(emoji="◀", style=discord.ButtonStyle.secondary, disabled=page == 0,
-                                            custom_id=f"pt:page:{g.id}:{page - 1}", row=2))
+                                            custom_id=f"pt:page:{g.id}:{page - 1}", row=3))
             self.add_item(discord.ui.Button(label=f"{page + 1} / {pages}", style=discord.ButtonStyle.secondary, disabled=True,
-                                            custom_id=f"pt:noop:{g.id}:{page}", row=2))
+                                            custom_id=f"pt:noop:{g.id}:{page}", row=3))
             self.add_item(discord.ui.Button(emoji="▶", style=discord.ButtonStyle.secondary, disabled=page >= pages - 1,
-                                            custom_id=f"pt:page:{g.id}:{page + 1}", row=2))
+                                            custom_id=f"pt:page:{g.id}:{page + 1}", row=3))
+
+
+PARTNER_KIND = {"ann": "announcements", "gift": "gift codes", "bug": "bug reports"}
+
+
+async def partner_bug_panel(g):
+    """Post (or move, or remove) the "Report a bug" message in a promoter server's bug report channel."""
+    p = store.get_partner(g.id)
+    if p is None:
+        return
+    old_ch = g.get_channel(p["bug_msg_ch"]) if p["bug_msg_ch"] else None
+    if p["bug_msg"] and old_ch is not None:                   # remove the old button message first
+        try:
+            await old_ch.get_partial_message(p["bug_msg"]).delete()
+        except discord.HTTPException:
+            pass
+    if p["bug_msg"]:
+        store.save_partner(g.id, bug_msg=None, bug_msg_ch=None)
+    ch = g.get_channel(p["bug_channel"]) if p["bug_channel"] else None
+    if ch is None or p["paused"]:
+        return
+    e = discord.Embed(title=T("partner.bug_panel_title", None, home=brand())[:256],
+                      description=T("partner.bug_panel_text", None, home=brand()), color=0x7DE3F4)
+    v = discord.ui.View(timeout=None)
+    v.add_item(discord.ui.Button(label=T("form.bug_btn", None)[:80], emoji=BUG_EMOJI, style=discord.ButtonStyle.primary, custom_id=f"ptbug:{g.id}"))
+    try:
+        msg = await ch.send(embed=e, view=v)
+        store.save_partner(g.id, bug_msg=msg.id, bug_msg_ch=ch.id)
+    except discord.HTTPException as exc:
+        await partner_problem(p, f"couldn't post the bug report button in #{ch.name} ({exc.status})")
+
+
+async def handle_partner_bug(interaction: discord.Interaction):
+    """A member of a promoter server pressed "Report a bug": same form as on our own server, report lands in our mod channel."""
+    gid = int(interaction.data["custom_id"].split(":")[1])
+    lg = ilang(interaction)
+    p = store.get_partner(gid)
+    if p is None or p["left_ts"] or p["paused"] or not p["bug_channel"] or interaction.guild_id != gid:
+        return await interaction.response.send_message(T("partner.bug_off", lg), ephemeral=True)
+    why = report_gate(interaction.user, "bug", lg)
+    if why:
+        return await interaction.response.send_message(_cap(why), ephemeral=True)
+    await interaction.response.send_modal(BugFormModal(lg, store.get_link(interaction.user.id)))
 
 
 def partner_setup_text(g, lg=None) -> str:
@@ -6064,20 +6121,23 @@ async def handle_partner_setup(interaction: discord.Interaction):
         return await interaction.response.edit_message(view=PartnerSetupView(g, lg, page))
     if what == "noop":
         return await interaction.response.defer()
-    if what in ("ann", "gift"):
+    if what in ("ann", "gift", "bug"):
         val = int((interaction.data.get("values") or ["0"])[0])
         ch = g.get_channel(val) if val else None
         if val and (ch is None or not (ch.permissions_for(g.me).send_messages and ch.permissions_for(g.me).embed_links)):
             return await interaction.response.send_message(T("partner.no_perm", lg, where="#" + (ch.name if ch else "?")), ephemeral=True)
         p = store.save_partner(g.id, **{f"{what}_channel": val or None, "problem": None, "problem_ts": None})
-        log_event("admin", f"Promoter server {g.name}: {'announcements' if what == 'ann' else 'gift codes'} → "
+        log_event("admin", f"Promoter server {g.name}: {PARTNER_KIND[what]} → "
                   f"{'#' + ch.name if ch else 'off'} (by {interaction.user.display_name})", interaction.user.id, interaction.user.display_name)
         name = lambda cid: "#" + g.get_channel(cid).name if cid and g.get_channel(cid) else "–"  # noqa: E731
         try:
             await interaction.response.edit_message(view=PartnerSetupView(g, lg, page))
         except discord.HTTPException:
             await interaction.response.defer()
-        await interaction.followup.send(T("partner.saved", lg, ann=name(p["ann_channel"]), gift=name(p["gift_channel"])), ephemeral=False)
+        await interaction.followup.send(T("partner.saved", lg, ann=name(p["ann_channel"]), gift=name(p["gift_channel"]),
+                                          bug=name(p["bug_channel"])), ephemeral=False)
+        if what == "bug":
+            await partner_bug_panel(g)
         if what == "gift" and ch is not None:
             asyncio.create_task(safe_task(partner_backfill_codes(g.id), "promoter codes"))
         return
@@ -6123,7 +6183,7 @@ def partner_issues(p, g=None) -> list:
     if g is None or p["paused"]:
         return []
     out = []
-    for kind, label in (("ann", "announcements"), ("gift", "gift codes")):
+    for kind, label in PARTNER_KIND.items():
         cid = p[f"{kind}_channel"]
         if not cid:
             continue
@@ -6286,14 +6346,14 @@ async def partner_remove(guild_id: int, by: str) -> bool:
     return True
 
 
-async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str = "Dashboard") -> dict:
-    """Change a promoter server from the dashboard. ann / gift: channel id, 0 = off, None = unchanged."""
+async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str = "Dashboard", bug=None) -> dict:
+    """Change a promoter server from the dashboard. ann / gift / bug: channel id, 0 = off, None = unchanged."""
     g = bot.get_guild(guild_id)
     p = store.get_partner(guild_id)
     if p is None:
         raise ValueError("Unknown server.")
     upd = {}
-    for k, v in (("ann_channel", ann), ("gift_channel", gift)):
+    for k, v in (("ann_channel", ann), ("gift_channel", gift), ("bug_channel", bug)):
         if v is None:
             continue
         if v and (g is None or g.get_channel(int(v)) is None):
@@ -6307,6 +6367,8 @@ async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str =
         log_event("admin", f"Promoter server {p['name']} changed by {by}", None, by)
         if upd.get("gift_channel"):
             asyncio.create_task(safe_task(partner_backfill_codes(guild_id), "promoter codes"))
+        if "bug_channel" in upd and g is not None:
+            await partner_bug_panel(g)
     return partner_info(store.get_partner(guild_id))
 
 
@@ -6320,7 +6382,8 @@ def partner_info(p) -> dict:
     return {"id": str(p["guild_id"]), "name": (g.name if g else p["name"]) or "?", "icon": (str(g.icon.url) if g and g.icon else p["icon"]) or "",
             "members": g.member_count if g else None, "promoter": p["promoter"] or "", "added_by": p["added_name"] or "",
             "added_by_id": str(p["added_by"]) if p["added_by"] else None, "added_ts": p["added_ts"],
-            "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "paused": bool(p["paused"]), "problem": p["problem"] or "",
+            "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "bug": ch(p["bug_channel"]),
+            "reports": store.db.execute("SELECT COUNT(*) FROM bug_reports WHERE via_guild=?", (p["guild_id"],)).fetchone()[0], "paused": bool(p["paused"]), "problem": p["problem"] or "",
             "status": status, "last_post_ts": p["last_post_ts"], "posts": p["posts"],
             "posts_30d": store.partner_posts_since(p["guild_id"], int(time.time()) - 30 * 86400), "fails": p["fails"] or 0,
             "issues": issues,
