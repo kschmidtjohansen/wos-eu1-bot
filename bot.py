@@ -341,6 +341,24 @@ def _cap(s: str) -> str:
     return s[:1].upper() + s[1:]
 
 
+async def allow_thread_talk(channel, member) -> bool:
+    """Threads take their permissions from the channel they're in. In a read-only report channel players can't write in
+    their own ticket unless the channel allows "Send Messages in Threads". Turn that on for everyone (they still can't
+    write in the channel itself, can't start threads, and only see private threads they were added to)."""
+    try:
+        if channel.permissions_for(member).send_messages_in_threads:
+            return True
+        everyone = channel.guild.default_role
+        ow = channel.overwrites_for(everyone)
+        ow.send_messages_in_threads = True
+        await channel.set_permissions(everyone, overwrite=ow, reason="Players must be able to write in their bug tickets")
+        log_event("system", f"Allowed “Send Messages in Threads” in #{channel.name} so players can write in their tickets", None, brand())
+        return channel.permissions_for(member).send_messages_in_threads
+    except (discord.HTTPException, AttributeError, TypeError) as exc:
+        print(f"[ticket perms] {exc!r}")
+        return False
+
+
 async def open_ticket(member: discord.Member, channel: discord.TextChannel, kind: str = "bug"):
     lg = lang_for(member.id)
 
@@ -360,6 +378,7 @@ async def open_ticket(member: discord.Member, channel: discord.TextChannel, kind
         invitable=False, auto_archive_duration=1440,
     )
     await thread.add_user(member)
+    await allow_thread_talk(channel, member)
     db.execute("INSERT INTO tickets (thread_id, user_id, kind) VALUES (?,?,?)", (thread.id, member.id, kind))
     db.commit()
     log_event("ticket", f"{member.display_name} opened a {kind} ticket", member.id, member.display_name)
@@ -1052,6 +1071,10 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
             except discord.HTTPException as exc:
                 print(f"[ticket] could not add {reporter.id} to {thread.id}: {exc!r}")
         mention = reporter.mention if reporter else f"<@{r['reporter_id']}> (left the server)"
+        if reporter and added and not await allow_thread_talk(home, reporter):
+            await channel.send(f"⚠️ {member.mention} {reporter.display_name} can read {thread.mention} but not write in it. Give @everyone "
+                               f"“Send Messages in Threads” in #{home.name} (Edit channel → Permissions), or give me “Manage Roles” "
+                               "there so I can do it myself.", delete_after=300)
         if reporter and not added:
             await channel.send(f"⚠️ {member.mention} I opened {thread.mention} but couldn't add {reporter.display_name} to it.",
                                delete_after=60)
