@@ -6049,12 +6049,14 @@ class PartnerSetupView(discord.ui.View):
                                                  description=desc[:100] or None))
             ph = T(f"partner.{kind}", lg) + (f" ({page + 1}/{pages})" if pages > 1 else "")
             self.add_item(discord.ui.Select(placeholder=ph[:150], options=opts, row=row, custom_id=f"pt:{kind}:{g.id}:{page}"))
-        ping = (p["gift_ping"] if p else None) or ""
-        tag = T("partner.ping_short", lg)
-        self.add_item(discord.ui.Select(placeholder=T("partner.ping", lg)[:150], row=3, custom_id=f"pt:ping:{g.id}:{page}", options=[
-            discord.SelectOption(label=f"{tag} → {T('partner.ping_none', lg)}"[:100], value="none", default=ping == ""),
-            discord.SelectOption(label=f"{tag} → @everyone"[:100], value="everyone", default=ping == "everyone"),
-            discord.SelectOption(label=f"{tag} → {T('partner.ping_here', lg)}"[:100], value="here", default=ping == "here")]))
+        opts = []
+        for kind in ("ann", "gift"):
+            cur = (p[f"{kind}_ping"] if p else None) or ""
+            for who, label in (("everyone", "@everyone"), ("here", T("partner.ping_here", lg))):
+                opts.append(discord.SelectOption(label=f"{T(f'partner.{kind}_short', lg)} → {T('partner.ping_tag', lg, who=label)}"[:100],
+                                                 value=f"{kind}:{who}", default=cur == who))
+        self.add_item(discord.ui.Select(placeholder=T("partner.ping", lg)[:150], row=3, custom_id=f"pt:ping:{g.id}:{page}",
+                                        options=opts, min_values=0, max_values=len(opts)))
         self.add_item(discord.ui.Button(label=T("partner.test", lg)[:80], emoji="🧪", style=discord.ButtonStyle.secondary,
                                         custom_id=f"pt:test:{g.id}:{page}", row=4))
         if pages > 1:
@@ -6155,16 +6157,19 @@ async def handle_partner_setup(interaction: discord.Interaction):
     if what == "noop":
         return await interaction.response.defer()
     if what == "ping":
-        val = (interaction.data.get("values") or ["none"])[0]
-        val = val if val in ("everyone", "here") else ""
-        store.save_partner(g.id, gift_ping=val or None)
-        log_event("admin", f"Promoter server {g.name}: new gift codes tag {('@' + val) if val else 'nobody'}", interaction.user.id,
-                  interaction.user.display_name)
+        picked = set(interaction.data.get("values") or [])
+        upd = {}
+        for kind in ("ann", "gift"):                      # @everyone wins if both were ticked for the same kind
+            upd[f"{kind}_ping"] = "everyone" if f"{kind}:everyone" in picked else "here" if f"{kind}:here" in picked else None
+        store.save_partner(g.id, **upd)
+        log_event("admin", f"Promoter server {g.name}: tags – announcements {('@' + upd['ann_ping']) if upd['ann_ping'] else 'nobody'}, "
+                  f"gift codes {('@' + upd['gift_ping']) if upd['gift_ping'] else 'nobody'}", interaction.user.id, interaction.user.display_name)
         await interaction.response.edit_message(view=PartnerSetupView(g, lg, page))
         p = store.get_partner(g.id)
-        ch = g.get_channel(p["gift_channel"]) if p["gift_channel"] else None
-        if val and ch is not None and not ch.permissions_for(g.me).mention_everyone:
-            await interaction.followup.send(T("partner.ping_noperm", lg, who="@" + val, channel=ch.name))
+        for kind in ("ann", "gift"):
+            ch = g.get_channel(p[f"{kind}_channel"]) if p[f"{kind}_channel"] else None
+            if p[f"{kind}_ping"] and ch is not None and not ch.permissions_for(g.me).mention_everyone:
+                await interaction.followup.send(T("partner.ping_noperm", lg, who="@" + p[f"{kind}_ping"], channel=ch.name))
         return
     if what in ("ann", "gift", "bug"):
         val = int((interaction.data.get("values") or ["0"])[0])
@@ -6237,8 +6242,8 @@ def partner_issues(p, g=None) -> list:
             out.append(f"the {label} channel no longer exists")
         elif not partner_can_post(ch, g):
             out.append(f"no permission to post in #{ch.name}")
-        elif kind == "gift" and p["gift_ping"] and not ch.permissions_for(g.me).mention_everyone:
-            out.append(f"no permission to tag @{p['gift_ping']} in #{ch.name} (Mention @everyone, @here and All Roles)")
+        elif kind in ("ann", "gift") and p[f"{kind}_ping"] and not ch.permissions_for(g.me).mention_everyone:
+            out.append(f"no permission to tag @{p[kind + '_ping']} in #{ch.name} (Mention @everyone, @here and All Roles)")
     return out
 
 
@@ -6270,9 +6275,9 @@ async def partner_send(kind: str, build, ref=None) -> int:
         try:
             kw = build(g)
             kw.setdefault("allowed_mentions", discord.AllowedMentions.none())
-            ping = p["gift_ping"] if kind == "gift" else None
-            if ping and kw.get("content") is not None and ch.permissions_for(g.me).mention_everyone:
-                kw["content"] = f"@{ping} " + kw["content"]
+            ping = p[f"{kind}_ping"] if kind in ("ann", "gift") else None
+            if ping and ch.permissions_for(g.me).mention_everyone:
+                kw["content"] = f"@{ping}" + (" " + kw["content"] if kw.get("content") else "")
                 kw["allowed_mentions"] = discord.AllowedMentions(everyone=True)
             msg = await ch.send(**kw)
             store.partner_post_add(g.id, ch.id, msg.id, kind, ref)
@@ -6476,7 +6481,7 @@ async def partner_remove(guild_id: int, by: str) -> bool:
     return True
 
 
-async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str = "Dashboard", bug=None, ping=None) -> dict:
+async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str = "Dashboard", bug=None, ping=None, ann_ping=None) -> dict:
     """Change a promoter server from the dashboard. ann / gift / bug: channel id, 0 = off, None = unchanged."""
     g = bot.get_guild(guild_id)
     p = store.get_partner(guild_id)
@@ -6485,6 +6490,8 @@ async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str =
     upd = {}
     if ping is not None:
         upd["gift_ping"] = ping if ping in ("everyone", "here") else None
+    if ann_ping is not None:
+        upd["ann_ping"] = ann_ping if ann_ping in ("everyone", "here") else None
     for k, v in (("ann_channel", ann), ("gift_channel", gift), ("bug_channel", bug)):
         if v is None:
             continue
@@ -6514,7 +6521,7 @@ def partner_info(p) -> dict:
     return {"id": str(p["guild_id"]), "name": (g.name if g else p["name"]) or "?", "icon": (str(g.icon.url) if g and g.icon else p["icon"]) or "",
             "members": g.member_count if g else None, "promoter": p["promoter"] or "", "added_by": p["added_name"] or "",
             "added_by_id": str(p["added_by"]) if p["added_by"] else None, "added_ts": p["added_ts"],
-            "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "bug": ch(p["bug_channel"]), "ping": p["gift_ping"] or "",
+            "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "bug": ch(p["bug_channel"]), "ping": p["gift_ping"] or "", "ann_ping": p["ann_ping"] or "",
             "reports": store.db.execute("SELECT COUNT(*) FROM bug_reports WHERE via_guild=?", (p["guild_id"],)).fetchone()[0], "paused": bool(p["paused"]), "problem": p["problem"] or "",
             "status": status, "last_post_ts": p["last_post_ts"], "posts": p["posts"],
             "posts_30d": store.partner_posts_since(p["guild_id"], int(time.time()) - 30 * 86400), "fails": p["fails"] or 0,
