@@ -489,6 +489,7 @@ SCHEMA = {
     "report_style": {"type": "choice", "default": "form", "choices": ["form", "ticket"]},
     "info_remind_hours": {"type": "int", "default": 48, "min": 0, "max": 720},
     "info_close_hours": {"type": "int", "default": 72, "min": 0, "max": 720},
+    "ticket_delete_hours": {"type": "int", "default": 4, "min": 0, "max": 168},
     "default_language": {"type": "text", "default": "en", "min": 2, "max": 10},
     "drive_enabled": {"type": "bool", "default": True},
     "drive_every_days": {"type": "int", "default": 7, "min": 1, "max": 30},

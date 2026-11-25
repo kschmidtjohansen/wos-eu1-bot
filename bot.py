@@ -1081,7 +1081,8 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
         await thread.send(T("info.ticket", lang_for(r["reporter_id"]), id=r["id"], mod=member.mention, player=mention,
                             link=msg.jump_url))
         await thread.send("-# Moderators: type `/closebug` here when you're done – the conversation and pictures are saved "
-                          "with the bug and it goes back to the moderators.", allowed_mentions=discord.AllowedMentions.none())
+                          "with the bug, it goes back to the moderators and this thread is deleted a few hours later.",
+                          allowed_mentions=discord.AllowedMentions.none())
         set_bug(r["id"], status="investigating", ticket_thread_id=thread.id)
         record_action("bug", r["id"], "investigating", member.id, who)
         r = get_bug(r["id"])
@@ -2125,13 +2126,52 @@ async def close_info_ticket(r, closer, note: str = "") -> dict:
             await ch.get_partial_message(r["msg_id"]).edit(embed=bug_embed(r, f"Ticket closed by {who} – waiting for a moderator"))
         except discord.HTTPException:
             pass
+    hours = int(cfg("ticket_delete_hours") or 0)
+    lg = lang_for(r["reporter_id"])
+    when = int(time.time()) + hours * 3600
     try:
-        await thread.send(T("info.closed_by", lang_for(r["reporter_id"]), mod=who, id=r["id"]))
+        await thread.send(T("info.closed_by", lg, mod=who, id=r["id"]) + (("\n-# " + T("info.deleting", lg, relative=f"<t:{when}:R>")) if hours else ""))
         await thread.edit(archived=True, locked=True)
     except discord.HTTPException:
         pass
+    if hours:                                      # everything is saved with the bug – the thread itself can go
+        due = _ticket_deletes()
+        due[str(thread.id)] = when
+        put_raw("ticket_deletes", json.dumps(due))
     await safe_refresh_board()
     return {"messages": n_msgs, "files": len(files)}
+
+
+def _ticket_deletes() -> dict:
+    try:
+        return json.loads(get_raw("ticket_deletes") or "{}")
+    except ValueError:
+        return {}
+
+
+async def delete_closed_tickets(now=None) -> int:
+    """Delete ticket threads closed with /closebug once their time is up (Settings: 'Delete closed tickets after')."""
+    due, now, n = _ticket_deletes(), now or time.time(), 0
+    if not due:
+        return 0
+    for tid, ts in list(due.items()):
+        if ts > now:
+            continue
+        try:
+            th = bot.get_channel(int(tid)) or await bot.fetch_channel(int(tid))
+            await th.delete()
+            n += 1
+        except discord.NotFound:
+            pass                                    # already gone
+        except discord.HTTPException as exc:
+            if ts > now - 7 * 86400:                # keep trying for a week (e.g. missing permission), then give up
+                print(f"[ticket delete] {tid}: {exc!r}")
+                continue
+        due.pop(tid, None)
+    put_raw("ticket_deletes", json.dumps(due))
+    if n:
+        log_event("system", f"Deleted {n} closed ticket thread{'s' if n != 1 else ''} (saved with their bugs)", None, brand())
+    return n
 
 
 @bot.tree.command(name="closebug", description="Close a bug's ticket: save the conversation and pictures with the report (moderators)",
@@ -7357,6 +7397,10 @@ async def reminder_loop():
         await partner_check()
     except Exception as exc:  # noqa: BLE001
         print(f"[promoter check] {exc!r}")
+    try:
+        await delete_closed_tickets()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[ticket delete] {exc!r}")
 
 
 @reminder_loop.before_loop

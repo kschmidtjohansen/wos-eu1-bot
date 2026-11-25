@@ -134,6 +134,7 @@ _EN = [
     ("info.ticket", "Info ticket", "🎫 **Ticket for bug #{id}** – {mod} needs more information.\n{player}, please answer the moderator's questions here.\nOriginal report: {link}"),
     ("info.reminder", "Info ticket", "⏰ {player}, a moderator is still waiting for your answer about bug #{id}. This ticket closes in {hours} hours if nobody replies."),
     ("info.closed_by", "Info ticket", "🔒 {mod} closed this ticket. Thanks for your help! Everything here was saved with bug #{id}, and the moderators take it from here."),
+    ("info.deleting", "Info ticket", "This thread will be deleted {relative}."),
     ("info.closed", "Info ticket", "🔒 This ticket was closed because there was no answer. Bug #{id} goes back to the moderators – you can always send a new report."),
     ("dm.info_reminder", "Direct messages", "⏰ A moderator is still waiting for your answer about bug report **#{id}**. Please reply in your ticket: {link}"),
     # direct messages
@@ -379,6 +380,7 @@ _PL = {
     "info.ticket": "🎫 **Ticket dla błędu #{id}** – {mod} potrzebuje więcej informacji.\n{player}, odpowiedz tutaj na pytania moderatora.\nOryginalne zgłoszenie: {link}",
     "info.reminder": "⏰ {player}, moderator wciąż czeka na Twoją odpowiedź w sprawie błędu #{id}. Ten ticket zamknie się za {hours} godz., jeśli nikt nie odpowie.",
     "info.closed_by": "🔒 {mod} zamknął to zgłoszenie. Dziękujemy za pomoc! Wszystko tutaj zostało zapisane przy błędzie #{id}, a moderatorzy zajmą się resztą.",
+    "info.deleting": "Ten wątek zostanie usunięty {relative}.",
     "info.closed": "🔒 Ten ticket został zamknięty z powodu braku odpowiedzi. Błąd #{id} wraca do moderatorów – zawsze możesz wysłać nowe zgłoszenie.",
     "dm.info_reminder": "⏰ Moderator wciąż czeka na Twoją odpowiedź w sprawie zgłoszenia **#{id}**. Odpowiedz w swoim tickecie: {link}",
     "dm.passed": "✅ Twoje zgłoszenie **#{id}** zostało przyjęte i przekazane administratorom. Dziękujemy!",
