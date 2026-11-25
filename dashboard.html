@@ -2100,7 +2100,9 @@ function viewPartners() {
         ${(p.issues && p.issues.length ? p.issues : p.problem ? [p.problem] : []).map(x => html`<p class="w-hint" style="color:var(--w-bad,#ff6b7a);margin:6px 0 0">⚠️ ${x[0].toUpperCase() + x.slice(1)}. The promoter has been sent the setup message again.</p>`)}
         <div class="w-ptrow" style="margin-top:10px"><label class="w-inline"><span class="w-hint">📢 Announcements</span>${ptChannel(p, 'ann')}</label>
           <label class="w-inline"><span class="w-hint">🎁 Gift codes</span>${ptChannel(p, 'gift')}</label>
-          <label class="w-inline"><span class="w-hint">🐞 Bug reports</span>${ptChannel(p, 'bug')}</label>${p.reports ? html`<span class="w-hint">${p.reports} report${p.reports === 1 ? '' : 's'} from here</span>` : ''}</div>
+          <label class="w-inline"><span class="w-hint">🐞 Bug reports</span>${ptChannel(p, 'bug')}</label>
+          <label class="w-inline"><span class="w-hint">🔔 New codes tag</span><select class="w-select" data-pt="ping" data-id="${p.id}" aria-label="Tag for new gift codes in ${p.name}" style="width:auto">
+            ${[['', 'Nobody'], ['everyone', '@everyone'], ['here', '@here']].map(o => html`<option value="${o[0]}" ${(p.ping || '') === o[0] ? 'selected' : ''}>${o[1]}</option>`)}</select></label>${p.reports ? html`<span class="w-hint">${p.reports} report${p.reports === 1 ? '' : 's'} from here</span>` : ''}</div>
         <div class="w-ptrow"><span class="w-hint" style="flex:1">${p.posts ? p.posts + ' post' + (p.posts === 1 ? '' : 's') + ' (' + (p.posts_30d || 0) + ' in 30 days), last ' + ago(p.last_post_ts) : 'Nothing posted yet'}${p.fails ? ' · ' + p.fails + ' failed' : ''}</span>
           <button class="w-btn small" data-act="ptTest" data-id="${p.id}" ${p.ann || p.gift ? '' : 'disabled'}>Test post</button>
           <button class="w-btn small" data-act="ptDm" data-id="${p.id}">Send setup DM again</button>
@@ -4242,7 +4244,7 @@ function makeMock() {
     if (p.startsWith('/api/partners')) {
       const M = (window.__mockPt = window.__mockPt || { ready: true, days: 7, left: [], summary: { servers: 2, members: 2620, posts_30d: 9, attention: 1 }, invites: [{ id: 1, promoter: 'Iron Wolves', created_ts: now - 7200, created_by: 'Kasper', expires_ts: now + 6 * 86400 }],
         items: [{ id: '900000000000000001', name: 'Nordic Alliance', icon: '', members: 1840, promoter: 'Nordic Alliance', added_by: 'Freya', added_by_id: '1', added_ts: now - 5 * 86400,
-            ann: { id: '11', name: 'announcements' }, gift: { id: '12', name: 'gift-codes' }, bug: { id: '13', name: 'general' }, reports: 4, paused: false, problem: '', status: 'ok', last_post_ts: now - 3600, posts: 14, posts_30d: 9, fails: 0, issues: [],
+            ann: { id: '11', name: 'announcements' }, gift: { id: '12', name: 'gift-codes' }, bug: { id: '13', name: 'general' }, reports: 4, ping: 'everyone', paused: false, problem: '', status: 'ok', last_post_ts: now - 3600, posts: 14, posts_30d: 9, fails: 0, issues: [],
             channels: [{ id: '11', name: 'announcements' }, { id: '12', name: 'gift-codes' }, { id: '13', name: 'general' }] },
           { id: '900000000000000002', name: 'Frost Legion', icon: '', members: 420, promoter: 'Frost Legion', added_by: 'Bjorn', added_by_id: '2', added_ts: now - 3600,
             ann: null, gift: null, paused: false, problem: '', status: 'setup', last_post_ts: null, posts: 0, posts_30d: 0, fails: 0, issues: [], channels: [{ id: '21', name: 'news' }, { id: '22', name: 'chat' }] }] });

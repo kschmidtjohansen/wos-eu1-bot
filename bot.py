@@ -3011,6 +3011,10 @@ async def safe_refresh_gift_list():
         await refresh_gift_list()
     except Exception as exc:  # noqa: BLE001 – never break adding/removing codes over the list
         print(f"[gift list] {exc!r}")
+    try:
+        await partner_lists()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[promoter lists] {exc!r}")
 
 
 def codes_embed(lang: Optional[str] = None, uid: Optional[str] = None) -> discord.Embed:
@@ -5981,7 +5985,7 @@ async def lift_temp_bans(now: Optional[int] = None) -> int:
 # A promoter adds the bot to their own server with a personal link from the dashboard. The bot DMs them two pickers
 # (announcements channel, gift-codes channel) and then copies our patch notes, weekly post and new gift codes there.
 # Nothing else runs in those servers – no moderation, welcome, logging or commands.
-PARTNER_PERMS = 379904           # View Channel, Send Messages, Embed Links, Attach Files, Read History, External Emojis
+PARTNER_PERMS = 510976           # View Channel, Send Messages, Embed Links, Attach Files, Read History, Mention Everyone, External Emojis
 PARTNER_GRACE = 180              # seconds a server may wait for its link to be confirmed before the bot leaves
 _partner_claims: dict = {}       # guild_id -> (promoter, user_id) from the add link, waiting for on_guild_join
 
@@ -6045,15 +6049,21 @@ class PartnerSetupView(discord.ui.View):
                                                  description=desc[:100] or None))
             ph = T(f"partner.{kind}", lg) + (f" ({page + 1}/{pages})" if pages > 1 else "")
             self.add_item(discord.ui.Select(placeholder=ph[:150], options=opts, row=row, custom_id=f"pt:{kind}:{g.id}:{page}"))
+        ping = (p["gift_ping"] if p else None) or ""
+        tag = T("partner.ping_short", lg)
+        self.add_item(discord.ui.Select(placeholder=T("partner.ping", lg)[:150], row=3, custom_id=f"pt:ping:{g.id}:{page}", options=[
+            discord.SelectOption(label=f"{tag} → {T('partner.ping_none', lg)}"[:100], value="none", default=ping == ""),
+            discord.SelectOption(label=f"{tag} → @everyone"[:100], value="everyone", default=ping == "everyone"),
+            discord.SelectOption(label=f"{tag} → {T('partner.ping_here', lg)}"[:100], value="here", default=ping == "here")]))
         self.add_item(discord.ui.Button(label=T("partner.test", lg)[:80], emoji="🧪", style=discord.ButtonStyle.secondary,
-                                        custom_id=f"pt:test:{g.id}:{page}", row=3))
+                                        custom_id=f"pt:test:{g.id}:{page}", row=4))
         if pages > 1:
             self.add_item(discord.ui.Button(emoji="◀", style=discord.ButtonStyle.secondary, disabled=page == 0,
-                                            custom_id=f"pt:page:{g.id}:{page - 1}", row=3))
+                                            custom_id=f"pt:page:{g.id}:{page - 1}", row=4))
             self.add_item(discord.ui.Button(label=f"{page + 1} / {pages}", style=discord.ButtonStyle.secondary, disabled=True,
-                                            custom_id=f"pt:noop:{g.id}:{page}", row=3))
+                                            custom_id=f"pt:noop:{g.id}:{page}", row=4))
             self.add_item(discord.ui.Button(emoji="▶", style=discord.ButtonStyle.secondary, disabled=page >= pages - 1,
-                                            custom_id=f"pt:page:{g.id}:{page + 1}", row=3))
+                                            custom_id=f"pt:page:{g.id}:{page + 1}", row=4))
 
 
 PARTNER_KIND = {"ann": "announcements", "gift": "gift codes", "bug": "bug reports"}
@@ -6144,6 +6154,18 @@ async def handle_partner_setup(interaction: discord.Interaction):
         return await interaction.response.edit_message(view=PartnerSetupView(g, lg, page))
     if what == "noop":
         return await interaction.response.defer()
+    if what == "ping":
+        val = (interaction.data.get("values") or ["none"])[0]
+        val = val if val in ("everyone", "here") else ""
+        store.save_partner(g.id, gift_ping=val or None)
+        log_event("admin", f"Promoter server {g.name}: new gift codes tag {('@' + val) if val else 'nobody'}", interaction.user.id,
+                  interaction.user.display_name)
+        await interaction.response.edit_message(view=PartnerSetupView(g, lg, page))
+        p = store.get_partner(g.id)
+        ch = g.get_channel(p["gift_channel"]) if p["gift_channel"] else None
+        if val and ch is not None and not ch.permissions_for(g.me).mention_everyone:
+            await interaction.followup.send(T("partner.ping_noperm", lg, who="@" + val, channel=ch.name))
+        return
     if what in ("ann", "gift", "bug"):
         val = int((interaction.data.get("values") or ["0"])[0])
         ch = g.get_channel(val) if val else None
@@ -6215,6 +6237,8 @@ def partner_issues(p, g=None) -> list:
             out.append(f"the {label} channel no longer exists")
         elif not partner_can_post(ch, g):
             out.append(f"no permission to post in #{ch.name}")
+        elif kind == "gift" and p["gift_ping"] and not ch.permissions_for(g.me).mention_everyone:
+            out.append(f"no permission to tag @{p['gift_ping']} in #{ch.name} (Mention @everyone, @here and All Roles)")
     return out
 
 
@@ -6244,7 +6268,13 @@ async def partner_send(kind: str, build, ref=None) -> int:
             await partner_problem(p, "the chosen channel no longer exists")
             continue
         try:
-            msg = await ch.send(**build(g), allowed_mentions=discord.AllowedMentions.none())
+            kw = build(g)
+            kw.setdefault("allowed_mentions", discord.AllowedMentions.none())
+            ping = p["gift_ping"] if kind == "gift" else None
+            if ping and kw.get("content") is not None and ch.permissions_for(g.me).mention_everyone:
+                kw["content"] = f"@{ping} " + kw["content"]
+                kw["allowed_mentions"] = discord.AllowedMentions(everyone=True)
+            msg = await ch.send(**kw)
             store.partner_post_add(g.id, ch.id, msg.id, kind, ref)
             n += 1
         except discord.Forbidden:
@@ -6255,7 +6285,7 @@ async def partner_send(kind: str, build, ref=None) -> int:
 
 
 async def partner_codes(rows) -> int:
-    """New gift codes → promoter servers (the same text and 📋 Copy button, without our role ping)."""
+    """New gift codes → promoter servers (the same text and 📋 Copy button; tagged as each promoter chose)."""
     if not rows:
         return 0
     ids = [r["id"] for r in rows]
@@ -6268,12 +6298,89 @@ async def partner_codes(rows) -> int:
     return total
 
 
+async def partner_list(p, parts=None) -> bool:
+    """Keep the same self-updating "Active gift codes" list as ours in a promoter's gift-codes channel."""
+    g = bot.get_guild(p["guild_id"])
+    ch = g.get_channel(p["gift_channel"]) if g and p["gift_channel"] and not p["paused"] else None
+    try:
+        ids = [int(x) for x in json.loads(p["list_msgs"] or "[]")]
+    except ValueError:
+        ids = []
+    if ch is None:
+        return False
+    parts = parts or gift_list_parts()
+    sig = f"{ch.id}:" + hashlib.sha1(json.dumps([parts, site_url()]).encode()).hexdigest()
+    if ids and len(ids) == len(parts) and p["list_sig"] == sig:
+        return False
+    old_ch = (p["list_sig"] or "").split(":")[0]
+    if ids and old_ch != str(ch.id):                              # the promoter picked another channel: remove the old list
+        oc = g.get_channel(int(old_ch)) if old_ch.isdigit() else None
+        for mid in ids:
+            try:
+                if oc is not None:
+                    await oc.get_partial_message(mid).delete()
+            except discord.HTTPException:
+                pass
+        ids = []
+    first = not ids
+    new_ids = []
+    try:
+        for n, part in enumerate(parts):
+            view = GiftListView() if n == len(parts) - 1 else None
+            mid = ids[n] if n < len(ids) else None
+            if mid:
+                try:
+                    await ch.get_partial_message(mid).edit(content=part, view=view, allowed_mentions=discord.AllowedMentions.none())
+                    new_ids.append(mid)
+                    continue
+                except discord.NotFound:
+                    pass
+            msg = await ch.send(content=part, view=view, allowed_mentions=discord.AllowedMentions.none())
+            new_ids.append(msg.id)
+        for mid in ids[len(parts):]:
+            try:
+                await ch.get_partial_message(mid).delete()
+            except discord.HTTPException:
+                pass
+    except discord.Forbidden:
+        await partner_problem(p, f"no permission to post in #{ch.name}")
+        return False
+    store.save_partner(p["guild_id"], list_msgs=json.dumps(new_ids), list_sig=sig)
+    if first:                                     # the list replaces the old one-post-per-code messages for codes it shows
+        listed = {r["id"] for r in list_rows()}
+        for pp in store.partner_gift_posts():
+            refs = json.loads(pp["ref"] or "[]")
+            if pp["guild_id"] == p["guild_id"] and refs and all(i in listed for i in refs):
+                try:
+                    await ch.get_partial_message(pp["message_id"]).delete()
+                except discord.HTTPException:
+                    pass
+                store.partner_post_drop(pp["id"])
+    return True
+
+
+async def partner_lists() -> int:
+    parts, n = gift_list_parts(), 0
+    for p in store.partners(active_only=True):
+        if p["gift_channel"] and not p["paused"]:
+            try:
+                n += await partner_list(p, parts)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[promoter list] {p['guild_id']}: {exc!r}")
+    return n
+
+
 async def partner_backfill_codes(guild_id: int):
-    """A promoter just picked a gift-codes channel: post the codes that are active right now, once."""
+    """A promoter just picked a gift-codes channel: the self-updating list, plus the codes still in their 'new' post."""
     p = store.get_partner(guild_id)
-    if p is None or not p["gift_channel"] or db.execute("SELECT 1 FROM partner_posts WHERE guild_id=? AND kind='gift'", (guild_id,)).fetchone():
+    if p is None or not p["gift_channel"]:
         return
-    rows = store.active_gift_codes()
+    await partner_list(p)
+    p = store.get_partner(guild_id)
+    if db.execute("SELECT 1 FROM partner_posts WHERE guild_id=? AND kind='gift'", (guild_id,)).fetchone():
+        return
+    listed = {r["id"] for r in list_rows()}
+    rows = [r for r in store.active_gift_codes() if r["id"] not in listed]
     if not rows:
         return
     g = bot.get_guild(guild_id)
@@ -6369,13 +6476,15 @@ async def partner_remove(guild_id: int, by: str) -> bool:
     return True
 
 
-async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str = "Dashboard", bug=None) -> dict:
+async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str = "Dashboard", bug=None, ping=None) -> dict:
     """Change a promoter server from the dashboard. ann / gift / bug: channel id, 0 = off, None = unchanged."""
     g = bot.get_guild(guild_id)
     p = store.get_partner(guild_id)
     if p is None:
         raise ValueError("Unknown server.")
     upd = {}
+    if ping is not None:
+        upd["gift_ping"] = ping if ping in ("everyone", "here") else None
     for k, v in (("ann_channel", ann), ("gift_channel", gift), ("bug_channel", bug)):
         if v is None:
             continue
@@ -6405,7 +6514,7 @@ def partner_info(p) -> dict:
     return {"id": str(p["guild_id"]), "name": (g.name if g else p["name"]) or "?", "icon": (str(g.icon.url) if g and g.icon else p["icon"]) or "",
             "members": g.member_count if g else None, "promoter": p["promoter"] or "", "added_by": p["added_name"] or "",
             "added_by_id": str(p["added_by"]) if p["added_by"] else None, "added_ts": p["added_ts"],
-            "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "bug": ch(p["bug_channel"]),
+            "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "bug": ch(p["bug_channel"]), "ping": p["gift_ping"] or "",
             "reports": store.db.execute("SELECT COUNT(*) FROM bug_reports WHERE via_guild=?", (p["guild_id"],)).fetchone()[0], "paused": bool(p["paused"]), "problem": p["problem"] or "",
             "status": status, "last_post_ts": p["last_post_ts"], "posts": p["posts"],
             "posts_30d": store.partner_posts_since(p["guild_id"], int(time.time()) - 30 * 86400), "fails": p["fails"] or 0,

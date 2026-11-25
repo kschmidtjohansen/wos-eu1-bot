@@ -2013,7 +2013,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         d = await body_json(request)
         num = lambda v: None if v is None else int(v or 0)  # noqa: E731
         try:
-            await hooks["partner_set"](gid, num(d.get("ann")), num(d.get("gift")), d.get("paused"), who(request), bug=num(d.get("bug")))
+            await hooks["partner_set"](gid, num(d.get("ann")), num(d.get("gift")), d.get("paused"), who(request), bug=num(d.get("bug")), ping=d.get("ping"))
         except (TypeError, ValueError) as exc:
             raise ApiError(400, str(exc) or "Bad channel.")
         return web.json_response(partners_payload())
