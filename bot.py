@@ -6197,11 +6197,26 @@ class PartnerSetupView(discord.ui.View):
 PARTNER_KIND = {"ann": "announcements", "gift": "gift codes", "bug": "bug reports"}
 
 
-async def partner_bug_panel(g):
-    """Post (or move, or remove) the "Report a bug" message in a promoter server's bug report channel."""
+async def partner_bug_panel(g, only_if_missing: bool = False):
+    """Post (or move, or remove) the "Report a bug" message in a promoter server's bug report channel.
+    only_if_missing: leave it alone if it is still there (used by the 30-minute check and the test button)."""
     p = store.get_partner(g.id)
     if p is None:
         return
+    if only_if_missing:
+        if not p["bug_channel"] or p["paused"]:
+            return
+        ch = g.get_channel(p["bug_msg_ch"]) if p["bug_msg"] and p["bug_msg_ch"] == p["bug_channel"] else None
+        if ch is not None:
+            try:
+                await ch.fetch_message(p["bug_msg"])
+                return                                       # still there
+            except discord.NotFound:
+                pass
+            except discord.HTTPException:
+                return                                       # can't tell right now – don't post a second one
+        store.save_partner(g.id, bug_msg=None, bug_msg_ch=None)
+        p = store.get_partner(g.id)
     old_ch = g.get_channel(p["bug_msg_ch"]) if p["bug_msg_ch"] else None
     if p["bug_msg"] and old_ch is not None:                   # remove the old button message first
         try:
@@ -6317,11 +6332,17 @@ async def handle_partner_setup(interaction: discord.Interaction):
         if what == "gift" and ch is not None:
             asyncio.create_task(safe_task(partner_backfill_codes(g.id), "promoter codes"))
         return
-    # test post
+    # test post – also brings an old setup message up to date (lists added later appear) and checks the bug button
+    try:
+        await interaction.response.edit_message(view=PartnerSetupView(g, lg, page))
+    except discord.HTTPException:
+        await interaction.response.defer()
+    if p["bug_channel"]:
+        await partner_bug_panel(g, only_if_missing=True)
+        p = store.get_partner(g.id)
     targets = {c for c in (p["ann_channel"], p["gift_channel"]) if c}
     if not targets:
-        return await interaction.response.send_message(T("partner.ann", lg) + " / " + T("partner.gift", lg), ephemeral=True)
-    await interaction.response.defer()
+        return await interaction.followup.send(T("partner.ann", lg) + " / " + T("partner.gift", lg))
     done = []
     for cid in targets:
         ch = g.get_channel(cid)
@@ -6331,6 +6352,8 @@ async def handle_partner_setup(interaction: discord.Interaction):
             done.append("#" + ch.name)
         except (discord.HTTPException, AttributeError):
             await interaction.followup.send(T("partner.no_perm", lg, where="#" + (ch.name if ch else "?")))
+    if p["bug_channel"] and p["bug_msg"] and g.get_channel(p["bug_channel"]):
+        done.append("🐞 #" + g.get_channel(p["bug_channel"]).name)
     if done:
         await interaction.followup.send(T("partner.tested", lg, where=", ".join(done)))
 
@@ -6374,8 +6397,16 @@ def partner_issues(p, g=None) -> list:
 
 
 async def partner_check():
-    """Every 30 minutes: warn about promoter servers where the bot lost access, and clear the warning once it's back."""
+    """Every 30 minutes: warn about promoter servers where the bot lost access, and clear the warning once it's back.
+    Also puts back a "Report a bug" button that is missing (deleted, or never posted)."""
     for p in store.partners(active_only=True):
+        g = bot.get_guild(p["guild_id"])
+        if g is not None and p["bug_channel"] and not p["paused"]:
+            try:
+                await partner_bug_panel(g, only_if_missing=True)
+                p = store.get_partner(p["guild_id"])
+            except Exception as exc:  # noqa: BLE001
+                print(f"[promoter bug button] {p['guild_id']}: {exc!r}")
         issues = partner_issues(p)
         if issues:
             if not p["problem"]:
