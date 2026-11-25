@@ -422,7 +422,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             linked = [] if not r["player_uid"] else [
                 {"id": str(x["discord_id"]), "name": person(x["discord_id"]) or f"User …{str(x['discord_id'])[-4:]}"}
                 for x in store.links_for_uid(r["player_uid"])]
-            d.update({"text": r["text"], "extra": r["extra"], "chief_name": r["chief_name"] or "",
+            d.update({"text": r["text"], "extra": r["extra"], "chief_name": r["chief_name"] or "", "ticket_log": r["ticket_log"] or "",
                       "uid": r["player_uid"] or "", "contact": r["contact"] or "", "linked": linked,
                       "files": [{"id": f["id"], "name": f["filename"], "size": f["size"],
                                  "kind": "video" if f["filename"].lower().endswith(MEDIA_VIDEO) else "image"}
@@ -2489,7 +2489,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         return {"id": r["id"], "reported": r["created_at"], "passed": it["passed_at"], "status": r["status"],
                 "area": r["area"] or "", "version": r["game_version"] or "", "title": store.bug_summary(r),
                 "text": "\n".join(x for x in (store.clean_report(ln) for ln in (r["text"] or "").splitlines()) if x),
-                "english": store.dev_english(r), "duplicates": len(it["dups"]), "affected": it["affected"],
+                "english": store.dev_english(r), "duplicates": len(it["dups"]), "affected": it["affected"], "ticket": r["ticket_log"] or "",
                 "chief": r["chief_name"] or "", "uid": r["player_uid"] or "", "severity": r["severity"] or "",
                 "files": [{"id": f["id"], "name": f["filename"],
                            "kind": "video" if f["filename"].lower().endswith(MEDIA_VIDEO) else "image"} for f in store.bug_files(r["id"])],

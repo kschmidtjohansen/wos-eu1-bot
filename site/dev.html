@@ -39,6 +39,7 @@ h1{font-size:clamp(26px,4vw,38px);margin-bottom:8px}
 .lb{position:fixed;inset:0;z-index:99;background:rgba(3,6,12,.92);display:grid;place-items:center;padding:16px;cursor:zoom-out}
 .lb img,.lb video{max-width:100%;max-height:92vh;border-radius:12px}
 @media (max-width:620px){.ask,.ask.ver{grid-template-columns:1fr}.ask input{max-width:none}}
+.ticket{margin-top:8px}.ticket summary{cursor:pointer;font-weight:600;font-size:14px}.ticket pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 inherit;max-height:300px;overflow:auto;margin:6px 0 0;padding:10px;border-radius:10px;background:rgba(255,255,255,.04)}
 </style></head><body>
 <main id="main">
   <div class="top"><div><h1>Bugs for the developers</h1>
@@ -97,6 +98,7 @@ h1{font-size:clamp(26px,4vw,38px);margin-bottom:8px}
       ...(b.affected > 1 ? [el('span', {}, el('b', {}, String(b.affected)), ' players affected')] : []), ...(b.chief || b.uid ? [el('span', {}, 'Chief ', el('b', {}, b.chief || '–'), ' · UID ', el('b', {}, b.uid || '–'))] : [])));
     kids.push(el('div', { class: 'txt' }, b.text || '(no text)'));
     if (b.english) kids.push(el('div', { class: 'en' }, el('small', {}, 'English translation'), b.english));
+    if (b.ticket) kids.push(el('details', { class: 'ticket' }, el('summary', {}, 'Conversation with the player'), el('pre', {}, b.ticket)));
     if (b.files.length) kids.push(el('div', { class: 'shots' }, b.files.map(f => {
       const btn = el('button', { type: 'button', 'data-bug': b.id, 'data-fid': f.id, title: f.name }, f.kind === 'video' ? '▶ Video' : '…');
       btn.onclick = async () => { try { lightbox(await blob(b.id, f), f.kind === 'video'); } catch (e) { btn.textContent = 'gone'; } };

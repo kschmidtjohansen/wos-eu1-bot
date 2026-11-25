@@ -309,6 +309,7 @@
 .w-record{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:4px 0 12px;padding:10px 12px;border:1px solid var(--w-border);border-radius:14px}
 .w-recrow{display:flex;flex-wrap:wrap;gap:6px 14px;flex:1 1 100%;font-size:13.5px;color:var(--w-muted)}
 .w-rec b{color:var(--w-text);font-variant-numeric:tabular-nums}.w-rec.ok b{color:var(--w-ok,#4fd1a1)}.w-rec.bad b{color:var(--w-bad,#ff6b7a)}
+.w-ticketlog{margin-top:10px}.w-ticketlog summary{cursor:pointer;font-weight:600;font-size:14px;padding:6px 0}.w-ticketlog .w-pre{max-height:320px;overflow:auto;font-size:13px}
 .w-quick{display:inline-flex;gap:4px}
 .w-qbtn{width:34px;height:32px;border-radius:9px;border:1px solid var(--w-border);background:var(--w-surface);cursor:pointer;font-size:15px;line-height:1;display:grid;place-items:center;transition:transform .1s,border-color .15s}
 .w-qbtn:hover{border-color:var(--w-accent);transform:scale(1.08)}
@@ -1499,7 +1500,7 @@ const BUG_LABEL = { new: 'New', investigating: 'Info ticket', passed: 'With admi
   fixed: 'Fixed', rejected: 'Rejected', admin_rejected: 'Rejected by admins' };
 const BUG_BADGE = { new: 'todo', investigating: 'warn', passed: 'info', being_investigated: 'warn', fixed: 'ok', rejected: 'bad', admin_rejected: 'bad' };
 const bugBadge = s => html`<span class="w-badge ${BUG_BADGE[s] || 'todo'}">${BUG_LABEL[s] || s}</span>`;
-const ACTION_LABEL = { ticket_closed: 'Info ticket closed – no answer', passed: 'Passed to admins', rejected: 'Rejected', investigating: 'Opened an info ticket', being_investigated: 'Marked as being investigated',
+const ACTION_LABEL = { ticket_closed: 'Info ticket closed – no answer', ticket_saved: 'Closed the ticket – conversation saved', passed: 'Passed to admins', rejected: 'Rejected', investigating: 'Opened an info ticket', being_investigated: 'Marked as being investigated',
   fixed: 'Marked as fixed', admin_rejected: 'Rejected (admins)', replied: 'Sent a message to the reporter' };
 
 const SEV = { critical: '🚨 Critical', major: '🟠 Major', minor: '🟡 Minor' };
@@ -1642,6 +1643,7 @@ function bugModal() {
     ${reportText(b.text)}
     ${b.files && b.files.length ? html`<div class="w-files" id="m-files">${b.files.map(f => html`<button class="w-file" data-act="openFile" data-fid="${f.id}" data-kind="${f.kind}" title="${f.name}">${f.kind === 'video' ? icon('play') : html`<img alt="${f.name}" data-fid="${f.id}">`}</button>`)}</div>` : ''}
     ${b.extra ? html`<div class="w-pre" style="margin-top:8px">${b.extra}</div>` : ''}
+    ${b.ticket_log ? html`<details class="w-ticketlog"><summary>🗂️ Ticket conversation</summary><div class="w-pre">${b.ticket_log}</div></details>` : ''}
     <div class="w-bugtools">${trBox('bugs', b.id)}${b.mod_url ? html`<a class="w-linkbtn" href="${b.mod_url}" target="_blank" rel="noopener">Mod channel ↗</a>` : ''}${b.admin_url ? html`<a class="w-linkbtn" href="${b.admin_url}" target="_blank" rel="noopener">Admin channel ↗</a>` : ''}</div>
 
     ${bugActions(b)}

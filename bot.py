@@ -1080,6 +1080,8 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
                                delete_after=60)
         await thread.send(T("info.ticket", lang_for(r["reporter_id"]), id=r["id"], mod=member.mention, player=mention,
                             link=msg.jump_url))
+        await thread.send("-# Moderators: type `/closebug` here when you're done – the conversation and pictures are saved "
+                          "with the bug and it goes back to the moderators.", allowed_mentions=discord.AllowedMentions.none())
         set_bug(r["id"], status="investigating", ticket_thread_id=thread.id)
         record_action("bug", r["id"], "investigating", member.id, who)
         r = get_bug(r["id"])
@@ -2072,6 +2074,89 @@ async def severity_cmd(interaction: discord.Interaction, bug: int, level: app_co
     await interaction.followup.send(f"Bug #{bug}: severity is now **{level.name}**.", ephemeral=True)
 
 
+# ------------------------------------------------- close an info ticket: save the conversation with the bug
+async def close_info_ticket(r, closer, note: str = "") -> dict:
+    """Save everything said and shown in the bug's ticket thread with the report (text + pictures/videos), post a copy
+    under the bug in the moderator channel, close the thread and put the bug back to "waiting for a moderator"."""
+    thread = bot.get_channel(r["ticket_thread_id"]) or await bot.fetch_channel(r["ticket_thread_id"])
+    who = getattr(closer, "display_name", "A moderator")
+    lines, files, n_msgs = [], [], 0
+    async for m in thread.history(limit=1000, oldest_first=True):
+        if m.author.bot and not m.attachments:
+            continue                                        # the bot's own questions/reminders
+        n_msgs += 1
+        when = time.strftime("%Y-%m-%d %H:%M", time.gmtime(m.created_at.timestamp()))
+        text = (m.clean_content or "").strip()
+        names = ", ".join(a.filename for a in m.attachments)
+        lines.append(f"[{when} UTC] {m.author.display_name}: {text}" + (f"  📎 {names}" if names else ""))
+        files.extend(m.attachments)
+    stamp = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+    head = f"— Ticket closed by {who} on {stamp} ({n_msgs} message{'s' if n_msgs != 1 else ''}) —"
+    log = "\n".join([head] + lines + ([f"Note from {who}: {note}"] if note else []))
+    set_bug(r["id"], ticket_log=((r["ticket_log"] + "\n\n") if r["ticket_log"] else "") + log)
+    await keep_files(r["id"], files)                       # pictures/videos stay with the bug (dashboard, developers, Excel)
+
+    # a copy under the bug in the moderator channel
+    ch = chan("mod_channel_id")
+    if ch is not None:
+        try:
+            limit = getattr(ch.guild, "filesize_limit", 25 * 1024 * 1024)
+            ups = [discord.File(io.BytesIO(log.encode("utf-8")), filename=f"bug-{r['id']}-ticket.txt")]
+            for a in files:
+                if len(ups) >= 10:
+                    break
+                if a.size <= limit:
+                    ups.append(await a.to_file())
+            ref = ch.get_partial_message(r["msg_id"]) if r["msg_id"] else None
+            await ch.send(f"🗂️ **Ticket for bug #{r['id']} closed by {who}** – {n_msgs} message{'s' if n_msgs != 1 else ''}, "
+                          f"{len(files)} file{'s' if len(files) != 1 else ''} saved with the report. Back to the moderators.",
+                          files=ups, reference=ref, mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException as exc:
+            print(f"[close ticket] copy to mod channel: {exc!r}")
+
+    # back to unhandled
+    set_bug(r["id"], status="new", ticket_thread_id=None)
+    record_action("bug", r["id"], "ticket_saved", getattr(closer, "id", None), who)
+    log_event("mod", f"Bug #{r['id']}: ticket closed by {who} – {n_msgs} messages and {len(files)} files saved, back to the moderators",
+              getattr(closer, "id", None), who)
+    r = get_bug(r["id"])
+    if ch is not None and r["msg_id"]:
+        try:
+            await ch.get_partial_message(r["msg_id"]).edit(embed=bug_embed(r, f"Ticket closed by {who} – waiting for a moderator"))
+        except discord.HTTPException:
+            pass
+    try:
+        await thread.send(T("info.closed_by", lang_for(r["reporter_id"]), mod=who, id=r["id"]))
+        await thread.edit(archived=True, locked=True)
+    except discord.HTTPException:
+        pass
+    await safe_refresh_board()
+    return {"messages": n_msgs, "files": len(files)}
+
+
+@bot.tree.command(name="closebug", description="Close a bug's ticket: save the conversation and pictures with the report (moderators)",
+                  guild=_GUILD)
+@app_commands.describe(bug="The bug number (not needed inside the ticket)", note="A short note to add (optional)")
+@app_commands.guild_only()
+async def closebug_cmd(interaction: discord.Interaction, bug: Optional[int] = None, note: Optional[str] = None):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    r = get_bug(bug) if bug else db.execute("SELECT * FROM bug_reports WHERE ticket_thread_id=?",
+                                            (getattr(interaction.channel, "id", 0),)).fetchone()
+    if r is None:
+        return await interaction.response.send_message(
+            f"Bug #{bug} doesn't exist." if bug else "Use this inside a bug's ticket, or give the bug number.", ephemeral=True)
+    if not r["ticket_thread_id"]:
+        return await interaction.response.send_message(f"Bug #{r['id']} has no open ticket.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+    try:
+        res = await close_info_ticket(r, interaction.user, (note or "").strip()[:500])
+    except discord.HTTPException as exc:
+        return await interaction.followup.send(f"I couldn't read the ticket ({exc.status}).", ephemeral=True)
+    await interaction.followup.send(f"✅ Bug #{r['id']}: saved {res['messages']} messages and {res['files']} files. "
+                                    "It's waiting for a moderator again.", ephemeral=True)
+
+
 # ------------------------------------------------- link Discord <-> game account
 @bot.tree.command(name="link", description="Link your Discord account to your in-game account", guild=_GUILD)
 @app_commands.describe(uid="Your player UID (numbers only)", chief_name="Your chief name in the game")
@@ -2324,7 +2409,8 @@ def dev_list_file(items: list, when, pictures: int = 900) -> tuple:
     for it in items:
         r = it["r"]
         rows.append([fmt(r["created_at"]), r["id"], r["area"] or "", r["game_version"] or "", store.bug_summary(r),
-                     "\n".join(x for x in (store.clean_report(ln) for ln in (r["text"] or "").splitlines()) if x),
+                     "\n".join(x for x in (store.clean_report(ln) for ln in (r["text"] or "").splitlines()) if x)
+                     + (f"\n\nTicket conversation:\n{r['ticket_log']}" if r["ticket_log"] else ""),
                      store.dev_english(r), ", ".join(f"#{d}" for d in it["dups"]), r["chief_name"] or "", r["player_uid"] or ""])
     stamp = when.strftime("%Y-%m-%d")
     try:
