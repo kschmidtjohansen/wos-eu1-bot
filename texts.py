@@ -236,7 +236,7 @@ _EN = [
     ("partner.test", "Promoter servers", "Send a test post"),
     ("partner.saved", "Promoter servers", "✅ Saved. 📢 Announcements: {ann} · 🎁 Gift codes: {gift} · 🐞 Bugs & ideas: {bug}"),
     ("partner.tested", "Promoter servers", "✅ Test post sent to {where}."),
-    ("partner.no_perm", "Promoter servers", "I can't post in {where} – give me “View Channel”, “Send Messages” and “Embed Links” there."),
+    ("partner.no_perm", "Promoter servers", "I can't post in {where}. Edit the channel → Permissions → add my role → allow “View Channel”, “Send Messages” and “Embed Links”. The channel can stay read-only for your members – only I need it."),
     ("partner.only_admin", "Promoter servers", "Only someone with “Manage Server” on {server} can change this."),
     ("partner.pages", "Promoter servers", "Can't find your channel? Use ◀ ▶ under the lists to see all your channels."),
     ("partner.cant", "Promoter servers", "⚠️ I can't post here yet"),

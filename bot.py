@@ -6242,7 +6242,7 @@ async def partner_bug_panel(g, only_if_missing: bool = False):
         msg = await ch.send(embed=e, view=v)
         store.save_partner(g.id, bug_msg=msg.id, bug_msg_ch=ch.id, bug_msg_sig=sig)
     except discord.HTTPException as exc:
-        await partner_problem(p, f"couldn't post the bug report button in #{ch.name} ({exc.status})")
+        await partner_problem(p, partner_missing(ch, g) or f"couldn't post the bugs & ideas message in #{ch.name} ({exc.status})")
 
 
 def partner_panel(guild_id: int):
@@ -6399,6 +6399,20 @@ async def partner_problem(p, text: str):
                 pass
 
 
+def partner_missing(ch, g) -> str:
+    """Why the bot can't post in a promoter's channel, in words they can act on ("" = it can)."""
+    try:
+        pm = ch.permissions_for(g.me)
+    except AttributeError:
+        return ""
+    miss = [n for ok, n in ((pm.view_channel, "View Channel"), (pm.send_messages, "Send Messages"), (pm.embed_links, "Embed Links")) if not ok]
+    if not miss:
+        return ""
+    role = getattr(getattr(g.me, "top_role", None), "name", None) or (bot.user.display_name if bot.user else brand())
+    return (f"no permission to post in #{ch.name} – missing {', '.join(miss)}. Fix: Edit channel → Permissions → add the "
+            f"“{role}” role → allow {', '.join(miss)}. (If the channel is read-only for members, that's fine – only I need it.)")
+
+
 def partner_issues(p, g=None) -> list:
     """What would stop our next post in this promoter server right now (checked live)."""
     g = g or bot.get_guild(p["guild_id"])
@@ -6413,7 +6427,7 @@ def partner_issues(p, g=None) -> list:
         if ch is None:
             out.append(f"the {label} channel no longer exists")
         elif not partner_can_post(ch, g):
-            out.append(f"no permission to post in #{ch.name}")
+            out.append(partner_missing(ch, g) or f"no permission to post in #{ch.name}")
         elif kind in ("ann", "gift") and p[f"{kind}_ping"] and not ch.permissions_for(g.me).mention_everyone:
             out.append(f"no permission to tag @{p[kind + '_ping']} in #{ch.name} (Mention @everyone, @here and All Roles)")
     return out
@@ -6463,7 +6477,7 @@ async def partner_send(kind: str, build, ref=None) -> int:
             store.partner_post_add(g.id, ch.id, msg.id, kind, ref)
             n += 1
         except discord.Forbidden:
-            await partner_problem(p, f"no permission to post in #{ch.name}")
+            await partner_problem(p, partner_missing(ch, g) or f"no permission to post in #{ch.name}")
         except discord.HTTPException as exc:
             print(f"[promoter post] {p['guild_id']}: {exc!r}")
     return n
@@ -6528,7 +6542,7 @@ async def partner_list(p, parts=None) -> bool:
             except discord.HTTPException:
                 pass
     except discord.Forbidden:
-        await partner_problem(p, f"no permission to post in #{ch.name}")
+        await partner_problem(p, partner_missing(ch, g) or f"no permission to post in #{ch.name}")
         return False
     store.save_partner(p["guild_id"], list_msgs=json.dumps(new_ids), list_sig=sig)
     if first:                                     # the list replaces the old one-post-per-code messages for codes it shows
@@ -6726,7 +6740,7 @@ async def partner_test(guild_id: int) -> list:
                           allowed_mentions=discord.AllowedMentions.none())
             done.append("#" + ch.name)
         except discord.HTTPException:
-            await partner_problem(p, f"no permission to post in #{ch.name}")
+            await partner_problem(p, partner_missing(ch, g) or f"no permission to post in #{ch.name}")
             raise ValueError(f"I can't post in #{ch.name} – they need to give the bot access.")
     if not done:
         raise ValueError("No channels are picked yet.")
