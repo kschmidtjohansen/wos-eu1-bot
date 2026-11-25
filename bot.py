@@ -814,7 +814,8 @@ class IdeaFormModal(discord.ui.Modal):
             return await interaction.response.send_message(_cap(why), ephemeral=True)
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            s = await submit_suggestion(member, str(self.idea.value).strip())
+            s = await submit_suggestion(member, str(self.idea.value).strip(),
+                                        via=interaction.guild_id if interaction.guild_id and interaction.guild_id != GUILD_ID else None)
         except (NotConfigured, discord.HTTPException) as exc:
             log_event("system", f"Could not deliver a suggestion from {member.display_name}: {exc}", member.id, member.display_name)
             return await interaction.followup.send(T("sub.sug_fail", lg), ephemeral=True)
@@ -942,13 +943,13 @@ async def submit_bug(member: discord.Member, text: str, atts, details=None):
 
 
 # ---------------------------------------------------- player: suggestion flow
-async def submit_suggestion(member: discord.Member, text: str):
-    """Store the suggestion and post it in the mod channel for moderators to handle."""
+async def submit_suggestion(member: discord.Member, text: str, via: Optional[int] = None):
+    """Store the suggestion and post it in the mod channel for moderators to handle (via = promoter server it came from)."""
     channel = chan("mod_channel_id")
     if channel is None:
         raise NotConfigured("mod channel")
-    cur = db.execute("INSERT INTO suggestions (author_id, text, created_at, author_name) VALUES (?,?,?,?)",
-                     (member.id, text, int(time.time()), member.display_name))
+    cur = db.execute("INSERT INTO suggestions (author_id, text, created_at, author_name, via_guild) VALUES (?,?,?,?,?)",
+                     (member.id, text, int(time.time()), member.display_name, via))
     db.commit()
     sid = cur.lastrowid
     try:
@@ -1146,7 +1147,11 @@ def suggestion_embed(r, note: Optional[str] = None) -> discord.Embed:
     label, color = {"new": ("🆕 Open", 0x3498DB), "accepted": ("✅ Accepted", 0x2ECC71),
                     "rejected": ("❌ Rejected", 0xED4245)}[r["status"]]
     e = discord.Embed(title=f"Suggestion #{r['id']}", description=r["text"], color=color)
-    e.add_field(name="From", value=f"<@{r['author_id']}>", inline=True)
+    via = ""
+    if r["via_guild"]:
+        vp = store.get_partner(r["via_guild"])
+        via = f"\nvia promoter server **{(vp['name'] if vp else None) or r['via_guild']}**"
+    e.add_field(name="From", value=f"<@{r['author_id']}>" + via, inline=True)
     e.add_field(name="Status", value="🛠️ Added – see what changed" if r["changes"] else label, inline=True)
     if r["status"] == "rejected" and r["reject_reason"]:
         e.add_field(name="💬 Reason", value=r["reject_reason"][:1024], inline=False)
@@ -1701,7 +1706,7 @@ class WosBot(discord.Client):
             except Exception as exc:  # noqa: BLE001
                 print(f"[device question] {exc!r}")
         for prefix, fn, label in (("pt:", handle_partner_setup, "promoter setup"), ("spike:", handle_spike_button, "spike alert"), ("mr:", handle_msg_report_button, "message report"),
-                                  ("ap:", handle_appeal_button, "appeal"), ("ptbug:", handle_partner_bug, "promoter bug report"), ("dq:", handle_dev_question_button, "developer question"), ("raid:", handle_raid_button, "raid mode")):
+                                  ("ap:", handle_appeal_button, "appeal"), ("ptbug:", handle_partner_bug, "promoter bug report"), ("ptidea:", handle_partner_bug, "promoter idea"), ("dq:", handle_dev_question_button, "developer question"), ("raid:", handle_raid_button, "raid mode")):
             if cid.startswith(prefix):
                 try:
                     await fn(interaction)
@@ -6209,7 +6214,11 @@ async def partner_bug_panel(g, only_if_missing: bool = False):
         ch = g.get_channel(p["bug_msg_ch"]) if p["bug_msg"] and p["bug_msg_ch"] == p["bug_channel"] else None
         if ch is not None:
             try:
-                await ch.fetch_message(p["bug_msg"])
+                msg = await ch.fetch_message(p["bug_msg"])
+                e, v, sig = partner_panel(g.id)
+                if p["bug_msg_sig"] != sig:                  # our panel text changed (or the old one-button message)
+                    await msg.edit(embed=e, view=v)
+                    store.save_partner(g.id, bug_msg_sig=sig)
                 return                                       # still there
             except discord.NotFound:
                 pass
@@ -6228,27 +6237,41 @@ async def partner_bug_panel(g, only_if_missing: bool = False):
     ch = g.get_channel(p["bug_channel"]) if p["bug_channel"] else None
     if ch is None or p["paused"]:
         return
-    e = discord.Embed(title=T("partner.bug_panel_title", None, home=brand())[:256],
-                      description=T("partner.bug_panel_text", None, home=brand()), color=0x7DE3F4)
-    v = discord.ui.View(timeout=None)
-    v.add_item(discord.ui.Button(label=T("form.bug_btn", None)[:80], emoji=BUG_EMOJI, style=discord.ButtonStyle.primary, custom_id=f"ptbug:{g.id}"))
+    e, v, sig = partner_panel(g.id)
     try:
         msg = await ch.send(embed=e, view=v)
-        store.save_partner(g.id, bug_msg=msg.id, bug_msg_ch=ch.id)
+        store.save_partner(g.id, bug_msg=msg.id, bug_msg_ch=ch.id, bug_msg_sig=sig)
     except discord.HTTPException as exc:
         await partner_problem(p, f"couldn't post the bug report button in #{ch.name} ({exc.status})")
 
 
+def partner_panel(guild_id: int):
+    """The same "Bugs & suggestions" message as our own panel, with buttons that work in the promoter's server.
+    Returns (embed, view, signature) – the signature changes when our panel text does."""
+    lg = store.default_language()
+    title, text = cfg("panel_title"), cfg("panel_text")
+    v = discord.ui.View(timeout=None)
+    v.add_item(discord.ui.Button(label=T("form.bug_btn", lg)[:80], emoji=BUG_EMOJI, style=discord.ButtonStyle.primary, custom_id=f"ptbug:{guild_id}"))
+    v.add_item(discord.ui.Button(label=T("form.idea_btn", lg)[:80], emoji=SUGGEST_EMOJI, style=discord.ButtonStyle.secondary,
+                                 custom_id=f"ptidea:{guild_id}"))
+    sig = hashlib.sha1(json.dumps([title, text, lg, T("form.bug_btn", lg), T("form.idea_btn", lg)]).encode()).hexdigest()[:16]
+    return panel_embed(title, text), v, sig
+
+
 async def handle_partner_bug(interaction: discord.Interaction):
-    """A member of a promoter server pressed "Report a bug": same form as on our own server, report lands in our mod channel."""
+    """A member of a promoter server pressed "Report a bug" or "Suggest an idea": the same forms as on our own server,
+    and it lands in our moderator channel marked with the promoter server."""
+    kind = "suggestion" if interaction.data["custom_id"].startswith("ptidea:") else "bug"
     gid = int(interaction.data["custom_id"].split(":")[1])
     lg = ilang(interaction)
     p = store.get_partner(gid)
     if p is None or p["left_ts"] or p["paused"] or not p["bug_channel"] or interaction.guild_id != gid:
         return await interaction.response.send_message(T("partner.bug_off", lg), ephemeral=True)
-    why = report_gate(interaction.user, "bug", lg)
+    why = report_gate(interaction.user, kind, lg)
     if why:
         return await interaction.response.send_message(_cap(why), ephemeral=True)
+    if kind == "suggestion":
+        return await interaction.response.send_modal(IdeaFormModal(lg))
     await interaction.response.send_modal(BugFormModal(lg, store.get_link(interaction.user.id)))
 
 
@@ -6679,7 +6702,8 @@ def partner_info(p) -> dict:
             "members": g.member_count if g else None, "promoter": p["promoter"] or "", "added_by": p["added_name"] or "",
             "added_by_id": str(p["added_by"]) if p["added_by"] else None, "added_ts": p["added_ts"],
             "ann": ch(p["ann_channel"]), "gift": ch(p["gift_channel"]), "bug": ch(p["bug_channel"]), "ping": p["gift_ping"] or "", "ann_ping": p["ann_ping"] or "",
-            "reports": store.db.execute("SELECT COUNT(*) FROM bug_reports WHERE via_guild=?", (p["guild_id"],)).fetchone()[0], "paused": bool(p["paused"]), "problem": p["problem"] or "",
+            "reports": store.db.execute("SELECT COUNT(*) FROM bug_reports WHERE via_guild=?", (p["guild_id"],)).fetchone()[0],
+            "ideas": store.db.execute("SELECT COUNT(*) FROM suggestions WHERE via_guild=?", (p["guild_id"],)).fetchone()[0], "paused": bool(p["paused"]), "problem": p["problem"] or "",
             "status": status, "last_post_ts": p["last_post_ts"], "posts": p["posts"],
             "posts_30d": store.partner_posts_since(p["guild_id"], int(time.time()) - 30 * 86400), "fails": p["fails"] or 0,
             "issues": issues,
