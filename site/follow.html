@@ -6,25 +6,41 @@
 <link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 <style>
-.fw{max-width:760px}
-.fw-head{padding:18px 20px;margin-bottom:12px}
-.fw-head .n{font-family:var(--display);color:var(--muted);font-size:13.5px}
-.fw-head h2{margin:2px 0 8px;font-size:21px;overflow-wrap:anywhere}
-.ask{padding:12px 14px;border-radius:14px;margin:0 0 12px;border:1px solid rgba(255,166,77,.35);background:rgba(255,166,77,.08);font-weight:600}
-.conv{display:flex;flex-direction:column;gap:10px;margin:6px 0 14px}
-.m{max-width:88%;padding:10px 13px;border-radius:16px;border:1px solid var(--line);background:var(--glass-2)}
-.m.staff{align-self:flex-start;border-color:rgba(125,227,244,.3);background:rgba(125,227,244,.07)}
-.m.player{align-self:flex-end;background:rgba(255,255,255,.05)}
-.m .who{font-size:13px;color:var(--muted);font-weight:650;margin-bottom:3px}
-.m .tx{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15.5px;line-height:1.5}
-.m .fl{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.m .fl img,.m .fl video{max-width:220px;max-height:180px;border-radius:10px;display:block}
-.fw-head .st{display:inline-block;padding:4px 10px;border-radius:999px;font-size:13px;font-weight:650;border:1px solid rgba(255,166,77,.35);background:rgba(255,166,77,.1)}
-.closed-note{align-self:center;color:var(--muted);font-size:13.5px}
-.reply textarea{width:100%;min-height:96px;resize:vertical}
-.reply .row label{margin:0}.reply>label{margin-top:0}
-.reply .row{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
-.reply .row .muted{flex:1;font-size:13.5px}
-.keep{font-size:13.5px;color:var(--muted);margin-top:14px;overflow-wrap:anywhere}
+.fw{max-width:760px;padding-bottom:0}
+.fw h1{font-size:clamp(26px,6vw,38px);margin-bottom:4px}
+.fw .lead{margin-bottom:14px}
+.chead{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:10px}
+.chead .n{font-family:var(--display);color:var(--muted);font-size:13px}
+.chead h2{margin:0;font-size:17px;line-height:1.3;overflow-wrap:anywhere}
+.chead .grow{flex:1;min-width:0}
+.chead .st{background:rgba(255,166,77,.1);border-color:rgba(255,166,77,.35);color:var(--text)}
+.chead .st.ok{background:rgba(79,209,161,.1);border-color:rgba(79,209,161,.35)}
+.chead .st.no{background:rgba(255,107,129,.1);border-color:rgba(255,107,129,.3)}
+.chat{display:flex;flex-direction:column;gap:6px;padding:8px 0 14px;min-height:42vh}
+.day{align-self:center;font-size:12.5px;color:var(--muted);margin:10px 0 4px}
+.row{display:flex;gap:8px;align-items:flex-end;max-width:88%}
+.row.me{align-self:flex-end;flex-direction:row-reverse}
+.av{width:30px;height:30px;border-radius:50%;flex:none;background:var(--glass-2) center/cover no-repeat;border:1px solid var(--line)}
+.bub{padding:9px 13px 7px;border-radius:18px 18px 18px 6px;border:1px solid rgba(125,227,244,.28);background:rgba(125,227,244,.08);min-width:0}
+.row.me .bub{border-radius:18px 18px 6px 18px;border-color:rgba(255,166,77,.35);background:rgba(255,166,77,.12)}
+.bub .who{font-size:12.5px;font-weight:700;color:var(--ice);margin-bottom:2px}
+.bub .tx{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15.5px;line-height:1.45}
+.bub .tm{font-size:11.5px;color:var(--muted);text-align:end;margin-top:3px}
+.bub .fl{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.bub .fl img,.bub .fl video{max-width:230px;max-height:200px;border-radius:12px;display:block}
+.bub .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
+.bub .acts button{font:inherit;font-size:13.5px;font-weight:650;padding:6px 12px;border-radius:999px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--text);cursor:pointer}
+.note{align-self:center;color:var(--muted);font-size:13.5px;text-align:center;margin:6px 0}
+.compose{position:sticky;bottom:0;z-index:5;padding:10px 0 calc(10px + env(safe-area-inset-bottom));
+  background:linear-gradient(to top,var(--bg,#060c17) 70%,transparent)}
+.cbox{display:flex;align-items:flex-end;gap:8px;padding:8px;border-radius:24px;border:1px solid var(--line-2);background:rgba(10,18,32,.92);backdrop-filter:blur(8px)}
+.cbox textarea{flex:1;min-height:40px;max-height:160px;resize:none;border:0;background:transparent;color:var(--text);font:inherit;font-size:16px;padding:9px 6px;outline:none}
+.cbox .ib{width:40px;height:40px;flex:none;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line-2);background:var(--glass-2);color:var(--text);cursor:pointer;font-size:18px;margin:0}
+.cbox .send{background:linear-gradient(135deg,#ff8a3d,#ffc15e);border:0;color:#2a1200}
+.cbox .send:disabled{opacity:.5}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px 4px;font-size:13px;color:var(--muted)}
+.cerr{color:var(--bad);font-size:13.5px;margin:4px 0 0 6px}
+.newpill{position:sticky;bottom:86px;align-self:center;z-index:6;padding:6px 14px;border-radius:999px;border:0;background:var(--ice);color:#04121a;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.closedbar{padding:12px 16px;border-radius:16px;border:1px solid var(--line);background:var(--glass-2);color:var(--muted);text-align:center;margin:4px 0 14px}
 </style></head><body>
 <main id="main" class="fw">
   <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
@@ -33,76 +49,139 @@
 <script src="config.js"></script><script src="app.js"></script>
 <script>
 const S = {
- en: { h1: 'Your report', lead: 'Follow what happens to your bug report, and answer the team if they ask you something.',
+ en: { h1: 'Your report', lead: 'Messages between you and the WOS EU1 team about your bug report.',
   bad: 'This link isn’t valid. Use the link you got when you sent the report.', err: 'Could not load your report. Try again in a moment.',
-  s_new: 'Waiting for a moderator', s_investigating: 'The team has a question for you', s_passed: 'Confirmed – with the admins',
-  s_fixed: 'Fixed', s_rejected: 'Closed', s_dup: 'Already reported – you’ll be told when it’s fixed',
-  ask: 'The team has a question for you. Please answer below – screenshots help a lot.',
-  team: 'WOS EU1 team', you: 'You', closed: 'The team closed the conversation. Thank you for your help!',
-  none: 'No messages yet. If the team needs more information, it will show up here.',
-  answer: 'Your answer', ph: 'Write your answer here…', add: 'Add screenshots', send: 'Send answer', sending: 'Sending…',
-  sent: 'Thank you! The team got your answer.', fileHint: 'Up to 4 pictures or videos, 8 MB each.',
-  keep: 'Keep this page’s link to come back later. This browser remembers it for you.', report: 'Report another bug' },
- pl: { h1: 'Twoje zgłoszenie', lead: 'Śledź, co dzieje się z Twoim zgłoszeniem błędu, i odpowiadaj zespołowi, jeśli o coś zapyta.',
+  s_new: 'Waiting for a moderator', s_investigating: 'The team has a question', s_passed: 'Confirmed – with the admins',
+  s_fixed: 'Fixed', s_rejected: 'Closed', s_dup: 'Already reported',
+  team: 'WOS EU1 team', you: 'You', today: 'Today', yesterday: 'Yesterday',
+  welcome: 'Thanks for your report! 🙏 We’ve received bug #{id} and a moderator will look at it soon.\n\nIf we have questions, we’ll write to you right here. Keep this tab open to see our replies – or save the link to this page and come back later. You can also add more details or screenshots below at any time.',
+  copy: '🔗 Copy link', copied: '✅ Link copied', notify: '🔔 Notify me', notifyOn: '🔔 Notifications on',
+  closedEv: 'The team closed the conversation. Thank you for your help!',
+  ask: 'The team is waiting for your answer.', ph: 'Write a message…', send: 'Send', attach: 'Add screenshots or video',
+  newMsg: 'New message ↓', closedBar: 'This report is closed, so you can’t add messages any more.', tabNew: 'New message',
+  files: '{n} file(s) added', sendErr: 'Could not send. Try again.' },
+ pl: { h1: 'Twoje zgłoszenie', lead: 'Wiadomości między Tobą a zespołem WOS EU1 w sprawie Twojego zgłoszenia.',
   bad: 'Ten link jest nieprawidłowy. Użyj linku, który otrzymałeś po wysłaniu zgłoszenia.', err: 'Nie udało się wczytać zgłoszenia. Spróbuj za chwilę.',
-  s_new: 'Czeka na moderatora', s_investigating: 'Zespół ma do Ciebie pytanie', s_passed: 'Potwierdzony – u administratorów',
-  s_fixed: 'Naprawiony', s_rejected: 'Zamknięty', s_dup: 'Już zgłoszony – damy znać, gdy zostanie naprawiony',
-  ask: 'Zespół ma do Ciebie pytanie. Odpowiedz poniżej – zrzuty ekranu bardzo pomagają.',
-  team: 'Zespół WOS EU1', you: 'Ty', closed: 'Zespół zakończył rozmowę. Dziękujemy za pomoc!',
-  none: 'Brak wiadomości. Jeśli zespół będzie potrzebował więcej informacji, pojawią się tutaj.',
-  answer: 'Twoja odpowiedź', ph: 'Napisz tutaj odpowiedź…', add: 'Dodaj zrzuty ekranu', send: 'Wyślij odpowiedź', sending: 'Wysyłanie…',
-  sent: 'Dziękujemy! Zespół otrzymał Twoją odpowiedź.', fileHint: 'Do 4 zdjęć lub filmów, po 8 MB.',
-  keep: 'Zachowaj link do tej strony, aby wrócić później. Ta przeglądarka zapamiętuje go za Ciebie.', report: 'Zgłoś kolejny błąd' } };
+  s_new: 'Czeka na moderatora', s_investigating: 'Zespół ma pytanie', s_passed: 'Potwierdzony – u administratorów',
+  s_fixed: 'Naprawiony', s_rejected: 'Zamknięty', s_dup: 'Już zgłoszony',
+  team: 'Zespół WOS EU1', you: 'Ty', today: 'Dzisiaj', yesterday: 'Wczoraj',
+  welcome: 'Dziękujemy za zgłoszenie! 🙏 Otrzymaliśmy błąd #{id} i moderator wkrótce się nim zajmie.\n\nJeśli będziemy mieli pytania, napiszemy tutaj. Zostaw tę kartę otwartą, aby widzieć nasze odpowiedzi – albo zapisz link do tej strony i wróć później. W każdej chwili możesz też dodać poniżej więcej szczegółów lub zrzutów ekranu.',
+  copy: '🔗 Kopiuj link', copied: '✅ Skopiowano', notify: '🔔 Powiadamiaj mnie', notifyOn: '🔔 Powiadomienia włączone',
+  closedEv: 'Zespół zakończył rozmowę. Dziękujemy za pomoc!',
+  ask: 'Zespół czeka na Twoją odpowiedź.', ph: 'Napisz wiadomość…', send: 'Wyślij', attach: 'Dodaj zrzuty ekranu lub film',
+  newMsg: 'Nowa wiadomość ↓', closedBar: 'To zgłoszenie jest zamknięte, więc nie można już dodawać wiadomości.', tabNew: 'Nowa wiadomość',
+  files: 'Dodano plików: {n}', sendErr: 'Nie udało się wysłać. Spróbuj ponownie.' } };
 const $ = id => document.getElementById(id), el = (...a) => WOS.el(...a), t = k => WOS.t(k);
 const base = ((window.WOS_CONFIG || {}).API_BASE || '').replace(/\/+$/, '');
 const q = new URLSearchParams(location.search), B = q.get('b'), T = q.get('t');
-let data = null, failed = null, note = '';
+const TITLE = document.title;
+let data = null, failed = null, lastId = null, unread = 0, draft = '', picked = [], built = false;
 const fileUrl = f => base + '/public/ticket/file?b=' + encodeURIComponent(B) + '&t=' + encodeURIComponent(T) + '&f=' + f.id;
-function draw() {
+const nearBottom = () => window.innerHeight + window.scrollY > document.body.scrollHeight - 160;
+const toBottom = smooth => window.scrollTo({ top: document.body.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+function dayLabel(ts) {
+  const d = new Date(ts * 1000), n = new Date(), y = new Date(Date.now() - 864e5);
+  return d.toDateString() === n.toDateString() ? t('today') : d.toDateString() === y.toDateString() ? t('yesterday') : d.toLocaleDateString();
+}
+const hm = ts => new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function bubble(m) {
+  if (m.kind === 'system' && m.event === 'closed') return el('div', { class: 'note' }, '🔒 ' + t('closedEv'));
+  const me = m.kind === 'player', welcome = m.kind === 'system';
+  const files = (m.files || []).map(f => f.type === 'video' ? el('video', { src: fileUrl(f), controls: true, preload: 'metadata' })
+    : el('a', { href: fileUrl(f), target: '_blank', rel: 'noopener' }, el('img', { src: fileUrl(f), alt: f.name, loading: 'lazy' })));
+  const acts = [];
+  if (welcome) {
+    const cp = el('button', { type: 'button' }, t('copy'));
+    cp.onclick = async () => { try { await navigator.clipboard.writeText(location.href); cp.textContent = t('copied'); } catch (e) { prompt('', location.href); } };
+    acts.push(cp);
+    if ('Notification' in window) {
+      const nb = el('button', { type: 'button' }, Notification.permission === 'granted' ? t('notifyOn') : t('notify'));
+      nb.onclick = async () => { try { if (await Notification.requestPermission() === 'granted') nb.textContent = t('notifyOn'); } catch (e) { /* not allowed */ } };
+      acts.push(nb);
+    }
+  }
+  return el('div', { class: 'row' + (me ? ' me' : '') }, me ? '' : el('div', { class: 'av', style: 'background-image:url(icons/icon-192.png)' }),
+    el('div', { class: 'bub' }, me ? '' : el('div', { class: 'who' }, welcome ? t('team') : (m.author || '') + ' · ' + t('team')),
+      el('div', { class: 'tx' }, welcome ? t('welcome').replace('{id}', data.id) : m.text),
+      files.length ? el('div', { class: 'fl' }, ...files) : '', acts.length ? el('div', { class: 'acts' }, ...acts) : '',
+      el('div', { class: 'tm' }, hm(m.ts))));
+}
+function drawChat() {
+  const chat = $('chat'); if (!chat) return;
+  chat.replaceChildren(); let day = '';
+  data.messages.forEach(m => { const d = dayLabel(m.ts); if (d !== day) { day = d; chat.append(el('div', { class: 'day' }, d)); } chat.append(bubble(m)); });
+  const st = $('st'); if (st) { const k = data.duplicate ? 's_dup' : 's_' + data.status; st.textContent = t(k);
+    st.className = 'st' + (data.status === 'fixed' ? ' ok' : ['rejected'].includes(data.status) ? ' no' : ''); }
+  $('askbar').hidden = !data.open;
+}
+function build() {
   const box = $('box'); box.replaceChildren();
   if (failed) return box.append(el('div', { class: 'card empty' }, t(failed)));
-  if (!data) return;
-  const st = data.duplicate ? 's_dup' : 's_' + data.status;
-  box.append(el('div', { class: 'card fw-head' }, el('div', { class: 'n' }, '#' + data.id), el('h2', {}, data.title),
-    el('span', { class: 'st' }, t(st))));
-  if (data.open) box.append(el('div', { class: 'ask' }, '❓ ' + t('ask')));
-  const conv = el('div', { class: 'conv' });
-  if (!data.messages.length) conv.append(el('p', { class: 'muted' }, t('none')));
-  data.messages.forEach(m => {
-    if (m.kind === 'system') return conv.append(el('div', { class: 'closed-note' }, '🔒 ' + t('closed')));
-    const files = m.files.map(f => f.type === 'video' ? el('video', { src: fileUrl(f), controls: true, preload: 'metadata' })
-      : el('a', { href: fileUrl(f), target: '_blank', rel: 'noopener' }, el('img', { src: fileUrl(f), alt: f.name, loading: 'lazy' })));
-    conv.append(el('div', { class: 'm ' + (m.kind === 'player' ? 'player' : 'staff') },
-      el('div', { class: 'who' }, (m.kind === 'player' ? t('you') : (m.author || '') + ' · ' + t('team')) + ' · ' + new Date(m.ts * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })),
-      m.text ? el('div', { class: 'tx' }, m.text) : '', files.length ? el('div', { class: 'fl' }, ...files) : ''));
-  });
-  box.append(conv);
-  if (data.open) {
-    const ta = el('textarea', { id: 'ans', maxlength: '1800', placeholder: t('ph'), 'aria-label': t('answer') });
-    const fi = el('input', { type: 'file', id: 'fi', accept: 'image/*,video/*', multiple: true, hidden: true });
-    const names = el('span', { class: 'muted' }, note || t('fileHint'));
-    fi.onchange = () => { names.textContent = [...fi.files].slice(0, 4).map(f => f.name).join(', ') || t('fileHint'); };
-    const go = el('button', { class: 'btn pri', type: 'submit' }, t('send'));
-    const form = el('form', { class: 'card reply' }, el('label', { for: 'ans', class: 'lbl' }, t('answer')), ta,
-      el('div', { class: 'row' }, el('label', { class: 'btn', for: 'fi' }, '📎 ' + t('add')), fi, names, go));
-    form.onsubmit = async e => {
-      e.preventDefault();
-      if (!ta.value.trim() && !fi.files.length) return ta.focus();
-      const fd = new FormData(); fd.append('b', B); fd.append('t', T); fd.append('text', ta.value);
-      [...fi.files].slice(0, 4).forEach(f => fd.append('files', f));
-      go.disabled = true; go.textContent = t('sending');
-      try { await WOS.api('/public/ticket', { method: 'POST', body: fd }); note = t('sent'); await load(); }
-      catch (err) { go.disabled = false; go.textContent = t('send'); names.textContent = err.message; }
-    };
-    box.append(form);
+  box.append(el('div', { class: 'card chead' }, el('div', { class: 'grow' }, el('div', { class: 'n' }, '#' + data.id), el('h2', {}, data.title)),
+    el('span', { class: 'st', id: 'st' })));
+  box.append(el('div', { class: 'note', id: 'askbar', hidden: true }, '❓ ' + t('ask')));
+  box.append(el('div', { class: 'chat', id: 'chat' }));
+  if (!data.can_write) { box.append(el('div', { class: 'closedbar' }, t('closedBar'))); built = true; return drawChat(); }
+  const ta = el('textarea', { id: 'msg', rows: '1', maxlength: '1800', placeholder: t('ph'), 'aria-label': t('ph') });
+  ta.value = draft;
+  ta.oninput = () => { draft = ta.value; ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; };
+  ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(hover:hover)').matches) { e.preventDefault(); send(); } };
+  const fi = el('input', { type: 'file', id: 'fi', accept: 'image/*,video/*', multiple: true, hidden: true });
+  const chips = el('div', { class: 'chips', id: 'chips' }), err = el('div', { class: 'cerr', id: 'cerr' });
+  fi.onchange = () => { picked = [...fi.files].slice(0, 4); chips.textContent = picked.length ? '📎 ' + picked.map(f => f.name).join(', ') : ''; };
+  const at = el('label', { class: 'ib', for: 'fi', title: t('attach'), 'aria-label': t('attach') }, '📎');
+  const go = el('button', { class: 'ib send', id: 'go', type: 'button', title: t('send'), 'aria-label': t('send') }, '➤');
+  go.onclick = send;
+  box.append(el('div', { class: 'compose' }, chips, el('div', { class: 'cbox' }, at, fi, ta, go), err));
+  built = true; drawChat();
+}
+async function send() {
+  const ta = $('msg'), go = $('go'), err = $('cerr');
+  if (!ta.value.trim() && !picked.length) return ta.focus();
+  const fd = new FormData(); fd.append('b', B); fd.append('t', T); fd.append('text', ta.value); picked.forEach(f => fd.append('files', f));
+  go.disabled = true; err.textContent = '';
+  try {
+    await WOS.api('/public/ticket', { method: 'POST', body: fd });
+    ta.value = draft = ''; ta.style.height = 'auto'; picked = []; $('fi').value = ''; $('chips').textContent = '';
+    await load(true);
+  } catch (e) { err.textContent = e.message || t('sendErr'); }
+  go.disabled = false;
+}
+function newFromTeam(prev, now) {
+  if (prev == null) return 0;
+  const i = now.findIndex(m => m.id === prev);
+  return now.slice(i + 1).filter(m => m.kind === 'staff').length;
+}
+async function load(mine) {
+  let d;
+  try { d = await WOS.api('/public/ticket?b=' + encodeURIComponent(B) + '&t=' + encodeURIComponent(T)); failed = null; }
+  catch (e) { if (!data) { failed = e.status === 404 ? 'bad' : 'err'; build(); } return; }
+  const last = d.messages.length ? d.messages[d.messages.length - 1].id : '0';
+  const fresh = newFromTeam(lastId, d.messages), stay = nearBottom();
+  const reshape = !data || data.can_write !== d.can_write;
+  data = d; WOS.rememberReport && WOS.rememberReport(B, T, d.title);
+  if (!built || reshape) { build(); toBottom(false); }
+  else if (last !== lastId) { drawChat(); if (stay || mine) toBottom(true); else showPill(); }
+  else drawChat();
+  lastId = last;
+  if (fresh && (document.hidden || !stay)) {
+    unread += fresh; document.title = '(' + unread + ') ' + t('tabNew') + ' – ' + TITLE;
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      try { new Notification(t('team'), { body: d.messages[d.messages.length - 1].text || t('tabNew'), icon: 'icons/icon-192.png', tag: 'wos-' + B }); } catch (e) { /* ignore */ }
+    }
   }
-  box.append(el('p', { class: 'keep' }, t('keep')), el('a', { class: 'btn', href: 'report.html' }, t('report')));
 }
-async function load() {
-  try { data = await WOS.api('/public/ticket?b=' + encodeURIComponent(B) + '&t=' + encodeURIComponent(T)); failed = null; WOS.rememberReport && WOS.rememberReport(B, T, data.title); }
-  catch (e) { failed = e.status === 404 ? 'bad' : 'err'; }
-  draw();
+function showPill() {
+  if ($('pill')) return;
+  const p = el('button', { class: 'newpill', id: 'pill', type: 'button' }, t('newMsg'));
+  p.onclick = () => { p.remove(); toBottom(true); }; $('chat').after(p);
 }
-WOS.init(S).then(() => { WOS.onLang.push(draw); if (!B || !T) { failed = 'bad'; draw(); } else load(); });
-setInterval(() => { if (data && data.open && !document.hidden && !(document.getElementById('ans') || {}).value) load(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { unread = 0; document.title = TITLE; load(); } });
+window.addEventListener('scroll', () => { if (nearBottom()) { const p = $('pill'); if (p) p.remove(); if (!document.hidden) { unread = 0; document.title = TITLE; } } }, { passive: true });
+WOS.init(S).then(() => {
+  WOS.onLang.push(() => { if (data) { built = false; build(); } });
+  if (!B || !T) { failed = 'bad'; build(); return; }
+  load();
+  (function tick() { setTimeout(async () => { await load(); tick(); }, document.hidden ? 30000 : 6000); })();
+});
 </script></body></html>

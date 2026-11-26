@@ -424,7 +424,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 for x in store.links_for_uid(r["player_uid"])]
             d.update({"text": r["text"], "extra": r["extra"], "chief_name": r["chief_name"] or "", "ticket_log": r["ticket_log"] or "",
                       "ticket_url": f"https://discord.com/channels/{guild_id}/{r['ticket_thread_id']}" if r["ticket_thread_id"] else "",
-                      "web_ticket": bool(r["web_ticket"]),
+                      "web_ticket": bool(r["web_ticket"]), "web_chat": bool(not r["reporter_id"] and r["web_token"]),
                       "can_ticket": bool(store.cfg("investigate_enabled") and (r["reporter_id"] or r["web_token"])),
                       "uid": r["player_uid"] or "", "contact": r["contact"] or "", "linked": linked,
                       "files": [{"id": f["id"], "name": f["filename"], "size": f["size"],
@@ -2478,7 +2478,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                  "fixed": "fixed", "rejected": "rejected", "admin_rejected": "rejected"}
         return web.json_response({"id": r["id"], "title": store.bug_summary(r), "status": steps.get(r["status"], "new"),
                                   "duplicate": bool(r["duplicate_of"]), "open": bool(r["web_ticket"]), "created": r["created_at"],
-                                  "messages": [{k: m[k] for k in ("id", "ts", "kind", "author", "text", "files")} for m in view["messages"]]},
+                                  "can_write": bool(hooks["web_can_write"](r)),
+                                  "messages": [dict({k: m[k] for k in ("id", "ts", "kind", "author", "text", "files")}, event=m.get("event", ""))
+                                               for m in view["messages"]]},
                                  headers={"Cache-Control": "no-store"})
 
     @routes.get("/public/ticket/file")

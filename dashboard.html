@@ -1666,7 +1666,7 @@ function bugModal() {
     <div class="w-bugtools">${trBox('bugs', b.id)}${b.mod_url ? html`<a class="w-linkbtn" href="${b.mod_url}" target="_blank" rel="noopener">Mod channel ↗</a>` : ''}${b.admin_url ? html`<a class="w-linkbtn" href="${b.admin_url}" target="_blank" rel="noopener">Admin channel ↗</a>` : ''}</div>
 
     ${bugActions(b)}
-    ${b.ticket_url || b.web_ticket ? ticketChat(b) : ''}
+    ${b.ticket_url || b.web_ticket || b.web_chat ? ticketChat(b) : ''}
     ${similarBox(b)}
     ${closed ? '' : html`<label class="w-knownbar ${b.public ? 'on' : ''}"><span class="w-switch"><input type="checkbox" data-act="bugKnownModal" ${b.public ? 'checked' : ''}><span></span></span>
       <span><b>📌 Known issue</b><span class="w-hint" style="display:block">${b.public ? 'Players see it on the website and the Known issues board, and can say “I have this too”.' : 'Show it on the website and the Known issues board (title, area and status only).'}</span></span></label>`}
@@ -1745,19 +1745,19 @@ async function fetchFile(bugId, fid) {
 // ---- the ticket with the player, right in the bug window: reads the Discord thread, writes into it through the bot
 function ticketChat(b) {
   return html`<section class="w-chat" aria-label="Ticket with the player">
-    <div class="w-chat-head"><b>🔍 Ticket with the player</b><span class="w-hint" id="m-chatstate">● live${b.web_ticket ? ' · on the website' : ''}</span>
+    <div class="w-chat-head"><b>${b.ticket_url || b.web_ticket ? '🔍 Ticket with the player' : '💬 Messages with the player'}</b><span class="w-hint" id="m-chatstate">● live${b.web_chat ? ' · on the website' : ''}</span>
       ${b.ticket_url ? html`<a class="w-linkbtn" href="${b.ticket_url}" target="_blank" rel="noopener">Open in Discord ↗</a>` : ''}</div>
-    ${b.web_ticket ? html`<p class="w-hint" style="margin:0 0 8px">This player reported from the website without Discord. They read and answer on their private report page – the website shows them a notice when you've asked something.</p>` : ''}
+    ${b.web_chat ? html`<p class="w-hint" style="margin:0 0 8px">This player reported from the website without Discord. They read and answer on their private report page${b.web_ticket ? '' : ' – write here any time, or press “Ask the player” to mark the bug as waiting for their answer'}.</p>` : ''}
     <div class="w-chatlog" id="m-chatlog" aria-live="polite"><div class="w-hint">Loading the conversation…</div></div>
     <div class="w-chatform">
       <textarea class="w-input" id="m-chatmsg" rows="2" maxlength="1800" placeholder="${b.web_ticket ? 'Write to the player – they read it on the website' : 'Write to the player – sent in Discord with your name'}"></textarea>
       <div class="w-chatbtns"><label class="w-btn small w-chatfile" title="Add pictures (up to 4)">📎<input type="file" id="m-chatfiles" accept="image/*,video/*" multiple hidden></label>
         <span class="w-hint" id="m-chatfilenames"></span>
         <button class="w-btn primary small" data-act="ticketSend">Send</button></div></div>
-    <details class="w-fold" style="margin-top:10px"><summary><b>Close the ticket</b><span class="w-hint">saves everything with the bug – same as /closebug</span></summary>
+    ${b.ticket_url || b.web_ticket ? html`<details class="w-fold" style="margin-top:10px"><summary><b>Close the ticket</b><span class="w-hint">saves everything with the bug – same as /closebug</span></summary>
       <div class="w-field" style="margin-top:8px"><label class="w-label" for="m-closenote">Short note <span class="w-hint">(optional)</span></label>
         <input class="w-input" id="m-closenote" maxlength="500" placeholder="e.g. Happens after every server reset"></div>
-      <button class="w-btn" data-act="ticketClose">🔒 Close ticket and save</button></details></section>`;
+      <button class="w-btn" data-act="ticketClose">🔒 Close ticket and save</button></details>` : ''}</section>`;
 }
 function chatHtml(d) {
   if (!d.messages.length) return '<div class="w-hint">No messages yet.</div>';
@@ -1770,7 +1770,7 @@ function chatHtml(d) {
 }
 async function pollChat(first) {
   const b = S.detail, log = $('#m-chatlog');
-  if (!b || !(b.ticket_url || b.web_ticket) || !log) return stopChat();
+  if (!b || !(b.ticket_url || b.web_ticket || b.web_chat) || !log) return stopChat();
   try {
     const d = await call('GET', '/api/bugs/' + b.id + '/ticket');
     const last = d.messages.length ? d.messages[d.messages.length - 1].id + ':' + d.messages.length : '0';
@@ -1781,7 +1781,7 @@ async function pollChat(first) {
     }
   } catch (e) { const st = $('#m-chatstate'); if (st) st.textContent = e.message; }
 }
-function startChat() { stopChat(); if (!S.detail || !(S.detail.ticket_url || S.detail.web_ticket)) return; S.chatLast = null; pollChat(true); S.chatTimer = setInterval(() => pollChat(false), 5000); }
+function startChat() { stopChat(); if (!S.detail || !(S.detail.ticket_url || S.detail.web_ticket || S.detail.web_chat)) return; S.chatLast = null; pollChat(true); S.chatTimer = setInterval(() => pollChat(false), 5000); }
 function stopChat() { if (S.chatTimer) { clearInterval(S.chatTimer); S.chatTimer = null; } }
 
 function showModal() {
@@ -1789,7 +1789,7 @@ function showModal() {
   if (!S.detail) return stopChat();
   root.insertAdjacentHTML('beforeend', String(bugModal()));
   loadThumbs();
-  if (S.detail.ticket_url || S.detail.web_ticket) startChat(); else stopChat();
+  if (S.detail.ticket_url || S.detail.web_ticket || S.detail.web_chat) startChat(); else stopChat();
   const fi = $('#m-chatfiles'); if (fi) fi.onchange = () => { $('#m-chatfilenames').textContent = [...fi.files].slice(0, 4).map(f => f.name).join(', '); };
   const ta = $('#m-chatmsg'); if (ta) ta.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const b = $('[data-act=ticketSend]'); if (b) b.click(); } };
   const c = $('#m-close'); if (c) c.focus();
