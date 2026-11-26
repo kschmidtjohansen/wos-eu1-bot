@@ -1495,7 +1495,43 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 "author_id": str(r["author_id"]), "author": person(r["author_id"], r["author_name"]) or "Unknown player",
                 "mod_url": jump("mod_channel_id", r["msg_id"]), "public_url": jump("suggestions_channel_id", r["public_msg_id"]),
                 "reason": r["reject_reason"] or "", "changes": r["changes"] or "", "changed_at": r["changed_at"], "changed_by": r["changed_by"] or "",
-                "changes_url": jump("suggestions_channel_id", r["changes_msg_id"])}
+                "changes_url": jump("suggestions_channel_id", r["changes_msg_id"]),
+                "source": r["source"] or "discord", "uid": r["player_uid"] or "",
+                "web_chat": bool(not r["author_id"] and r["web_token"]), "unread": web_unread_now().get(store.idea_key(r["id"]), 0)}
+
+    @routes.get("/api/suggestions/{id}/chat")
+    async def sug_chat_read(request):
+        """The conversation with a player who sent the idea from the website."""
+        r = sug_or_404(int(request.match_info["id"]))
+        if r["author_id"] or not r["web_token"]:
+            raise ApiError(404, "Only ideas sent from the website have a conversation here.")
+        store.web_msgs_seen(store.idea_key(r["id"]), "player")
+        _unread["t"] = 0
+        return web.json_response(hooks["idea_chat_view"](r, True), headers={"Cache-Control": "no-store"})
+
+    @routes.post("/api/suggestions/{id}/chat")
+    async def sug_chat_send(request):
+        sid = int(request.match_info["id"])
+        sug_or_404(sid)
+        text, files = "", []
+        if request.content_type.startswith("multipart/"):
+            async for part in await request.multipart():
+                if part.name == "text":
+                    text = (await part.text())[:1800]
+                elif part.name == "files" and part.filename and len(files) < 4:
+                    data = bytes(await part.read(decode=False))
+                    if len(data) > 8 * 1024 * 1024:
+                        raise ApiError(413, "Files can be at most 8 MB each.")
+                    name = re.sub(r"[^A-Za-z0-9._-]", "_", part.filename)[-60:] or "file"
+                    if not name.lower().endswith(MEDIA_ALLOWED) or not sniff_ok(name, data):
+                        raise ApiError(400, "Only PNG, JPG, GIF, WEBP, MP4, MOV or WEBM files can be attached.")
+                    files.append((name, data))
+        else:
+            text = str((await body_json(request)).get("text") or "")
+        try:
+            return web.json_response(hooks["idea_staff_send"](sid, who_id(request), text, files))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
 
     @routes.get("/api/suggestions")
     async def list_suggestions(request):
@@ -1785,6 +1821,17 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         return web.json_response({"ok": True, "count": len(bugs), "jump_url": msg.jump_url})
 
     # ------------------------------------------------- kept screenshots / videos
+    @routes.get("/api/suggestions/{id}/files/{fid}")
+    async def sug_file(request):
+        row = store.get_file(int_param(request, "fid"))
+        if row is None or row["bug_id"] != store.idea_key(int_param(request, "id")):
+            raise ApiError(404, "File not found.")
+        path = store.file_path(row)
+        if not path.is_file():
+            raise ApiError(404, "The file has been removed from the bot's computer.")
+        return web.FileResponse(path, headers={"X-Content-Type-Options": "nosniff", "Content-Type": MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+                                               "Content-Security-Policy": "sandbox", "Cache-Control": "private, max-age=3600"})
+
     @routes.get("/api/bugs/{id}/files/{fid}")
     async def bug_file(request):
         row = store.get_file(int_param(request, "fid"))
@@ -2337,6 +2384,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                                   "changelog": bool(store.cfg("changelog_enabled")),
                                   "giftcodes": bool(store.cfg("giftcodes_enabled")),
                                   "ideas": bool(store.cfg("changelog_enabled")),
+                                  "send_ideas": bool(store.cfg("web_ideas_enabled") and store.cfg("suggestions_enabled") and store.cfg("mod_channel_id")),
                                   "languages": [{"code": c, "name": _texts.lang_name(c)} for c in store.languages()],
                                   "player_login": bool(oauth_conf()["secret"] and oauth_conf()["redirect"]),
                                   "areas": store.area_list(), "version": store.cfg("game_version") or "",
@@ -2464,6 +2512,118 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         bug_id = await hooks["submit_web_report"](f, files)
         r = store.get_bug(bug_id) if isinstance(bug_id, int) else None
         return web.json_response({"ok": True, "id": bug_id, "token": (r["web_token"] if r is not None else None) or ""})
+
+    @routes.post("/public/idea")
+    async def public_idea(request):
+        if not (store.cfg("web_ideas_enabled") and store.cfg("suggestions_enabled") and store.cfg("mod_channel_id")):
+            raise ApiError(503, "Ideas from the website are switched off right now.")
+        data = await body_json(request)
+        if data.get("website"):                        # honeypot
+            return web.json_response({"ok": True, "id": None})
+        try:
+            if data.get("t") and float(data["t"]) < 3000:
+                return web.json_response({"ok": True, "id": None})
+        except (TypeError, ValueError):
+            pass
+        now, ip = time.time(), client_ip(request)
+        ip_hash = hmac.new(api_key.encode(), ip.encode(), "sha256").hexdigest()[:16]
+        uid_key = ("uid:" + re.sub(r"\D", "", str(data.get("uid") or ""))) if data.get("uid") else None
+        if store.web_blocked(["ip:" + ip_hash, uid_key]):
+            raise ApiError(429, "Messages from this connection are paused for a few days. Please contact us on Discord.")
+        hits[ip] = [t for t in hits[ip] if now - t < 3600]
+        all_hits[:] = [t for t in all_hits if now - t < 3600]
+        if len(hits[ip]) >= 5 or len(all_hits) >= 60:
+            raise ApiError(429, "Too many messages right now. Please try again later.")
+        f = {"ip_hash": ip_hash, "chief_name": clean(data.get("chief_name"), 50), "uid": clean(data.get("uid"), 30),
+             "text": clean(data.get("text"), store.cfg("suggestion_max_length"))}
+        me = appeal_user(request)
+        if me:
+            f["discord_id"], f["discord_name"] = me
+        if f["uid"]:
+            try:
+                f["uid"] = store.clean_uid(f["uid"])
+            except ValueError as exc:
+                raise ApiError(400, str(exc))
+        if len(f["text"]) < 20:
+            raise ApiError(400, "Please describe your idea (at least 20 characters).")
+        hits[ip].append(now)
+        all_hits.append(now)
+        try:
+            sid = await hooks["submit_web_idea"](f)
+        except ValueError as exc:
+            raise ApiError(503, str(exc))
+        r = store.get_suggestion(sid)
+        return web.json_response({"ok": True, "id": sid, "token": (r["web_token"] if r is not None and not r["author_id"] else "") or ""})
+
+    def follow_idea(request, data=None):
+        q = data if data is not None else request.query
+        try:
+            sid = int(q.get("i") or 0)
+        except ValueError:
+            sid = 0
+        r = store.idea_token_ok(sid, str(q.get("t") or ""))
+        if r is None:
+            raise ApiError(404, "This link isn't valid.")
+        return r
+
+    @routes.get("/public/idea-chat")
+    async def public_idea_chat(request):
+        r = follow_idea(request)
+        view = hooks["idea_chat_view"](r, False)
+        store.web_msgs_seen(store.idea_key(r["id"]), "staff")
+        status = "added" if r["changes"] else r["status"]
+        return web.json_response({"id": r["id"], "title": (r["text"] or "")[:120], "status": status, "created": r["created_at"],
+                                  "can_write": bool(view["open"]), "kind": "idea",
+                                  "messages": [dict({k: m[k] for k in ("id", "ts", "kind", "author", "text", "files")}, event=m.get("event", ""))
+                                               for m in view["messages"]]},
+                                 headers={"Cache-Control": "no-store"})
+
+    @routes.get("/public/idea-chat/file")
+    async def public_idea_file(request):
+        r = follow_idea(request)
+        try:
+            fid = int(request.query.get("f") or 0)
+        except ValueError:
+            fid = 0
+        mine = {x for m in store.web_msgs(store.idea_key(r["id"])) for x in json.loads(m["files"] or "[]")}
+        row = store.get_file(fid) if fid in mine else None
+        path = store.file_path(row) if row is not None else None
+        if path is None or not path.is_file():
+            raise ApiError(404, "File not found.")
+        return web.FileResponse(path, headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox",
+                                               "Content-Type": MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+                                               "Cache-Control": "private, max-age=3600"})
+
+    @routes.post("/public/idea-chat")
+    async def public_idea_reply(request):
+        now, ip = time.time(), client_ip(request)
+        web_ticket_hits[ip] = [t for t in web_ticket_hits[ip] if now - t < 600]
+        if len(web_ticket_hits[ip]) >= 10:
+            raise ApiError(429, "Slow down a little – try again in a few minutes.")
+        fields, files = {}, []
+        if request.content_type == "application/x-www-form-urlencoded":
+            fields = {k: str(v)[:1800] for k, v in (await request.post()).items() if k in ("i", "t", "text")}
+        elif not request.content_type.startswith("multipart/"):
+            raise ApiError(400, "Send the answer as a form.")
+        else:
+            async for part in await request.multipart():
+                if part.name in ("i", "t", "text"):
+                    fields[part.name] = (await part.text())[:1800]
+                elif part.name == "files" and part.filename and len(files) < 4:
+                    data = bytes(await part.read(decode=False))
+                    if len(data) > 8 * 1024 * 1024:
+                        raise ApiError(413, "Files can be at most 8 MB each.")
+                    name = re.sub(r"[^A-Za-z0-9._-]", "_", part.filename)[-60:] or "file"
+                    if not name.lower().endswith(MEDIA_ALLOWED) or not sniff_ok(name, data):
+                        raise ApiError(400, "Only PNG, JPG, GIF, WEBP, MP4, MOV or WEBM files can be attached.")
+                    files.append((name, data))
+        r = follow_idea(request, fields)
+        web_ticket_hits[ip].append(now)
+        try:
+            res = await hooks["idea_reply"](r["id"], fields.get("t") or "", fields.get("text") or "", files)
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        return web.json_response(res)
 
     # ---- website tickets: the player's private follow link (b = bug id, t = token)
     web_ticket_hits = collections.defaultdict(list)

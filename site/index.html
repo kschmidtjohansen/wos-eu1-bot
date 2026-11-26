@@ -26,7 +26,7 @@
 
   <section class="sec grid g2">
     <div id="latest"><div class="sec-h"><h2 data-i="latestH"></h2><a href="changelog.html" data-i="all"></a></div><div class="list" id="latest-l"><div class="skel"></div><div class="skel"></div></div></div>
-    <div id="ideas" hidden><div class="sec-h"><h2 data-i="ideasH"></h2></div><div class="list" id="ideas-l"></div></div>
+    <div id="ideas" hidden><div class="sec-h"><h2 data-i="ideasH"></h2><a href="report.html?idea" id="ideaGo" data-i="ideaGo" hidden></a></div><div class="list" id="ideas-l"></div></div>
   </section>
 
   <section class="sec card banner" id="app" hidden>
@@ -44,7 +44,7 @@ const S = {
   aRepH: 'Report a bug', aRep: 'Something broken? A short form, a screenshot, done. Moderators read every report.',
   aKnownH: 'Known issues', aKnown: "Bugs we already know about. Check here first – you can skip reporting these.", nOpen: 'being worked on',
   aFixH: "What's fixed", aFix: 'Every update and the bugs it fixed, with the game version.', nFixed: 'fixed so far',
-  latestH: 'Fixed lately', all: 'See all', none: 'Nothing published yet.', ideasH: 'Ideas from players we added',
+  latestH: 'Fixed lately', all: 'See all', none: 'Nothing published yet.', ideasH: 'Ideas from players we added', ideaGo: '💡 Suggest an idea', ideaFirst: 'No player ideas added yet – yours could be the first.',
   appH: 'Get the game', appT: 'Android · version {v}. Installs over the version you have – your account is kept.', appB: 'Download for Android', appS: 'Server status',
   gsOn: 'Game server online', gsOff: 'Game server offline', gsMaint: 'Game server in maintenance', gsDeg: 'Game server having problems',
   dcH: 'Never miss a code', dcT: 'Get a notification on your phone for new gift codes and the weekly news – or follow our Discord.', dcB: 'Join our Discord' },
@@ -53,7 +53,7 @@ const S = {
   aRepH: 'Zgłoś błąd', aRep: 'Coś nie działa? Krótki formularz, zrzut ekranu i gotowe. Moderatorzy czytają każde zgłoszenie.',
   aKnownH: 'Znane problemy', aKnown: 'Błędy, o których już wiemy. Sprawdź najpierw tutaj – tych nie musisz zgłaszać.', nOpen: 'w trakcie prac',
   aFixH: 'Co naprawiono', aFix: 'Każda aktualizacja i naprawione w niej błędy, z wersją gry.', nFixed: 'naprawionych',
-  latestH: 'Ostatnio naprawione', all: 'Zobacz wszystkie', none: 'Nic jeszcze nie opublikowano.', ideasH: 'Pomysły graczy, które dodaliśmy',
+  latestH: 'Ostatnio naprawione', all: 'Zobacz wszystkie', none: 'Nic jeszcze nie opublikowano.', ideasH: 'Pomysły graczy, które dodaliśmy', ideaGo: '💡 Zaproponuj pomysł', ideaFirst: 'Nie dodano jeszcze pomysłów graczy – Twój może być pierwszy.',
   appH: 'Pobierz grę', appT: 'Android · wersja {v}. Instaluje się na posiadaną wersję – Twoje konto zostaje.', appB: 'Pobierz na Androida', appS: 'Status serwera',
   gsOn: 'Serwer gry online', gsOff: 'Serwer gry offline', gsMaint: 'Przerwa techniczna serwera', gsDeg: 'Serwer gry ma problemy',
   dcH: 'Nie przegap żadnego kodu', dcT: 'Dostawaj powiadomienia o nowych kodach i cotygodniowych nowościach – albo obserwuj nasz Discord.', dcB: 'Dołącz do Discorda' } };
@@ -79,12 +79,14 @@ function draw() {
   const items = changes.flatMap(c => c.items.map(i => ({ ...i, v: c.title }))).slice(0, 5);
   if (!items.length) box.append(WOS.el('div', { class: 'card empty' }, WOS.t('none')));
   items.forEach(i => box.append(WOS.el('div', { class: 'item' }, WOS.el('div', {}, WOS.el('b', {}, i.title), WOS.el('span', { class: 'm' }, [i.area, i.v].filter(Boolean).join(' · '))), WOS.el('span', { class: 'st fixed' }, '✓'))));
-  const il = $('ideas-l'); il.replaceChildren(); $('ideas').hidden = !ideas.length;
+  const il = $('ideas-l'); il.replaceChildren(); $('ideas').hidden = !ideas.length && !sendIdeas; $('ideaGo').hidden = !sendIdeas;
+  if (!ideas.length && sendIdeas) il.append(WOS.el('div', { class: 'card empty' }, WOS.t('ideaFirst')));
   ideas.slice(0, 3).forEach(x => { const chg = WOS.el('div', { class: 'chg' }, WOS.icon('spark'), WOS.el('span', {}, x.changes));
     il.append(WOS.el('div', { class: 'card idea' }, WOS.el('q', {}, x.idea), chg, WOS.el('time', {}, WOS.date(x.ts)))); });
 }
+let sendIdeas = false;
 WOS.init(S).then(async cfg => {
-  game = cfg.game; drawGame();
+  game = cfg.game; drawGame(); sendIdeas = !!cfg.send_ideas;
   const v = cfg.version || (cfg.game && cfg.game.version);
   if (v) { $('ver-t').textContent = v; $('ver').hidden = false; }
   if (C.DISCORD_URL) { $('dc-a').href = C.DISCORD_URL; $('dc').hidden = false; } else $('dc-a').hidden = true;

@@ -342,6 +342,8 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "dev_version TEXT"), ("bug_reports", "dev_ts INTEGER"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
                      ("bug_reports", "mod_pinged INTEGER"), ("bug_reports", "dev_reply TEXT"), ("bug_reports", "dev_reply_ts INTEGER"), ("bug_reports", "dev_asked INTEGER"), ("bug_reports", "known_off INTEGER"), ("gift_codes", "reminded INTEGER"), ("partners", "fails INTEGER NOT NULL DEFAULT 0"), ("partners", "bug_channel INTEGER"), ("partners", "bug_msg INTEGER"), ("partners", "bug_msg_ch INTEGER"), ("partners", "gift_ping TEXT"), ("partners", "ann_ping TEXT"), ("bug_reports", "ticket_log TEXT"), ("suggestions", "via_guild INTEGER"), ("bug_reports", "web_token TEXT"), ("bug_reports", "web_ticket INTEGER"), ("partners", "bug_msg_sig TEXT"), ("partners", "list_msgs TEXT"), ("partners", "list_sig TEXT"), ("bug_reports", "via_guild INTEGER"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
+                     ("suggestions", "source TEXT"), ("suggestions", "web_token TEXT"), ("suggestions", "player_uid TEXT"),
+                     ("suggestions", "ip_hash TEXT"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
                      ("tickets", "area TEXT"), ("tickets", "title TEXT"), ("tickets", "chief_name TEXT"),
                      ("tickets", "player_uid TEXT"), ("tickets", "game_version TEXT")):   # upgrade older databases
@@ -411,6 +413,8 @@ def set_suggestion(sid: int, **fields):
     cols = ", ".join(f"{k}=?" for k in fields)
     db.execute(f"UPDATE suggestions SET {cols} WHERE id=?", (*fields.values(), sid))
     db.commit()
+    if "status" in fields or fields.get("changes"):
+        idea_status_note(sid)
 
 
 def get_ticket(thread_id: int):
@@ -480,6 +484,7 @@ SCHEMA = {
     "game_version": {"type": "text", "default": "", "min": 0, "max": 30},
     "ticket_details_required": {"type": "bool", "default": True},
     "web_form_enabled": {"type": "bool", "default": False},
+    "web_ideas_enabled": {"type": "bool", "default": True},
     "known_issues_enabled": {"type": "bool", "default": False},
     "known_auto_players": {"type": "int", "default": 3, "min": 0, "max": 100},
     "reminder_critical_hours": {"type": "int", "default": 4, "min": 1, "max": 72},
@@ -1527,8 +1532,40 @@ def web_msg_add(bug_id: int, author: str, name: str, text: str, file_ids=()) -> 
 
 
 def web_unread() -> dict:
-    """{bug id: messages from website players the staff haven't opened yet}."""
+    """{bug id: messages from website players the staff haven't opened yet}. Ideas use negative ids (see idea_key)."""
     return {r[0]: r[1] for r in db.execute("SELECT bug_id, COUNT(*) FROM web_msgs WHERE author='player' AND seen=0 GROUP BY bug_id")}
+
+
+# Website ideas share the conversation and file tables with bugs, keyed by the NEGATIVE suggestion number
+# (suggestion #5 → -5), so the two can never mix.
+def idea_key(sid: int) -> int:
+    return -int(sid)
+
+
+def idea_token_ok(sid: int, token: str):
+    """The suggestion, if token is its private follow-link token (constant-time compare)."""
+    import hmac as _hmac
+    r = get_suggestion(sid) if sid else None
+    if r is None or not r["web_token"] or not token or not _hmac.compare_digest(r["web_token"], str(token)):
+        return None
+    return r
+
+
+def idea_status_note(sid: int):
+    """Tell a website idea's author in their conversation what happened: accepted, rejected (with reason), added to the game."""
+    r = get_suggestion(sid)
+    if r is None or r["author_id"] or not r["web_token"]:
+        return
+    ev = "added" if r["changes"] else r["status"] if r["status"] in ("accepted", "rejected") else None
+    if not ev:
+        return
+    key = idea_key(sid)
+    last = db.execute("SELECT name FROM web_msgs WHERE bug_id=? AND author='system' AND name LIKE 'status:%' ORDER BY id DESC LIMIT 1",
+                      (key,)).fetchone()
+    if last and last["name"] == "status:" + ev:
+        return
+    text = (r["reject_reason"] or "") if ev == "rejected" else (r["changes"] or "") if ev == "added" else ""
+    web_msg_add(key, "system", "status:" + ev, text)
 
 
 def web_msgs(bug_id: int) -> list:
@@ -2760,7 +2797,12 @@ def query_suggestions(status=None, q=None, limit=50, offset=0):
 def delete_suggestions(ids, reset_numbers: bool = False) -> list:
     ids = sorted({int(i) for i in ids})
     rows = [r for r in (get_suggestion(i) for i in ids) if r is not None]
+    import shutil
     for r in rows:
+        key = idea_key(r["id"])
+        shutil.rmtree(ATTACH_DIR / str(key), ignore_errors=True)
+        db.execute("DELETE FROM bug_files WHERE bug_id=?", (key,))
+        db.execute("DELETE FROM web_msgs WHERE bug_id=?", (key,))
         db.execute("DELETE FROM actions WHERE kind='suggestion' AND item_id=?", (r["id"],))
         db.execute("DELETE FROM suggestions WHERE id=?", (r["id"],))
     if reset_numbers and not db.execute("SELECT 1 FROM suggestions LIMIT 1").fetchone():

@@ -63,7 +63,12 @@ const S = {
   files: '{n} file(s) added', sendErr: 'Could not send. Try again.',
   evPassed: '✅ Good news – we confirmed your bug and passed it on to the admins to fix.',
   evFixed: '🎉 Your bug has been fixed. Thank you for reporting it!', evRejected: 'We looked at your report and closed it.', evWhy: 'Reason:',
-  evDup: '🔁 This bug was already reported (bug {dup}). You don’t need to do anything – it is being handled there.' },
+  evDup: '🔁 This bug was already reported (bug {dup}). You don’t need to do anything – it is being handled there.',
+  h1Idea: 'Your idea', leadIdea: 'Messages between you and the WOS EU1 team about your idea.',
+  welcomeIdea: 'Thanks for your idea! 💡 We’ve received suggestion #{id} and the team will look at it soon.\n\nIf we have questions, we’ll write to you right here. Keep this tab open – or save the link to this page and come back later. You can add more details or pictures below at any time.',
+  s_accepted: 'Accepted', s_added: 'Added to the game', s_ideaNew: 'Waiting for the team',
+  evAccepted: '✅ Good news – we accepted your idea! We’ll tell you here when it is in the game.', evIdeaRejected: 'We looked at your idea and decided not to add it.',
+  evAdded: '🎉 Your idea is in the game! What we changed:', closedIdea: 'This idea is closed, so you can’t add messages any more.' },
  pl: { h1: 'Twoje zgłoszenie', lead: 'Wiadomości między Tobą a zespołem WOS EU1 w sprawie Twojego zgłoszenia.',
   bad: 'Ten link jest nieprawidłowy. Użyj linku, który otrzymałeś po wysłaniu zgłoszenia.', err: 'Nie udało się wczytać zgłoszenia. Spróbuj za chwilę.',
   s_new: 'Czeka na moderatora', s_investigating: 'Zespół ma pytanie', s_passed: 'Potwierdzony – u administratorów',
@@ -77,13 +82,20 @@ const S = {
   files: 'Dodano plików: {n}', sendErr: 'Nie udało się wysłać. Spróbuj ponownie.',
   evPassed: '✅ Dobra wiadomość – potwierdziliśmy Twój błąd i przekazaliśmy go administratorom do naprawy.',
   evFixed: '🎉 Twój błąd został naprawiony. Dziękujemy za zgłoszenie!', evRejected: 'Sprawdziliśmy Twoje zgłoszenie i je zamknęliśmy.', evWhy: 'Powód:',
-  evDup: '🔁 Ten błąd był już zgłoszony (błąd {dup}). Nie musisz nic robić – zajmujemy się nim tam.' } };
+  evDup: '🔁 Ten błąd był już zgłoszony (błąd {dup}). Nie musisz nic robić – zajmujemy się nim tam.',
+  h1Idea: 'Twój pomysł', leadIdea: 'Wiadomości między Tobą a zespołem WOS EU1 w sprawie Twojego pomysłu.',
+  welcomeIdea: 'Dziękujemy za pomysł! 💡 Otrzymaliśmy propozycję #{id} i zespół wkrótce się nią zajmie.\n\nJeśli będziemy mieli pytania, napiszemy tutaj. Zostaw tę kartę otwartą – albo zapisz link do tej strony i wróć później. W każdej chwili możesz też dodać poniżej więcej szczegółów lub zdjęć.',
+  s_accepted: 'Zaakceptowany', s_added: 'Dodany do gry', s_ideaNew: 'Czeka na zespół',
+  evAccepted: '✅ Dobra wiadomość – zaakceptowaliśmy Twój pomysł! Damy znać tutaj, gdy pojawi się w grze.', evIdeaRejected: 'Przyjrzeliśmy się Twojemu pomysłowi i postanowiliśmy go nie dodawać.',
+  evAdded: '🎉 Twój pomysł jest w grze! Co zmieniliśmy:', closedIdea: 'Ten pomysł jest zamknięty, więc nie można już dodawać wiadomości.' } };
 const $ = id => document.getElementById(id), el = (...a) => WOS.el(...a), t = k => WOS.t(k);
 const base = ((window.WOS_CONFIG || {}).API_BASE || '').replace(/\/+$/, '');
-const q = new URLSearchParams(location.search), B = q.get('b'), T = q.get('t');
+const q = new URLSearchParams(location.search), I = q.get('i'), IDEA = !!I && !q.get('b'), B = IDEA ? I : q.get('b'), T = q.get('t');
+const EP = IDEA ? '/public/idea-chat' : '/public/ticket', KEY = IDEA ? 'i' : 'b';     // a website idea or a bug report
+if (IDEA) { document.querySelector('h1').dataset.i = 'h1Idea'; document.querySelector('.lead').dataset.i = 'leadIdea'; document.title = document.title.replace(/^[^–]+/, 'Your idea '); }
 const TITLE = document.title;
 let data = null, failed = null, lastId = null, unread = 0, draft = '', picked = [], built = false;
-const fileUrl = f => base + '/public/ticket/file?b=' + encodeURIComponent(B) + '&t=' + encodeURIComponent(T) + '&f=' + f.id;
+const fileUrl = f => base + EP + '/file?' + KEY + '=' + encodeURIComponent(B) + '&t=' + encodeURIComponent(T) + '&f=' + f.id;
 const nearBottom = () => window.innerHeight + window.scrollY > document.body.scrollHeight - 160;
 const toBottom = smooth => window.scrollTo({ top: document.body.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
 function dayLabel(ts) {
@@ -95,7 +107,8 @@ function bubble(m) {
   if (m.kind === 'system' && m.event === 'closed') return el('div', { class: 'note' }, '🔒 ' + t('closedEv'));
   if (m.kind === 'system' && (m.event || '').startsWith('status:')) {         // what happened to the report
     const ev = m.event.slice(7), extra = m.text || '';
-    const line = ev === 'rejected' ? t('evRejected') + (extra ? '\n' + t('evWhy') + ' ' + extra : '')
+    const line = ev === 'accepted' ? t('evAccepted') : ev === 'added' ? t('evAdded') + '\n' + extra
+      : ev === 'rejected' ? t(IDEA ? 'evIdeaRejected' : 'evRejected') + (extra ? '\n' + t('evWhy') + ' ' + extra : '')
       : ev === 'duplicate' ? t('evDup').replace('{dup}', extra) : ev === 'fixed' ? t('evFixed') + (extra ? ' (' + extra + ')' : '') : t('evPassed');
     return el('div', { class: 'row' }, el('div', { class: 'av', style: 'background-image:url(icons/icon-192.png)' }),
       el('div', { class: 'bub ev ' + ev }, el('div', { class: 'who' }, t('team')), el('div', { class: 'tx' }, line), el('div', { class: 'tm' }, hm(m.ts))));
@@ -116,7 +129,7 @@ function bubble(m) {
   }
   return el('div', { class: 'row' + (me ? ' me' : '') }, me ? '' : el('div', { class: 'av', style: 'background-image:url(icons/icon-192.png)' }),
     el('div', { class: 'bub' }, me ? '' : el('div', { class: 'who' }, welcome ? t('team') : (m.author || '') + ' · ' + t('team')),
-      el('div', { class: 'tx' }, welcome ? t('welcome').replace('{id}', data.id) : m.text),
+      el('div', { class: 'tx' }, welcome ? t(IDEA ? 'welcomeIdea' : 'welcome').replace('{id}', data.id) : m.text),
       files.length ? el('div', { class: 'fl' }, ...files) : '', acts.length ? el('div', { class: 'acts' }, ...acts) : '',
       el('div', { class: 'tm' }, hm(m.ts))));
 }
@@ -124,9 +137,10 @@ function drawChat() {
   const chat = $('chat'); if (!chat) return;
   chat.replaceChildren(); let day = '';
   data.messages.forEach(m => { const d = dayLabel(m.ts); if (d !== day) { day = d; chat.append(el('div', { class: 'day' }, d)); } chat.append(bubble(m)); });
-  const st = $('st'); if (st) { const k = data.duplicate ? 's_dup' : 's_' + data.status; st.textContent = t(k);
-    st.className = 'st' + (data.status === 'fixed' ? ' ok' : ['rejected'].includes(data.status) ? ' no' : ''); }
-  $('askbar').hidden = !data.open;
+  const st = $('st'); if (st) { const k = data.duplicate ? 's_dup' : IDEA && data.status === 'new' ? 's_ideaNew' : 's_' + data.status; st.textContent = t(k);
+    st.className = 'st' + (['fixed', 'accepted', 'added'].includes(data.status) ? ' ok' : ['rejected'].includes(data.status) ? ' no' : ''); }
+  const lastM = data.messages[data.messages.length - 1];
+  $('askbar').hidden = !(IDEA ? data.can_write && lastM && lastM.kind === 'staff' : data.open);
 }
 function build() {
   const box = $('box'); box.replaceChildren();
@@ -135,7 +149,7 @@ function build() {
     el('span', { class: 'st', id: 'st' })));
   box.append(el('div', { class: 'note', id: 'askbar', hidden: true }, '❓ ' + t('ask')));
   box.append(el('div', { class: 'chat', id: 'chat' }));
-  if (!data.can_write) { box.append(el('div', { class: 'closedbar' }, t('closedBar'))); built = true; return drawChat(); }
+  if (!data.can_write) { box.append(el('div', { class: 'closedbar' }, t(IDEA ? 'closedIdea' : 'closedBar'))); built = true; return drawChat(); }
   const ta = el('textarea', { id: 'msg', rows: '1', maxlength: '1800', placeholder: t('ph'), 'aria-label': t('ph') });
   ta.value = draft;
   ta.oninput = () => { draft = ta.value; ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; };
@@ -152,10 +166,10 @@ function build() {
 async function send() {
   const ta = $('msg'), go = $('go'), err = $('cerr');
   if (!ta.value.trim() && !picked.length) return ta.focus();
-  const fd = new FormData(); fd.append('b', B); fd.append('t', T); fd.append('text', ta.value); picked.forEach(f => fd.append('files', f));
+  const fd = new FormData(); fd.append(KEY, B); fd.append('t', T); fd.append('text', ta.value); picked.forEach(f => fd.append('files', f));
   go.disabled = true; err.textContent = '';
   try {
-    await WOS.api('/public/ticket', { method: 'POST', body: fd });
+    await WOS.api(EP, { method: 'POST', body: fd });
     ta.value = draft = ''; ta.style.height = 'auto'; picked = []; $('fi').value = ''; $('chips').textContent = '';
     await load(true);
   } catch (e) { err.textContent = e.message || t('sendErr'); }
@@ -168,12 +182,12 @@ function newFromTeam(prev, now) {
 }
 async function load(mine) {
   let d;
-  try { d = await WOS.api('/public/ticket?b=' + encodeURIComponent(B) + '&t=' + encodeURIComponent(T)); failed = null; }
+  try { d = await WOS.api(EP + '?' + KEY + '=' + encodeURIComponent(B) + '&t=' + encodeURIComponent(T)); failed = null; }
   catch (e) { if (!data) { failed = e.status === 404 ? 'bad' : 'err'; build(); } return; }
   const last = d.messages.length ? d.messages[d.messages.length - 1].id : '0';
   const fresh = newFromTeam(lastId, d.messages), stay = nearBottom();
   const reshape = !data || data.can_write !== d.can_write;
-  data = d; WOS.rememberReport && WOS.rememberReport(B, T, d.title);
+  data = d; WOS.rememberReport && WOS.rememberReport(B, T, d.title, IDEA ? 'idea' : 'bug');
   if (!built || reshape) { build(); toBottom(false); }
   else if (last !== lastId) { drawChat(); if (stay || mine) toBottom(true); else showPill(); }
   else drawChat();

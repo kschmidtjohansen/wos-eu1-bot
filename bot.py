@@ -1112,8 +1112,16 @@ async def _sync_mod_msg(r, note):
 
 def web_ticket_view(r, for_staff: bool) -> dict:
     """The website conversation, for the dashboard (for_staff) or for the player's follow page."""
+    return {"thread_url": "", "web": True, "archived": not r["web_ticket"], "messages": _web_messages(r["id"], for_staff)}
+
+
+WEB_EV_LABEL = {"status:passed": "confirmed", "status:fixed": "fixed", "status:rejected": "closed", "status:duplicate": "already reported",
+                "status:accepted": "accepted", "status:added": "added to the game"}
+
+
+def _web_messages(key: int, for_staff: bool) -> list:
     out = []
-    for m in store.web_msgs(r["id"]):
+    for m in store.web_msgs(key):
         files = []
         for fid in json.loads(m["files"] or "[]"):
             f = store.get_file(fid)
@@ -1123,9 +1131,8 @@ def web_ticket_view(r, for_staff: bool) -> dict:
         if m["author"] == "system":
             what = m["name"] or "closed"                 # welcome | closed | status:<passed|fixed|rejected|duplicate>
             if for_staff:
-                label = {"status:passed": "confirmed", "status:fixed": "fixed", "status:rejected": "closed", "status:duplicate": "already reported"}
                 text = ("👋 Standard welcome message sent to the player" if what == "welcome" else "🔒 Ticket closed" if what == "closed"
-                        else f"📣 The player was told: {label.get(what, what)}" + (f" – {m['text']}" if m["text"] else ""))
+                        else f"📣 The player was told: {WEB_EV_LABEL.get(what, what)}" + (f" – {m['text']}" if m["text"] else ""))
             else:
                 text = m["text"] or ""
             out.append({"id": str(m["id"]), "ts": m["ts"], "author": brand(), "kind": "system", "event": what, "bot": True, "player": False,
@@ -1134,7 +1141,93 @@ def web_ticket_view(r, for_staff: bool) -> dict:
         out.append({"id": str(m["id"]), "ts": m["ts"], "author": m["name"] or ("Staff" if m["author"] == "staff" else "Player"),
                     "kind": m["author"], "bot": m["author"] == "system", "player": m["author"] == "player",
                     "staff": m["author"] == "staff", "avatar": "", "text": m["text"] or "", "files": files, "web": True})
-    return {"thread_url": "", "web": True, "archived": not r["web_ticket"], "messages": out}
+    return out
+
+
+# ------------------------------------------- website ideas: the player's private conversation (follow.html?i=…)
+def idea_follow_url(r) -> str:
+    return f"{store.site_base() or '/'}follow.html?i={r['id']}&t={r['web_token']}" if r["web_token"] else ""
+
+
+def idea_chat_view(r, for_staff: bool) -> dict:
+    return {"web": True, "open": idea_can_write(r), "messages": _web_messages(store.idea_key(r["id"]), for_staff)}
+
+
+def idea_can_write(r) -> bool:
+    """The player can write until the idea is rejected or has been added to the game."""
+    return r["status"] != "rejected" and not r["changes"]
+
+
+def idea_chat_write(r, author: str, name: str, text: str, files=None, user_id=None) -> dict:
+    text = (text or "").strip()[:1800]
+    if not text and not files:
+        raise ValueError("Write a message first.")
+    key = store.idea_key(r["id"])
+    ids = [store.save_file(key, n, d, always=True) for n, d in (files or [])[:4]]
+    mid = store.web_msg_add(key, author, name, text, ids)
+    if author == "staff":
+        record_action("suggestion", r["id"], "message", int(user_id) if user_id else None, name)
+    return {"ok": True, "id": str(mid)}
+
+
+def idea_staff_send(sid: int, user_id, text: str, files=None) -> dict:
+    r = get_suggestion(sid)
+    if r is None or r["author_id"] or not r["web_token"]:
+        raise ValueError("Only ideas sent from the website have a conversation here.")
+    return idea_chat_write(r, "staff", _staff_name(user_id), text, files, user_id)
+
+
+async def idea_reply(sid: int, token: str, text: str, files) -> dict:
+    """The player writes on their idea's follow page."""
+    r = store.idea_token_ok(sid, token)
+    if r is None:
+        raise ValueError("This link isn't valid.")
+    if not idea_can_write(r):
+        raise ValueError("This idea is closed, so you can't add messages to it any more.")
+    name = r["author_name"] or "The player"
+    res = idea_chat_write(r, "player", name, text, files)
+    log_event("suggestion", f"{name} wrote on the website about suggestion #{r['id']}", None, "Website")
+    ch = chan("mod_channel_id")
+    if ch is not None:
+        try:
+            ref = ch.get_partial_message(r["msg_id"]) if r["msg_id"] else None
+            await ch.send(f"💬 **{name} wrote on the website about suggestion #{r['id']}**\n>>> {(text or '(pictures)')[:1500]}\n"
+                          "-# Read and answer in the suggestion's window on the dashboard.", reference=ref, mention_author=False,
+                          allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+    return res
+
+
+async def submit_web_idea(f: dict) -> int:
+    """A suggestion sent through the website. Posted in the mod channel like a Discord suggestion; the player gets a
+    private follow link where the team can ask questions and where they see what was decided."""
+    channel = chan("mod_channel_id")
+    if channel is None or not (cfg("web_ideas_enabled") and cfg("suggestions_enabled")):
+        raise ValueError("Ideas from the website are switched off right now.")
+    import secrets
+    cur = db.execute("INSERT INTO suggestions (author_id, text, created_at, author_name, source, web_token, player_uid, ip_hash) "
+                     "VALUES (?,?,?,?, 'web', ?,?,?)",
+                     (f.get("discord_id") or 0, f["text"], int(time.time()), f.get("discord_name") or f["chief_name"] or None,
+                      secrets.token_urlsafe(18), f["uid"] or None, f.get("ip_hash")))
+    db.commit()
+    sid = cur.lastrowid
+    if not f.get("discord_id"):
+        store.web_msg_add(store.idea_key(sid), "system", "welcome", "")
+    try:
+        msg = await channel.send(embed=suggestion_embed(store.get_suggestion(sid)), view=TranslateView())
+    except discord.HTTPException as exc:
+        store.delete_suggestions([sid])
+        log_event("system", f"Could not deliver a website idea: {exc}", None, "Website")
+        raise ValueError("Sorry, the idea could not be delivered. Please try again later.")
+    set_suggestion(sid, msg_id=msg.id)
+    for e in (SUGGEST_ACCEPT_EMOJI, SUGGEST_REJECT_EMOJI):
+        try:
+            await msg.add_reaction(e)
+        except discord.HTTPException:
+            pass
+    log_event("suggestion", f"Suggestion #{sid} sent from the website by {f['chief_name'] or 'an anonymous player'}", None, "Website")
+    return sid
 
 
 def web_can_write(r) -> bool:
@@ -1396,7 +1489,9 @@ def suggestion_embed(r, note: Optional[str] = None) -> discord.Embed:
     if r["via_guild"]:
         vp = store.get_partner(r["via_guild"])
         via = f"\nvia promoter server **{(vp['name'] if vp else None) or r['via_guild']}**"
-    e.add_field(name="From", value=f"<@{r['author_id']}>" + via, inline=True)
+    who = (f"<@{r['author_id']}>" if r["author_id"]
+           else f"🌐 **{r['author_name'] or 'A player'}** (website)" + (f"\nUID {r['player_uid']}" if r["player_uid"] else ""))
+    e.add_field(name="From", value=who + via, inline=True)
     e.add_field(name="Status", value="🛠️ Added – see what changed" if r["changes"] else label, inline=True)
     if r["status"] == "rejected" and r["reject_reason"]:
         e.add_field(name="💬 Reason", value=r["reject_reason"][:1024], inline=False)
@@ -1436,7 +1531,7 @@ async def post_suggestion_changes(sid: int, text: str, actor_id, who: str):
         e = discord.Embed(title=f"🛠️ Suggestion #{r['id']} is in the game!", description=text, color=0x9B59B6)
         e.add_field(name="The idea", value=(r["text"][:300] + ("…" if len(r["text"]) > 300 else "")), inline=False)
         e.set_footer(text=f"{brand()} · thanks for the idea!")
-        content = f"<@{r['author_id']}>"
+        content = f"<@{r['author_id']}>" if r["author_id"] else None
         try:
             if r["changes_msg_id"]:
                 await pub.get_partial_message(r["changes_msg_id"]).edit(content=content, embed=e,
@@ -1883,7 +1978,7 @@ class WosBot(discord.Client):
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "ticket_from_dashboard": ticket_from_dashboard, "ticket_messages": ticket_messages,
                          "ticket_send": ticket_send, "ticket_close": ticket_close,
-                         "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "web_ticket_view": web_ticket_view, "web_can_write": web_can_write, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
+                         "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "submit_web_idea": submit_web_idea, "idea_chat_view": idea_chat_view, "idea_can_write": idea_can_write, "idea_reply": idea_reply, "idea_staff_send": idea_staff_send, "idea_follow_url": idea_follow_url, "web_ticket_view": web_ticket_view, "web_can_write": web_can_write, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
                          "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
                          "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
