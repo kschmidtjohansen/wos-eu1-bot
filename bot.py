@@ -1121,11 +1121,15 @@ def web_ticket_view(r, for_staff: bool) -> dict:
                 kind = "image" if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")) else "video"
                 files.append({"id": f["id"], "name": f["filename"], "type": kind})
         if m["author"] == "system":
-            what = m["name"] or "closed"                 # welcome | closed
+            what = m["name"] or "closed"                 # welcome | closed | status:<passed|fixed|rejected|duplicate>
+            if for_staff:
+                label = {"status:passed": "confirmed", "status:fixed": "fixed", "status:rejected": "closed", "status:duplicate": "already reported"}
+                text = ("👋 Standard welcome message sent to the player" if what == "welcome" else "🔒 Ticket closed" if what == "closed"
+                        else f"📣 The player was told: {label.get(what, what)}" + (f" – {m['text']}" if m["text"] else ""))
+            else:
+                text = m["text"] or ""
             out.append({"id": str(m["id"]), "ts": m["ts"], "author": brand(), "kind": "system", "event": what, "bot": True, "player": False,
-                        "staff": False, "avatar": "",
-                        "text": ("👋 Standard welcome message sent to the player" if what == "welcome" else "🔒 Ticket closed") if for_staff else "",
-                        "files": [], "web": True})
+                        "staff": False, "avatar": "", "text": text, "files": [], "web": True})
             continue
         out.append({"id": str(m["id"]), "ts": m["ts"], "author": m["name"] or ("Staff" if m["author"] == "staff" else "Player"),
                     "kind": m["author"], "bot": m["author"] == "system", "player": m["author"] == "player",
@@ -1221,7 +1225,6 @@ async def ticket_messages(bug_id: int, after: int = 0) -> dict:
     if w is not None and (w["web_ticket"] or (not w["reporter_id"] and w["web_token"])):
         return web_ticket_view(w, for_staff=True)
     r, th = await _ticket_thread(bug_id)
-    staff = set()
     g = bot.get_guild(GUILD_ID)
     out = []
     async for m in th.history(limit=200, oldest_first=True, after=discord.Object(id=after) if after else None):

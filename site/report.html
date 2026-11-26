@@ -116,8 +116,6 @@ f.addEventListener('submit', async e => {
       WOS.rememberReport(j.id, j.token, v('title'));
       const url = new URL('follow.html?b=' + j.id + '&t=' + encodeURIComponent(j.token), location.href).href;
       location.href = url; return;                       // straight into the conversation (with the standard welcome message)
-      fl.append(WOS.el('p', {}, WOS.t('followT')), WOS.el('a', { class: 'btn pri', href: url }, WOS.t('follow')),
-        WOS.el('p', { class: 'muted', style: 'font-size:13.5px;overflow-wrap:anywhere;margin-top:8px' }, url));
     }
   } catch (err) { say(err.message, 'err'); }
   go.disabled = false; go.textContent = WOS.t('send');

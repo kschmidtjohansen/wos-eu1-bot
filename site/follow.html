@@ -29,6 +29,7 @@
 .bub .fl{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.bub .fl img,.bub .fl video{max-width:230px;max-height:200px;border-radius:12px;display:block}
 .bub .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
 .bub .acts button{font:inherit;font-size:13.5px;font-weight:650;padding:6px 12px;border-radius:999px;border:1px solid var(--line-2);background:var(--glass-2);color:var(--text);cursor:pointer}
+.bub.ev.fixed,.bub.ev.passed{border-color:rgba(79,209,161,.4);background:rgba(79,209,161,.09)}
 .note{align-self:center;color:var(--muted);font-size:13.5px;text-align:center;margin:6px 0}
 .compose{position:sticky;bottom:0;z-index:5;padding:10px 0 calc(10px + env(safe-area-inset-bottom));
   background:linear-gradient(to top,var(--bg,#060c17) 70%,transparent)}
@@ -59,7 +60,10 @@ const S = {
   closedEv: 'The team closed the conversation. Thank you for your help!',
   ask: 'The team is waiting for your answer.', ph: 'Write a message…', send: 'Send', attach: 'Add screenshots or video',
   newMsg: 'New message ↓', closedBar: 'This report is closed, so you can’t add messages any more.', tabNew: 'New message',
-  files: '{n} file(s) added', sendErr: 'Could not send. Try again.' },
+  files: '{n} file(s) added', sendErr: 'Could not send. Try again.',
+  evPassed: '✅ Good news – we confirmed your bug and passed it on to the admins to fix.',
+  evFixed: '🎉 Your bug has been fixed. Thank you for reporting it!', evRejected: 'We looked at your report and closed it.', evWhy: 'Reason:',
+  evDup: '🔁 This bug was already reported (bug {dup}). You don’t need to do anything – it is being handled there.' },
  pl: { h1: 'Twoje zgłoszenie', lead: 'Wiadomości między Tobą a zespołem WOS EU1 w sprawie Twojego zgłoszenia.',
   bad: 'Ten link jest nieprawidłowy. Użyj linku, który otrzymałeś po wysłaniu zgłoszenia.', err: 'Nie udało się wczytać zgłoszenia. Spróbuj za chwilę.',
   s_new: 'Czeka na moderatora', s_investigating: 'Zespół ma pytanie', s_passed: 'Potwierdzony – u administratorów',
@@ -70,7 +74,10 @@ const S = {
   closedEv: 'Zespół zakończył rozmowę. Dziękujemy za pomoc!',
   ask: 'Zespół czeka na Twoją odpowiedź.', ph: 'Napisz wiadomość…', send: 'Wyślij', attach: 'Dodaj zrzuty ekranu lub film',
   newMsg: 'Nowa wiadomość ↓', closedBar: 'To zgłoszenie jest zamknięte, więc nie można już dodawać wiadomości.', tabNew: 'Nowa wiadomość',
-  files: 'Dodano plików: {n}', sendErr: 'Nie udało się wysłać. Spróbuj ponownie.' } };
+  files: 'Dodano plików: {n}', sendErr: 'Nie udało się wysłać. Spróbuj ponownie.',
+  evPassed: '✅ Dobra wiadomość – potwierdziliśmy Twój błąd i przekazaliśmy go administratorom do naprawy.',
+  evFixed: '🎉 Twój błąd został naprawiony. Dziękujemy za zgłoszenie!', evRejected: 'Sprawdziliśmy Twoje zgłoszenie i je zamknęliśmy.', evWhy: 'Powód:',
+  evDup: '🔁 Ten błąd był już zgłoszony (błąd {dup}). Nie musisz nic robić – zajmujemy się nim tam.' } };
 const $ = id => document.getElementById(id), el = (...a) => WOS.el(...a), t = k => WOS.t(k);
 const base = ((window.WOS_CONFIG || {}).API_BASE || '').replace(/\/+$/, '');
 const q = new URLSearchParams(location.search), B = q.get('b'), T = q.get('t');
@@ -86,6 +93,13 @@ function dayLabel(ts) {
 const hm = ts => new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 function bubble(m) {
   if (m.kind === 'system' && m.event === 'closed') return el('div', { class: 'note' }, '🔒 ' + t('closedEv'));
+  if (m.kind === 'system' && (m.event || '').startsWith('status:')) {         // what happened to the report
+    const ev = m.event.slice(7), extra = m.text || '';
+    const line = ev === 'rejected' ? t('evRejected') + (extra ? '\n' + t('evWhy') + ' ' + extra : '')
+      : ev === 'duplicate' ? t('evDup').replace('{dup}', extra) : ev === 'fixed' ? t('evFixed') + (extra ? ' (' + extra + ')' : '') : t('evPassed');
+    return el('div', { class: 'row' }, el('div', { class: 'av', style: 'background-image:url(icons/icon-192.png)' }),
+      el('div', { class: 'bub ev ' + ev }, el('div', { class: 'who' }, t('team')), el('div', { class: 'tx' }, line), el('div', { class: 'tm' }, hm(m.ts))));
+  }
   const me = m.kind === 'player', welcome = m.kind === 'system';
   const files = (m.files || []).map(f => f.type === 'video' ? el('video', { src: fileUrl(f), controls: true, preload: 'metadata' })
     : el('a', { href: fileUrl(f), target: '_blank', rel: 'noopener' }, el('img', { src: fileUrl(f), alt: f.name, loading: 'lazy' })));

@@ -300,6 +300,11 @@ WEB_EN = [
     ('web.follow.tabNew', 'Website – follow a report', 'New message'),
     ('web.follow.files', 'Website – follow a report', '{n} file(s) added'),
     ('web.follow.sendErr', 'Website – follow a report', 'Could not send. Try again.'),
+    ('web.follow.evPassed', 'Website – follow a report', '✅ Good news – we confirmed your bug and passed it on to the admins to fix.'),
+    ('web.follow.evFixed', 'Website – follow a report', '🎉 Your bug has been fixed. Thank you for reporting it!'),
+    ('web.follow.evRejected', 'Website – follow a report', 'We looked at your report and closed it.'),
+    ('web.follow.evWhy', 'Website – follow a report', 'Reason:'),
+    ('web.follow.evDup', 'Website – follow a report', '🔁 This bug was already reported (bug {dup}). You don’t need to do anything – it is being handled there.'),
 ]
 
 WEB_PL = {
@@ -600,4 +605,9 @@ WEB_PL = {
     'web.follow.tabNew': 'Nowa wiadomość',
     'web.follow.files': 'Dodano plików: {n}',
     'web.follow.sendErr': 'Nie udało się wysłać. Spróbuj ponownie.',
+    'web.follow.evPassed': '✅ Dobra wiadomość – potwierdziliśmy Twój błąd i przekazaliśmy go administratorom do naprawy.',
+    'web.follow.evFixed': '🎉 Twój błąd został naprawiony. Dziękujemy za zgłoszenie!',
+    'web.follow.evRejected': 'Sprawdziliśmy Twoje zgłoszenie i je zamknęliśmy.',
+    'web.follow.evWhy': 'Powód:',
+    'web.follow.evDup': '🔁 Ten błąd był już zgłoszony (błąd {dup}). Nie musisz nic robić – zajmujemy się nim tam.',
 }

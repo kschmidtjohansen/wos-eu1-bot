@@ -1004,13 +1004,6 @@ function viewOverview() {
     detail: r.found ? '@' + r.name : 'Role not found – check the role IDs in your .env file', go: null }));
   const issues = rows.filter(r => r.state !== 'ok').length;
   const B = st.bugs, G = st.suggestions;
-  const bugTiles = [[B.total, 'Bugs reported', ''], [B.awaiting, 'Awaiting moderators', ''], [B.with_admins, 'Waiting for admins', ''],
-    [B.investigating, 'Being investigated', 'warn'], [B.fixed, 'Fixed', 'ok'], [B.rejected, 'Rejected', 'bad']];
-  const sugTiles = [[G.total, 'Suggestions submitted', ''], [G.pending, 'Awaiting decision', ''],
-    [G.accepted, 'Accepted', 'ok'], [G.rejected, 'Rejected', 'bad']];
-  const tIc = { 'Bugs reported': 'bug', 'Awaiting moderators': 'list', 'Waiting for admins': 'shield', 'Being investigated': 'alert', 'Fixed': 'check', 'Rejected': 'circle',
-    'Suggestions submitted': 'message', 'Awaiting decision': 'list', 'Accepted': 'check' };
-  const tile = t => html`<div class="w-card w-tile ${t[2]}"><i class="w-tic">${icon(tIc[t[1]] || 'chart')}</i><b data-tick="${t[0]}">${t[0]}</b><span>${t[1]}</span></div>`;
   const sIc = { ok: 'check', warn: 'alert', bad: 'alert', todo: 'circle' };
   const todo = [[B.awaiting, 'bug reports waiting for a moderator', 'bugs', 'new', 'bug'], [B.dups || 0, (B.dups === 1 ? 'bug looks' : 'bugs look') + ' like a duplicate – merge with one tap', 'bugs', 'dups', 'list'],
     [B.with_admins, 'bugs passed on, waiting for an admin', 'bugs', 'passed', 'shield'],
@@ -1532,7 +1525,7 @@ function bugList() {
   if (!B.items.length) return html`<div class="w-empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`;
   return html`${B.items.map(b => html`<div class="w-bugrow${B.selecting ? ' sel' : ''}" role="button" tabindex="0" data-act="${B.selecting ? 'bugPick' : 'bugOpen'}" data-id="${b.id}" data-sev="${b.severity || ''}"${B.selecting ? html` aria-pressed="${String(B.sel.includes(b.id))}"` : ''}>
     <b>${B.selecting ? (B.sel.includes(b.id) ? '☑' : '☐') : ''} #${b.id}</b>
-    <div><div class="w-bugsum">${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? (b.auto_closed ? ' · closed automatically as duplicate of #' : ' · duplicate of #') + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}${b.public ? html` · <span class="w-knowntag">📌 Known issue</span>` : ''}${b.dev && b.dev.state ? html` · <span class="w-devtag ${b.dev.state}">${{ working: '🛠️ Developers working on it', fixed: '✔️ Fixed by developers', need_info: '💬 Developers need info' }[b.dev.state]}</span>` : ''}</div>
+    <div><div class="w-bugsum">${b.unread ? html`<span class="w-badge warn" title="The player wrote on the website – open the bug to read it">💬 ${b.unread} new</span> ` : ''}${b.summary}</div><div class="w-sub">${b.severity ? SEV[b.severity] + ' · ' : ''}${b.area ? b.area + ' · ' : ''}${b.reporter || (b.source === 'web' ? 'Website' : 'Unknown player')}${b.version ? ' · ' + b.version : ''}${b.duplicate_of ? (b.auto_closed ? ' · closed automatically as duplicate of #' : ' · duplicate of #') + b.duplicate_of : ''}${b.duplicates && b.duplicates.length ? ' · +' + b.duplicates.length + ' duplicate' + (b.duplicates.length > 1 ? 's' : '') : ''}${b.votes ? ' · 👥 ' + b.votes + ' affected' : ''}${b.public ? html` · <span class="w-knowntag">📌 Known issue</span>` : ''}${b.dev && b.dev.state ? html` · <span class="w-devtag ${b.dev.state}">${{ working: '🛠️ Developers working on it', fixed: '✔️ Fixed by developers', need_info: '💬 Developers need info' }[b.dev.state]}</span>` : ''}</div>
       ${dupHint(b) ? html`<div class="w-duphint">🔁 Looks like <b>#${b.dup_suggest}</b> ${b.dup_title ? '“' + b.dup_title.slice(0, 60) + '”' : ''} · ${b.dup_score}% match
         ${B.selecting ? '' : html`<button class="w-btn small" data-act="dupMerge" data-id="${b.id}" data-orig="${b.dup_suggest}">Merge into #${b.dup_suggest}</button>`}</div>` : ''}</div>
     ${bugBadge(b.status)}${B.selecting ? html`<span></span>` : quickBtns(b)}<time title="${full(b.created_at)}">${ago(b.created_at)}</time></div>`)}`;
@@ -2196,7 +2189,7 @@ function quickModal() {
         <div class="w-hint">Filled in on new bug reports, shown on the website, and written on a bug as “fixed in” when it is marked fixed. Bugs already reported keep their version.</div></div>
       <div class="w-actions"><button class="w-btn primary" data-act="qVer">Save version</button></div>`);
   if (Q.kind === 'code') {
-    const ch = chanName(set.giftcodes_channel_id), pt = (S.queue && S.queue.partners) || 0;
+    const ch = chanName(set.giftcodes_channel_id);
     return shell('New gift code', html`
       <div class="w-field"><label class="w-label" for="q-code">Code</label><input class="w-input w-codein" id="q-code" maxlength="40" placeholder="e.g. WOSEU1GIFT" autocomplete="off"></div>
       <div class="w-grid2" style="gap:12px"><div class="w-field"><label class="w-label" for="q-dur">Works for</label>
@@ -4224,7 +4217,7 @@ function makeMock() {
           { kind: 'suggestion', id: 17, title: 'Add a timer for the bear trap', status: 'new', who: 'Moderators', since: now - 2 * 86400, severity: null, votes: 0 },
           { kind: 'bug', id: 49, title: 'Cannot open the shop', status: 'investigating', who: 'Info ticket', since: now - 3 * 86400, severity: '', votes: 2 }], waiting_total: 4 }; }
     if (p === '/api/giftcodes/import') { const t = Math.floor(Date.now() / 1000), added = [], skipped = [];
-      body.codes.split('\n').map(x => x.trim()).filter(Boolean).forEach(c => { if (!/^[A-Za-z0-9_-]{3,40}$/.test(c) || codes.some(k => k.code.toLowerCase() === c.toLowerCase())) skipped.push(c); else { added.push(c); codes.push({ id: codes.length + 100, code: c, reward: '', url: body.announce ? '#' : null, created_at: body.announce ? t : t - 7 * 86400, expires_at: null, by: 'Dashboard', url: null }); } });
+      body.codes.split('\n').map(x => x.trim()).filter(Boolean).forEach(c => { if (!/^[A-Za-z0-9_-]{3,40}$/.test(c) || codes.some(k => k.code.toLowerCase() === c.toLowerCase())) skipped.push(c); else { added.push(c); codes.push({ id: codes.length + 100, code: c, reward: '', url: body.announce ? '#' : null, created_at: body.announce ? t : t - 7 * 86400, expires_at: null, by: 'Dashboard' }); } });
       return { added, skipped }; }
     if (p === '/api/info') { settings.info_rules = body.rules; settings.info_channel_id = body.channel_id; addLog('panel', 'Info messages published'); return { ok: true, messages: 3 }; }
     if (p === '/api/giftcodes' && method === 'GET') {

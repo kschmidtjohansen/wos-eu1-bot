@@ -369,6 +369,30 @@ def set_bug(bug_id: int, **fields):
         r = get_bug(bug_id)
         if r is not None and r["source"] == "web":
             note_web_reject(r)
+    if "status" in fields or fields.get("duplicate_of"):
+        web_status_note(bug_id)
+
+
+WEB_EVENTS = {"passed": "passed", "being_investigated": "passed", "fixed": "fixed", "rejected": "rejected", "admin_rejected": "rejected"}
+
+
+def web_status_note(bug_id: int):
+    """Players who reported from the website without Discord get no DMs – tell them in their report's conversation
+    instead: confirmed, fixed, already reported or closed (with the reason)."""
+    r = get_bug(bug_id)
+    if r is None or r["reporter_id"] or not r["web_token"]:
+        return
+    ev = "duplicate" if r["duplicate_of"] else WEB_EVENTS.get(r["status"])
+    if not ev:
+        return
+    last = db.execute("SELECT name FROM web_msgs WHERE bug_id=? AND author='system' AND name LIKE 'status:%' ORDER BY id DESC LIMIT 1",
+                      (bug_id,)).fetchone()
+    if last and last["name"] == "status:" + ev:
+        return                                       # already told
+    text = (r["reject_reason"] or "") if ev == "rejected" else (f"#{r['duplicate_of']}" if ev == "duplicate" else "")
+    if ev == "fixed" and r["fixed_version"]:
+        text = r["fixed_version"]
+    web_msg_add(bug_id, "system", "status:" + ev, text)
 
 
 def get_bug_by_admin_msg(msg_id: int):
@@ -1500,6 +1524,11 @@ def web_msg_add(bug_id: int, author: str, name: str, text: str, file_ids=()) -> 
                      (bug_id, int(time.time()), author, (name or "")[:60], (text or "")[:1800], json.dumps([int(x) for x in file_ids if x])))
     db.commit()
     return cur.lastrowid
+
+
+def web_unread() -> dict:
+    """{bug id: messages from website players the staff haven't opened yet}."""
+    return {r[0]: r[1] for r in db.execute("SELECT bug_id, COUNT(*) FROM web_msgs WHERE author='player' AND seen=0 GROUP BY bug_id")}
 
 
 def web_msgs(bug_id: int) -> list:
@@ -2693,6 +2722,7 @@ def delete_bugs(ids, reset_numbers: bool = False) -> list:
         i = r["id"]
         shutil.rmtree(ATTACH_DIR / str(i), ignore_errors=True)
         db.execute("DELETE FROM bug_files WHERE bug_id=?", (i,))
+        db.execute("DELETE FROM web_msgs WHERE bug_id=?", (i,))
         db.execute("DELETE FROM bug_votes WHERE bug_id=?", (i,))
         db.execute("DELETE FROM actions WHERE kind='bug' AND item_id=?", (i,))
         db.execute("UPDATE bug_reports SET duplicate_of=NULL WHERE duplicate_of=?", (i,))

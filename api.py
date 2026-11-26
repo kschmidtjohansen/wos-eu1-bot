@@ -402,13 +402,20 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         cid = store.cfg(channel_key)
         return f"https://discord.com/channels/{guild_id}/{cid}/{msg_id}" if (cid and msg_id) else None
 
+    _unread = {"t": 0.0, "v": {}}
+
+    def web_unread_now() -> dict:                    # cached for a second – the bug list asks once per row
+        if time.time() - _unread["t"] > 1:
+            _unread["v"], _unread["t"] = store.web_unread(), time.time()
+        return _unread["v"]
+
     def bug_dict(r, full=False):
         d = {"id": r["id"], "summary": store.bug_summary(r), "status": r["status"],
              "reporter_id": str(r["reporter_id"]), "reporter": person(r["reporter_id"], r["reporter_name"]),
              "created_at": r["created_at"], "duplicate_of": r["duplicate_of"],
              "announced": bool(r["patched_at"]), "has_custom_summary": bool(r["summary"]),
              "area": r["area"] or "", "version": r["game_version"] or "", "severity": r["severity"] or "",
-             "source": r["source"] or "discord", "public": bool(r["public"]),
+             "source": r["source"] or "discord", "public": bool(r["public"]), "unread": web_unread_now().get(r["id"], 0),
              "fixed_version": r["fixed_version"] or "",
              "duplicates": [d["id"] for d in store.duplicates_of(r["id"])], "votes": store.vote_count(r["id"]),
              "reason": r["reject_reason"] or "", "dup_suggest": r["dup_suggest"], "dup_score": r["dup_score"],
@@ -1513,8 +1520,11 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     async def bug_ticket_read(request):
         """The ticket's conversation, for the chat in the dashboard's bug window."""
         try:
-            return web.json_response(await hooks["ticket_messages"](int(request.match_info["id"]), int(request.query.get("after") or 0)),
-                                     headers={"Cache-Control": "no-store"})
+            res = await hooks["ticket_messages"](int(request.match_info["id"]), int(request.query.get("after") or 0))
+            if res.get("web"):
+                store.web_msgs_seen(int(request.match_info["id"]), "player")      # staff have now seen the player's messages
+                _unread["t"] = 0
+            return web.json_response(res, headers={"Cache-Control": "no-store"})
         except ValueError as exc:
             raise ApiError(404, str(exc))
 
