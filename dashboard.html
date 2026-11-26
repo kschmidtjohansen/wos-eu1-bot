@@ -1624,7 +1624,10 @@ function bugActions(b) {
   const btns = modOpen ? [['passed', '✅ Pass to admins', 'primary']] : adminOpen && !isMod() ? [['being_investigated', '🔍 Being investigated', ''], ['fixed', '✔️ Mark fixed', 'primary']].filter(x => x[0] !== b.status) : [];
   const rej = modOpen ? 'rejected' : adminOpen && !isMod() ? 'admin_rejected' : null;
   if (!btns.length && !rej) return isMod() ? '' : html`<details class="w-more"><summary>Change status</summary><div class="w-inline" style="margin-top:8px">${STATUS_BTNS.filter(x => x[0] !== b.status).map(x => html`<button class="w-btn small" data-act="bugSet" data-s="${x[0]}">${x[1]}</button>`)}</div></details>`;
+  const ticket = modOpen && !b.ticket_url && b.can_ticket;
   return html`<div class="w-decide">${btns.map(x => html`<button class="w-btn ${x[2]}" data-act="bugSet" data-s="${x[0]}">${x[1]}</button>`)}
+      ${ticket ? html`<button class="w-btn" data-act="bugTicket" title="Opens a private thread with the player in Discord, like 🔍 on the bug in the moderator channel">🔍 Ask the player (ticket)</button>` : ''}
+      ${b.ticket_url ? html`<a class="w-btn" href="${b.ticket_url}" target="_blank" rel="noopener">🔍 Open the ticket</a>` : ''}
       ${rej ? html`<button class="w-btn" data-act="rejToggle" aria-expanded="${String(!!S.rejOpen)}">❌ Reject…</button>` : ''}</div>
     ${rej && S.rejOpen ? html`<div class="w-rejbox"><label class="w-label" for="m-reason">Why? <span class="w-hint">– the player gets this in their DM</span></label>
       ${reasonBox('m-reason', BUG_REASON_KEYS, b.reason)}
@@ -3561,6 +3564,11 @@ root.addEventListener('click', async e => {
       } catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'bugSummary') changeBug({ summary: $('#m-sum').value }, 'Title saved.', el);
+    else if (act === 'bugTicket') { const b = S.detail; busy(el, true, 'Opening…');
+      try { const r = await call('POST', '/api/bugs/' + b.id + '/ticket');
+        toast(r.warnings && r.warnings.length ? '⚠️ ' + r.warnings[0] : 'Ticket opened – you and the player were added to it in Discord.', r.warnings && r.warnings.length ? 'err' : 'ok');
+        await openBug(b.id); if (r.thread) window.open(r.thread, '_blank', 'noopener'); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'rejToggle') { S.rejOpen = !S.rejOpen; showModal(); if (S.rejOpen) $('#m-reason').focus(); }
     else if (act === 'bugReopen') changeBug({ reopen: true }, 'Reopened – it is open again for the moderators.', el);
     else if (act === 'bugSet') {
@@ -4198,6 +4206,9 @@ function makeMock() {
     if (sm) { const b = bugs.find(x => x.id === +sm[1]); const pool = bugs.filter(x => x.id !== b.id && !x.duplicate_of).slice(0, 12);
       const items = (b.dup_suggest ? [bugs.find(x => x.id === b.dup_suggest)] : []).concat(pool.filter(x => x.id !== b.dup_suggest && x.area === b.area)).filter(Boolean).slice(0, 3);
       return { items: items.map((x, i) => Object.assign(briefBug(x), { score: i === 0 && b.dup_suggest ? b.dup_score : 52 - i * 7, snippet: (x.text || '').slice(0, 220) })) }; }
+    const tk = p.match(/^\/api\/bugs\/(\d+)\/ticket$/);
+    if (tk) { const b = bugs.find(x => x.id === +tk[1]); b.status = 'investigating'; b.ticket_url = 'https://discord.com/channels/1/2';
+      b.history.push({ ts: Math.floor(Date.now() / 1000), action: 'investigating', actor: 'Dashboard' }); return { ok: true, thread: '', warnings: [] }; }
     let m = p.match(/^\/api\/bugs\/(\d+)(\/reply)?$/);
     if (m && method === 'DELETE') { const i = bugs.findIndex(x => x.id === +m[1]); if (i < 0) throw new Error('Bug not found.'); bugs.splice(i, 1); addLog('admin', 'Deleted bug #' + m[1]); return { deleted: 1 }; }
     if (m) {
@@ -4215,7 +4226,7 @@ function makeMock() {
           if (st !== 'fixed') b.announced = false;
         }
       }
-      return Object.assign({}, b);
+      return Object.assign({ can_ticket: true, ticket_url: '' }, b);
     }
     if (p === '/api/insights') return {
       members: (() => { const items = []; let m = 212; for (let i = 59; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000), j = (i * 7 % 5) + (i % 9 === 0 ? 4 : 1), l = i % 4 === 0 ? 2 : (i % 3 === 0 ? 1 : 0); if (i < 59) m += j - l; items.push({ day: d.toISOString().slice(0, 10), members: m, joins: j, leaves: l, est: i > 40 }); } return { current: m, items, joined: items.slice(-30).reduce((a, x) => a + x.joins, 0), left: items.slice(-30).reduce((a, x) => a + x.leaves, 0), estimated: true }; })(),

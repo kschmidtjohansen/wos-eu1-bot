@@ -130,7 +130,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles",
                 r"/api/queue", r"/api/reports", r"/api/appeals",
                 r"/api/players/find", r"/api/players/\d+", r"/api/msglog"]
-    MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/translate"),
+    MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/ticket"), ("POST", r"/api/bugs/\d+/translate"),
                  ("POST", r"/api/reports/\d+"), ("POST", r"/api/appeals/\d+"), ("POST", r"/api/raid"), ("POST", r"/api/spikes"),
                  ("POST", r"/api/players/\d+/notes"), ("POST", r"/api/players/\d+/action")]
     SECRET_SETTING = re.compile(r"(header|secret|token|key|webhook|url)", re.I)
@@ -423,6 +423,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 {"id": str(x["discord_id"]), "name": person(x["discord_id"]) or f"User …{str(x['discord_id'])[-4:]}"}
                 for x in store.links_for_uid(r["player_uid"])]
             d.update({"text": r["text"], "extra": r["extra"], "chief_name": r["chief_name"] or "", "ticket_log": r["ticket_log"] or "",
+                      "ticket_url": f"https://discord.com/channels/{guild_id}/{r['ticket_thread_id']}" if r["ticket_thread_id"] else "",
+                      "can_ticket": bool(store.cfg("investigate_enabled") and r["reporter_id"] and r["source"] != "web"),
                       "uid": r["player_uid"] or "", "contact": r["contact"] or "", "linked": linked,
                       "files": [{"id": f["id"], "name": f["filename"], "size": f["size"],
                                  "kind": "video" if f["filename"].lower().endswith(MEDIA_VIDEO) else "image"}
@@ -1505,6 +1507,15 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if r is None:
             raise ApiError(404, "Suggestion not found.")
         return r
+
+    @routes.post("/api/bugs/{id}/ticket")
+    async def bug_ticket(request):
+        """Open an info ticket with the player – the dashboard version of 🔍 on the mod message (moderators)."""
+        try:
+            res = await hooks["ticket_from_dashboard"](int(request.match_info["id"]), who_id(request))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        return web.json_response(res)
 
     @routes.post("/api/bugs/{id}/translate")
     async def translate_bug(request):

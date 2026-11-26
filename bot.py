@@ -1030,66 +1030,114 @@ async def handle_mod(payload: discord.RawReactionActionEvent, emoji: str):
         await prompt_reason(channel, "bug", r["id"], member, "rejected")
 
     elif emoji == INVESTIGATE_EMOJI:
-        if not cfg("investigate_enabled") or r["ticket_thread_id"]:
-            return  # switched off, or ticket already open
-        if not r["reporter_id"]:
-            await channel.send("🔍 This report came from the website, so there is no Discord account to open a "
-                               "ticket with." + (f" Contact: {r['contact']}" if r["contact"] else ""), delete_after=20)
+        if not cfg("investigate_enabled"):
             return
-        guild = channel.guild
-        reporter = guild.get_member(r["reporter_id"])
-        if reporter is None:
+        async def say(text, secs):
+            await channel.send(text, delete_after=secs)
+        await open_info_ticket(r, member, channel, msg, say)
+
+
+async def ticket_from_dashboard(bug_id: int, user_id) -> dict:
+    """The dashboard's "Ask the player (ticket)" button: the same as 🔍 on the mod message, opened by the logged-in moderator."""
+    r = get_bug(bug_id)
+    if r is None:
+        raise ValueError("That bug doesn't exist.")
+    if r["status"] not in MOD_OPEN:
+        raise ValueError("Tickets can only be opened while the bug is waiting for a moderator.")
+    g = bot.get_guild(GUILD_ID)
+    member = None
+    if user_id and g is not None:
+        member = g.get_member(int(user_id))
+        if member is None:
             try:
-                reporter = await guild.fetch_member(r["reporter_id"])
+                member = await g.fetch_member(int(user_id))
             except discord.HTTPException:
-                reporter = None
-        if reporter is None and r["via_guild"]:
-            vp = store.get_partner(r["via_guild"])
-            await channel.send(f"🔍 {member.mention} This report came from the promoter server **{(vp['name'] if vp else None) or '?'}** and the "
-                               "player isn't on our server, so I can't open a ticket with them. Pass it on or reject it with a reason – "
-                               "they get a DM either way.", delete_after=40)
-            return
-        # The thread must live in a channel the player can see – Discord won't add anyone to a private thread
-        # in a channel they can't open (like the moderators' channel). Players' own tickets live in the report channel.
-        home = channel
-        rep_ch = chan("report_channel_id")
-        if reporter and rep_ch is not None and rep_ch.permissions_for(reporter).view_channel:
-            home = rep_ch
-        elif reporter and not channel.permissions_for(reporter).view_channel:
-            await channel.send(f"🔍 {member.mention} I can't open a ticket with {reporter.display_name}: they can't see this channel, "
-                               "and no bug report channel they can see is set (Settings → Channels).", delete_after=30)
-            return
-        thread = await home.create_thread(
-            name=f"ticket-bug-{r['id']}", type=discord.ChannelType.private_thread,
-            invitable=False, auto_archive_duration=4320,
-        )
-        await thread.add_user(member)
-        added = False
-        if reporter:
-            try:
-                await thread.add_user(reporter)
-                added = True
-            except discord.HTTPException as exc:
-                print(f"[ticket] could not add {reporter.id} to {thread.id}: {exc!r}")
-        mention = reporter.mention if reporter else f"<@{r['reporter_id']}> (left the server)"
-        if reporter and added and not await allow_thread_talk(home, reporter):
-            await channel.send(f"⚠️ {member.mention} {reporter.display_name} can read {thread.mention} but not write in it. Give @everyone "
-                               f"“Send Messages in Threads” in #{home.name} (Edit channel → Permissions), or give me “Manage Roles” "
-                               "there so I can do it myself.", delete_after=300)
-        if reporter and not added:
-            await channel.send(f"⚠️ {member.mention} I opened {thread.mention} but couldn't add {reporter.display_name} to it.",
-                               delete_after=60)
-        await thread.send(T("info.ticket", lang_for(r["reporter_id"]), id=r["id"], mod=member.mention, player=mention,
-                            link=msg.jump_url))
-        await thread.send("-# Moderators: type `/closebug` here when you're done – the conversation and pictures are saved "
-                          "with the bug, it goes back to the moderators and this thread is deleted a few hours later.",
-                          allowed_mentions=discord.AllowedMentions.none())
-        set_bug(r["id"], status="investigating", ticket_thread_id=thread.id)
-        record_action("bug", r["id"], "investigating", member.id, who)
-        r = get_bug(r["id"])
-        await msg.edit(embed=bug_embed(r, f"Ticket opened by {who}"))
-        log_event("mod", f"Bug #{r['id']}: info ticket opened by {who}", member.id, who)
-        await dm_t(r["reporter_id"], "dm.investigating", id=r["id"], link=thread.jump_url, bug=r)
+                member = None
+    if member is None:
+        raise ValueError("Log in to the dashboard with Discord to open a ticket – it adds you to the thread.")
+    channel = chan("mod_channel_id")
+    if channel is None or not r["msg_id"]:
+        raise ValueError("The moderator channel isn't set, or this bug has no message there.")
+    problems = []
+
+    async def say(text, secs):
+        problems.append(text)
+        try:
+            await channel.send(text, delete_after=secs)
+        except discord.HTTPException:
+            pass
+    thread = await open_info_ticket(r, member, channel, channel.get_partial_message(r["msg_id"]), say)
+    if thread is None:
+        raise ValueError(re.sub(r"<@!?\d+>\s*", "", problems[-1] if problems else "The ticket couldn't be opened.").lstrip("🔍 "))
+    return {"ok": True, "thread": thread.jump_url, "warnings": [re.sub(r"<@!?\d+>\s*", "", x) for x in problems]}
+
+
+async def open_info_ticket(r, member, channel, msg, say):
+    """Open a private ticket thread with the player who reported the bug (🔍 on the mod message, or the dashboard).
+    channel/msg: the moderator channel and the bug's message there. say(text, seconds): tell the moderator about a problem.
+    Returns the thread, or None when no ticket could be opened."""
+    who = member.display_name
+    if r["ticket_thread_id"]:
+        await say(f"🔍 Bug #{r['id']} already has an open ticket: <#{r['ticket_thread_id']}>.", 20)
+        return None
+    if not r["reporter_id"]:
+        await say("🔍 This report came from the website, so there is no Discord account to open a "
+                           "ticket with." + (f" Contact: {r['contact']}" if r["contact"] else ""), 20)
+        return None
+    guild = channel.guild
+    reporter = guild.get_member(r["reporter_id"])
+    if reporter is None:
+        try:
+            reporter = await guild.fetch_member(r["reporter_id"])
+        except discord.HTTPException:
+            reporter = None
+    if reporter is None and r["via_guild"]:
+        vp = store.get_partner(r["via_guild"])
+        await say(f"🔍 {member.mention} This report came from the promoter server **{(vp['name'] if vp else None) or '?'}** and the "
+                           "player isn't on our server, so I can't open a ticket with them. Pass it on or reject it with a reason – "
+                           "they get a DM either way.", 40)
+        return None
+    # The thread must live in a channel the player can see – Discord won't add anyone to a private thread
+    # in a channel they can't open (like the moderators' channel). Players' own tickets live in the report channel.
+    home = channel
+    rep_ch = chan("report_channel_id")
+    if reporter and rep_ch is not None and rep_ch.permissions_for(reporter).view_channel:
+        home = rep_ch
+    elif reporter and not channel.permissions_for(reporter).view_channel:
+        await say(f"🔍 {member.mention} I can't open a ticket with {reporter.display_name}: they can't see this channel, "
+                           "and no bug report channel they can see is set (Settings → Channels).", 30)
+        return None
+    thread = await home.create_thread(
+        name=f"ticket-bug-{r['id']}", type=discord.ChannelType.private_thread,
+        invitable=False, auto_archive_duration=4320,
+    )
+    await thread.add_user(member)
+    added = False
+    if reporter:
+        try:
+            await thread.add_user(reporter)
+            added = True
+        except discord.HTTPException as exc:
+            print(f"[ticket] could not add {reporter.id} to {thread.id}: {exc!r}")
+    mention = reporter.mention if reporter else f"<@{r['reporter_id']}> (left the server)"
+    if reporter and added and not await allow_thread_talk(home, reporter):
+        await say(f"⚠️ {member.mention} {reporter.display_name} can read {thread.mention} but not write in it. Give @everyone "
+                           f"“Send Messages in Threads” in #{home.name} (Edit channel → Permissions), or give me “Manage Roles” "
+                           "there so I can do it myself.", 300)
+    if reporter and not added:
+        await say(f"⚠️ {member.mention} I opened {thread.mention} but couldn't add {reporter.display_name} to it.", 60)
+    await thread.send(T("info.ticket", lang_for(r["reporter_id"]), id=r["id"], mod=member.mention, player=mention,
+                        link=msg.jump_url))
+    await thread.send("-# Moderators: type `/closebug` here when you're done – the conversation and pictures are saved "
+                      "with the bug, it goes back to the moderators and this thread is deleted a few hours later.",
+                      allowed_mentions=discord.AllowedMentions.none())
+    set_bug(r["id"], status="investigating", ticket_thread_id=thread.id)
+    record_action("bug", r["id"], "investigating", member.id, who)
+    r = get_bug(r["id"])
+    await msg.edit(embed=bug_embed(r, f"Ticket opened by {who}"))
+    log_event("mod", f"Bug #{r['id']}: info ticket opened by {who}", member.id, who)
+    await dm_t(r["reporter_id"], "dm.investigating", id=r["id"], link=thread.jump_url, bug=r)
+    return thread
 
 
 async def handle_admin(payload: discord.RawReactionActionEvent, emoji: str):
@@ -1636,7 +1684,7 @@ class WosBot(discord.Client):
                          "set_bug_status": apply_bug_status, "send_reply": send_bug_reply,
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
-                         "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
+                         "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "ticket_from_dashboard": ticket_from_dashboard, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
                          "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
                          "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
