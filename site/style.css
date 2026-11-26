@@ -266,3 +266,5 @@ footer{border-top:1px solid var(--line);color:var(--muted);font-size:14px}
 .closed{margin:0;font-size:17px;line-height:1.55;color:var(--text)}
 .closed + .btns{margin-top:18px}
 .me{margin:0 0 16px;font-size:15px}.me a{color:var(--ice,#7de3f4);font-weight:600}
+.qbanner{display:block;margin:0 0 16px;padding:12px 16px;border-radius:14px;border:1px solid rgba(255,166,77,.4);background:rgba(255,166,77,.1);color:var(--text);text-decoration:none;font-weight:600}.qbanner b{color:var(--ice)}
+.follow{margin:14px 0 18px}.follow p:first-child{margin:0 0 10px}

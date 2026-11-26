@@ -1,0 +1,108 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Your report – WOS EU1</title><meta name="theme-color" content="#060c17"><meta name="robots" content="noindex">
+<meta name="description" content="Follow your bug report and answer the team’s questions.">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="WOS EU1">
+<link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<style>
+.fw{max-width:760px}
+.fw-head{padding:18px 20px;margin-bottom:12px}
+.fw-head .n{font-family:var(--display);color:var(--muted);font-size:13.5px}
+.fw-head h2{margin:2px 0 8px;font-size:21px;overflow-wrap:anywhere}
+.ask{padding:12px 14px;border-radius:14px;margin:0 0 12px;border:1px solid rgba(255,166,77,.35);background:rgba(255,166,77,.08);font-weight:600}
+.conv{display:flex;flex-direction:column;gap:10px;margin:6px 0 14px}
+.m{max-width:88%;padding:10px 13px;border-radius:16px;border:1px solid var(--line);background:var(--glass-2)}
+.m.staff{align-self:flex-start;border-color:rgba(125,227,244,.3);background:rgba(125,227,244,.07)}
+.m.player{align-self:flex-end;background:rgba(255,255,255,.05)}
+.m .who{font-size:13px;color:var(--muted);font-weight:650;margin-bottom:3px}
+.m .tx{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15.5px;line-height:1.5}
+.m .fl{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.m .fl img,.m .fl video{max-width:220px;max-height:180px;border-radius:10px;display:block}
+.fw-head .st{display:inline-block;padding:4px 10px;border-radius:999px;font-size:13px;font-weight:650;border:1px solid rgba(255,166,77,.35);background:rgba(255,166,77,.1)}
+.closed-note{align-self:center;color:var(--muted);font-size:13.5px}
+.reply textarea{width:100%;min-height:96px;resize:vertical}
+.reply .row label{margin:0}.reply>label{margin-top:0}
+.reply .row{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+.reply .row .muted{flex:1;font-size:13.5px}
+.keep{font-size:13.5px;color:var(--muted);margin-top:14px;overflow-wrap:anywhere}
+</style></head><body>
+<main id="main" class="fw">
+  <h1 data-i="h1"></h1><p class="lead" data-i="lead"></p>
+  <div id="box" aria-live="polite"><div class="skel"></div><div class="skel"></div></div>
+</main>
+<script src="config.js"></script><script src="app.js"></script>
+<script>
+const S = {
+ en: { h1: 'Your report', lead: 'Follow what happens to your bug report, and answer the team if they ask you something.',
+  bad: 'This link isn’t valid. Use the link you got when you sent the report.', err: 'Could not load your report. Try again in a moment.',
+  s_new: 'Waiting for a moderator', s_investigating: 'The team has a question for you', s_passed: 'Confirmed – with the admins',
+  s_fixed: 'Fixed', s_rejected: 'Closed', s_dup: 'Already reported – you’ll be told when it’s fixed',
+  ask: 'The team has a question for you. Please answer below – screenshots help a lot.',
+  team: 'WOS EU1 team', you: 'You', closed: 'The team closed the conversation. Thank you for your help!',
+  none: 'No messages yet. If the team needs more information, it will show up here.',
+  answer: 'Your answer', ph: 'Write your answer here…', add: 'Add screenshots', send: 'Send answer', sending: 'Sending…',
+  sent: 'Thank you! The team got your answer.', fileHint: 'Up to 4 pictures or videos, 8 MB each.',
+  keep: 'Keep this page’s link to come back later. This browser remembers it for you.', report: 'Report another bug' },
+ pl: { h1: 'Twoje zgłoszenie', lead: 'Śledź, co dzieje się z Twoim zgłoszeniem błędu, i odpowiadaj zespołowi, jeśli o coś zapyta.',
+  bad: 'Ten link jest nieprawidłowy. Użyj linku, który otrzymałeś po wysłaniu zgłoszenia.', err: 'Nie udało się wczytać zgłoszenia. Spróbuj za chwilę.',
+  s_new: 'Czeka na moderatora', s_investigating: 'Zespół ma do Ciebie pytanie', s_passed: 'Potwierdzony – u administratorów',
+  s_fixed: 'Naprawiony', s_rejected: 'Zamknięty', s_dup: 'Już zgłoszony – damy znać, gdy zostanie naprawiony',
+  ask: 'Zespół ma do Ciebie pytanie. Odpowiedz poniżej – zrzuty ekranu bardzo pomagają.',
+  team: 'Zespół WOS EU1', you: 'Ty', closed: 'Zespół zakończył rozmowę. Dziękujemy za pomoc!',
+  none: 'Brak wiadomości. Jeśli zespół będzie potrzebował więcej informacji, pojawią się tutaj.',
+  answer: 'Twoja odpowiedź', ph: 'Napisz tutaj odpowiedź…', add: 'Dodaj zrzuty ekranu', send: 'Wyślij odpowiedź', sending: 'Wysyłanie…',
+  sent: 'Dziękujemy! Zespół otrzymał Twoją odpowiedź.', fileHint: 'Do 4 zdjęć lub filmów, po 8 MB.',
+  keep: 'Zachowaj link do tej strony, aby wrócić później. Ta przeglądarka zapamiętuje go za Ciebie.', report: 'Zgłoś kolejny błąd' } };
+const $ = id => document.getElementById(id), el = (...a) => WOS.el(...a), t = k => WOS.t(k);
+const base = ((window.WOS_CONFIG || {}).API_BASE || '').replace(/\/+$/, '');
+const q = new URLSearchParams(location.search), B = q.get('b'), T = q.get('t');
+let data = null, failed = null, note = '';
+const fileUrl = f => base + '/public/ticket/file?b=' + encodeURIComponent(B) + '&t=' + encodeURIComponent(T) + '&f=' + f.id;
+function draw() {
+  const box = $('box'); box.replaceChildren();
+  if (failed) return box.append(el('div', { class: 'card empty' }, t(failed)));
+  if (!data) return;
+  const st = data.duplicate ? 's_dup' : 's_' + data.status;
+  box.append(el('div', { class: 'card fw-head' }, el('div', { class: 'n' }, '#' + data.id), el('h2', {}, data.title),
+    el('span', { class: 'st' }, t(st))));
+  if (data.open) box.append(el('div', { class: 'ask' }, '❓ ' + t('ask')));
+  const conv = el('div', { class: 'conv' });
+  if (!data.messages.length) conv.append(el('p', { class: 'muted' }, t('none')));
+  data.messages.forEach(m => {
+    if (m.kind === 'system') return conv.append(el('div', { class: 'closed-note' }, '🔒 ' + t('closed')));
+    const files = m.files.map(f => f.type === 'video' ? el('video', { src: fileUrl(f), controls: true, preload: 'metadata' })
+      : el('a', { href: fileUrl(f), target: '_blank', rel: 'noopener' }, el('img', { src: fileUrl(f), alt: f.name, loading: 'lazy' })));
+    conv.append(el('div', { class: 'm ' + (m.kind === 'player' ? 'player' : 'staff') },
+      el('div', { class: 'who' }, (m.kind === 'player' ? t('you') : (m.author || '') + ' · ' + t('team')) + ' · ' + new Date(m.ts * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })),
+      m.text ? el('div', { class: 'tx' }, m.text) : '', files.length ? el('div', { class: 'fl' }, ...files) : ''));
+  });
+  box.append(conv);
+  if (data.open) {
+    const ta = el('textarea', { id: 'ans', maxlength: '1800', placeholder: t('ph'), 'aria-label': t('answer') });
+    const fi = el('input', { type: 'file', id: 'fi', accept: 'image/*,video/*', multiple: true, hidden: true });
+    const names = el('span', { class: 'muted' }, note || t('fileHint'));
+    fi.onchange = () => { names.textContent = [...fi.files].slice(0, 4).map(f => f.name).join(', ') || t('fileHint'); };
+    const go = el('button', { class: 'btn pri', type: 'submit' }, t('send'));
+    const form = el('form', { class: 'card reply' }, el('label', { for: 'ans', class: 'lbl' }, t('answer')), ta,
+      el('div', { class: 'row' }, el('label', { class: 'btn', for: 'fi' }, '📎 ' + t('add')), fi, names, go));
+    form.onsubmit = async e => {
+      e.preventDefault();
+      if (!ta.value.trim() && !fi.files.length) return ta.focus();
+      const fd = new FormData(); fd.append('b', B); fd.append('t', T); fd.append('text', ta.value);
+      [...fi.files].slice(0, 4).forEach(f => fd.append('files', f));
+      go.disabled = true; go.textContent = t('sending');
+      try { await WOS.api('/public/ticket', { method: 'POST', body: fd }); note = t('sent'); await load(); }
+      catch (err) { go.disabled = false; go.textContent = t('send'); names.textContent = err.message; }
+    };
+    box.append(form);
+  }
+  box.append(el('p', { class: 'keep' }, t('keep')), el('a', { class: 'btn', href: 'report.html' }, t('report')));
+}
+async function load() {
+  try { data = await WOS.api('/public/ticket?b=' + encodeURIComponent(B) + '&t=' + encodeURIComponent(T)); failed = null; WOS.rememberReport && WOS.rememberReport(B, T, data.title); }
+  catch (e) { failed = e.status === 404 ? 'bad' : 'err'; }
+  draw();
+}
+WOS.init(S).then(() => { WOS.onLang.push(draw); if (!B || !T) { failed = 'bad'; draw(); } else load(); });
+setInterval(() => { if (data && data.open && !document.hidden && !(document.getElementById('ans') || {}).value) load(); }, 30000);
+</script></body></html>

@@ -1639,7 +1639,7 @@ function bugActions(b) {
   const btns = modOpen ? [['passed', '✅ Pass to admins', 'primary']] : adminOpen && !isMod() ? [['being_investigated', '🔍 Being investigated', ''], ['fixed', '✔️ Mark fixed', 'primary']].filter(x => x[0] !== b.status) : [];
   const rej = modOpen ? 'rejected' : adminOpen && !isMod() ? 'admin_rejected' : null;
   if (!btns.length && !rej) return isMod() ? '' : html`<details class="w-more"><summary>Change status</summary><div class="w-inline" style="margin-top:8px">${STATUS_BTNS.filter(x => x[0] !== b.status).map(x => html`<button class="w-btn small" data-act="bugSet" data-s="${x[0]}">${x[1]}</button>`)}</div></details>`;
-  const ticket = modOpen && !b.ticket_url && b.can_ticket;
+  const ticket = modOpen && !b.ticket_url && !b.web_ticket && b.can_ticket;
   return html`<div class="w-decide">${btns.map(x => html`<button class="w-btn ${x[2]}" data-act="bugSet" data-s="${x[0]}">${x[1]}</button>`)}
       ${ticket ? html`<button class="w-btn" data-act="bugTicket" title="Opens a private thread with the player in Discord, like 🔍 on the bug in the moderator channel">🔍 Ask the player (ticket)</button>` : ''}
       ${b.ticket_url ? html`<a class="w-btn" href="${b.ticket_url}" target="_blank" rel="noopener">🔍 Open the ticket</a>` : ''}
@@ -1666,7 +1666,7 @@ function bugModal() {
     <div class="w-bugtools">${trBox('bugs', b.id)}${b.mod_url ? html`<a class="w-linkbtn" href="${b.mod_url}" target="_blank" rel="noopener">Mod channel ↗</a>` : ''}${b.admin_url ? html`<a class="w-linkbtn" href="${b.admin_url}" target="_blank" rel="noopener">Admin channel ↗</a>` : ''}</div>
 
     ${bugActions(b)}
-    ${b.ticket_url ? ticketChat(b) : ''}
+    ${b.ticket_url || b.web_ticket ? ticketChat(b) : ''}
     ${similarBox(b)}
     ${closed ? '' : html`<label class="w-knownbar ${b.public ? 'on' : ''}"><span class="w-switch"><input type="checkbox" data-act="bugKnownModal" ${b.public ? 'checked' : ''}><span></span></span>
       <span><b>📌 Known issue</b><span class="w-hint" style="display:block">${b.public ? 'Players see it on the website and the Known issues board, and can say “I have this too”.' : 'Show it on the website and the Known issues board (title, area and status only).'}</span></span></label>`}
@@ -1745,11 +1745,12 @@ async function fetchFile(bugId, fid) {
 // ---- the ticket with the player, right in the bug window: reads the Discord thread, writes into it through the bot
 function ticketChat(b) {
   return html`<section class="w-chat" aria-label="Ticket with the player">
-    <div class="w-chat-head"><b>🔍 Ticket with the player</b><span class="w-hint" id="m-chatstate">● live</span>
-      <a class="w-linkbtn" href="${b.ticket_url}" target="_blank" rel="noopener">Open in Discord ↗</a></div>
+    <div class="w-chat-head"><b>🔍 Ticket with the player</b><span class="w-hint" id="m-chatstate">● live${b.web_ticket ? ' · on the website' : ''}</span>
+      ${b.ticket_url ? html`<a class="w-linkbtn" href="${b.ticket_url}" target="_blank" rel="noopener">Open in Discord ↗</a>` : ''}</div>
+    ${b.web_ticket ? html`<p class="w-hint" style="margin:0 0 8px">This player reported from the website without Discord. They read and answer on their private report page – the website shows them a notice when you've asked something.</p>` : ''}
     <div class="w-chatlog" id="m-chatlog" aria-live="polite"><div class="w-hint">Loading the conversation…</div></div>
     <div class="w-chatform">
-      <textarea class="w-input" id="m-chatmsg" rows="2" maxlength="1800" placeholder="Write to the player – sent in Discord with your name"></textarea>
+      <textarea class="w-input" id="m-chatmsg" rows="2" maxlength="1800" placeholder="${b.web_ticket ? 'Write to the player – they read it on the website' : 'Write to the player – sent in Discord with your name'}"></textarea>
       <div class="w-chatbtns"><label class="w-btn small w-chatfile" title="Add pictures (up to 4)">📎<input type="file" id="m-chatfiles" accept="image/*,video/*" multiple hidden></label>
         <span class="w-hint" id="m-chatfilenames"></span>
         <button class="w-btn primary small" data-act="ticketSend">Send</button></div></div>
@@ -1764,12 +1765,12 @@ function chatHtml(d) {
     ${m.avatar ? html`<img class="w-msg-av" src="${m.avatar}" alt="" loading="lazy">` : ''}<div class="w-msg-body">
       <div class="w-msg-who"><b>${m.author}</b>${m.player ? html`<span class="w-badge info">player</span>` : m.staff ? html`<span class="w-badge ok">staff</span>` : ''}<span class="w-hint">${ago(m.ts)}</span></div>
       ${m.text ? html`<div class="w-msg-text">${m.text}</div>` : ''}
-      ${m.files.length ? html`<div class="w-msg-files">${m.files.map(f => f.type === 'image' ? html`<a href="${f.url}" target="_blank" rel="noopener"><img src="${f.url}" alt="${f.name}" loading="lazy"></a>`
+      ${m.files.length ? html`<div class="w-msg-files">${m.files.map(f => f.id ? html`<button class="w-file" data-act="openFile" data-fid="${f.id}" data-kind="${f.type}" title="${f.name}">${f.type === 'video' ? '🎬' : '🖼️'} ${f.name}</button>` : f.type === 'image' ? html`<a href="${f.url}" target="_blank" rel="noopener"><img src="${f.url}" alt="${f.name}" loading="lazy"></a>`
         : f.type === 'video' ? html`<video src="${f.url}" controls preload="metadata"></video>` : html`<a class="w-linkbtn" href="${f.url}" target="_blank" rel="noopener">📎 ${f.name}</a>`)}</div>` : ''}</div></div>`)).join('');
 }
 async function pollChat(first) {
   const b = S.detail, log = $('#m-chatlog');
-  if (!b || !b.ticket_url || !log) return stopChat();
+  if (!b || !(b.ticket_url || b.web_ticket) || !log) return stopChat();
   try {
     const d = await call('GET', '/api/bugs/' + b.id + '/ticket');
     const last = d.messages.length ? d.messages[d.messages.length - 1].id + ':' + d.messages.length : '0';
@@ -1780,7 +1781,7 @@ async function pollChat(first) {
     }
   } catch (e) { const st = $('#m-chatstate'); if (st) st.textContent = e.message; }
 }
-function startChat() { stopChat(); if (!S.detail || !S.detail.ticket_url) return; S.chatLast = null; pollChat(true); S.chatTimer = setInterval(() => pollChat(false), 5000); }
+function startChat() { stopChat(); if (!S.detail || !(S.detail.ticket_url || S.detail.web_ticket)) return; S.chatLast = null; pollChat(true); S.chatTimer = setInterval(() => pollChat(false), 5000); }
 function stopChat() { if (S.chatTimer) { clearInterval(S.chatTimer); S.chatTimer = null; } }
 
 function showModal() {
@@ -1788,7 +1789,7 @@ function showModal() {
   if (!S.detail) return stopChat();
   root.insertAdjacentHTML('beforeend', String(bugModal()));
   loadThumbs();
-  if (S.detail.ticket_url) startChat(); else stopChat();
+  if (S.detail.ticket_url || S.detail.web_ticket) startChat(); else stopChat();
   const fi = $('#m-chatfiles'); if (fi) fi.onchange = () => { $('#m-chatfilenames').textContent = [...fi.files].slice(0, 4).map(f => f.name).join(', '); };
   const ta = $('#m-chatmsg'); if (ta) ta.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const b = $('[data-act=ticketSend]'); if (b) b.click(); } };
   const c = $('#m-close'); if (c) c.focus();
@@ -3638,7 +3639,7 @@ root.addEventListener('click', async e => {
       catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'bugTicket') { const b = S.detail; busy(el, true, 'Opening…');
       try { const r = await call('POST', '/api/bugs/' + b.id + '/ticket');
-        toast(r.warnings && r.warnings.length ? '⚠️ ' + r.warnings[0] : 'Ticket opened – you and the player were added to it in Discord.', r.warnings && r.warnings.length ? 'err' : 'ok');
+        toast(r.web ? 'Ticket opened – write your question below. The player answers on the website.' : r.warnings && r.warnings.length ? '⚠️ ' + r.warnings[0] : 'Ticket opened – you and the player were added to it in Discord.', r.warnings && r.warnings.length ? 'err' : 'ok');
         await openBug(b.id); if (r.thread) window.open(r.thread, '_blank', 'noopener'); }
       catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'rejToggle') { S.rejOpen = !S.rejOpen; showModal(); if (S.rejOpen) $('#m-reason').focus(); }

@@ -424,7 +424,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 for x in store.links_for_uid(r["player_uid"])]
             d.update({"text": r["text"], "extra": r["extra"], "chief_name": r["chief_name"] or "", "ticket_log": r["ticket_log"] or "",
                       "ticket_url": f"https://discord.com/channels/{guild_id}/{r['ticket_thread_id']}" if r["ticket_thread_id"] else "",
-                      "can_ticket": bool(store.cfg("investigate_enabled") and r["reporter_id"]),
+                      "web_ticket": bool(r["web_ticket"]),
+                      "can_ticket": bool(store.cfg("investigate_enabled") and (r["reporter_id"] or r["web_token"])),
                       "uid": r["player_uid"] or "", "contact": r["contact"] or "", "linked": linked,
                       "files": [{"id": f["id"], "name": f["filename"], "size": f["size"],
                                  "kind": "video" if f["filename"].lower().endswith(MEDIA_VIDEO) else "image"}
@@ -2451,7 +2452,81 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         hits[ip].append(now)
         all_hits.append(now)
         bug_id = await hooks["submit_web_report"](f, files)
-        return web.json_response({"ok": True, "id": bug_id})
+        r = store.get_bug(bug_id) if isinstance(bug_id, int) else None
+        return web.json_response({"ok": True, "id": bug_id, "token": (r["web_token"] if r is not None else None) or ""})
+
+    # ---- website tickets: the player's private follow link (b = bug id, t = token)
+    web_ticket_hits = collections.defaultdict(list)
+
+    def follow_bug(request, data=None):
+        q = data if data is not None else request.query
+        try:
+            bid = int(q.get("b") or 0)
+        except ValueError:
+            bid = 0
+        r = store.web_token_ok(bid, str(q.get("t") or ""))
+        if r is None:
+            raise ApiError(404, "This link isn't valid.")
+        return r
+
+    @routes.get("/public/ticket")
+    async def public_ticket(request):
+        r = follow_bug(request)
+        view = hooks["web_ticket_view"](r, False)
+        store.web_msgs_seen(r["id"], "staff")
+        steps = {"new": "new", "investigating": "investigating", "passed": "passed", "being_investigated": "passed",
+                 "fixed": "fixed", "rejected": "rejected", "admin_rejected": "rejected"}
+        return web.json_response({"id": r["id"], "title": store.bug_summary(r), "status": steps.get(r["status"], "new"),
+                                  "duplicate": bool(r["duplicate_of"]), "open": bool(r["web_ticket"]), "created": r["created_at"],
+                                  "messages": [{k: m[k] for k in ("id", "ts", "kind", "author", "text", "files")} for m in view["messages"]]},
+                                 headers={"Cache-Control": "no-store"})
+
+    @routes.get("/public/ticket/file")
+    async def public_ticket_file(request):
+        r = follow_bug(request)
+        try:
+            fid = int(request.query.get("f") or 0)
+        except ValueError:
+            fid = 0
+        mine = {x for m in store.web_msgs(r["id"]) for x in json.loads(m["files"] or "[]")}
+        row = store.get_file(fid) if fid in mine else None
+        if row is None:
+            raise ApiError(404, "File not found.")
+        path = store.file_path(row)
+        if not path.is_file():
+            raise ApiError(404, "File not found.")
+        return web.FileResponse(path, headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox",
+                                               "Content-Type": MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+                                               "Cache-Control": "private, max-age=3600"})
+
+    @routes.post("/public/ticket")
+    async def public_ticket_reply(request):
+        now, ip = time.time(), client_ip(request)
+        web_ticket_hits[ip] = [t for t in web_ticket_hits[ip] if now - t < 600]
+        if len(web_ticket_hits[ip]) >= 10:
+            raise ApiError(429, "Slow down a little – try again in a few minutes.")
+        fields, files = {}, []
+        if not request.content_type.startswith("multipart/"):
+            raise ApiError(400, "Send the answer as a form.")
+        reader = await request.multipart()
+        async for part in reader:
+            if part.name in ("b", "t", "text"):
+                fields[part.name] = (await part.text())[:1800]
+            elif part.name == "files" and part.filename and len(files) < 4:
+                data = bytes(await part.read(decode=False))
+                if len(data) > 8 * 1024 * 1024:
+                    raise ApiError(413, "Files can be at most 8 MB each.")
+                name = re.sub(r"[^A-Za-z0-9._-]", "_", part.filename)[-60:] or "file"
+                if not name.lower().endswith(MEDIA_ALLOWED) or not sniff_ok(name, data):
+                    raise ApiError(400, "Only PNG, JPG, GIF, WEBP, MP4, MOV or WEBM files can be attached.")
+                files.append((name, data))
+        r = follow_bug(request, fields)
+        web_ticket_hits[ip].append(now)
+        try:
+            res = await hooks["web_ticket_reply"](r["id"], fields.get("t") or "", fields.get("text") or "", files)
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        return web.json_response(res)
 
     @routes.get("/public/similar")
     async def public_similar(request):

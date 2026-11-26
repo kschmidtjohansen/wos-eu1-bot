@@ -5,7 +5,7 @@
     en: { nav_home: 'Home', nav_report: 'Report a bug', nav_known: 'Known issues', nav_fixed: "What's fixed", nav_codes: 'Gift codes', nav_my: 'My reports', tab_my: 'Mine', langLabel: 'Language', nav_status: 'Status', tab_status: 'Status', getGame: 'Get the game', getGameS: 'Game',
       st_online: 'Online', st_offline: 'Offline', st_maintenance: 'Maintenance', st_degraded: 'Having problems', st_unknown: 'Unknown',
       tab_home: 'Home', tab_codes: 'Codes', tab_known: 'Issues', tab_report: 'Report', tab_fixed: 'Fixed',
-      newBadge: 'NEW', discord: 'Join our Discord', skip: 'Skip to content', rights: 'Made for the players of', terms: 'Terms', privacy: 'Privacy',
+      newBadge: 'NEW', discord: 'Join our Discord', skip: 'Skip to content', q_banner: 'The team has a question about your bug report #{id}.', q_answer: 'Answer', rights: 'Made for the players of', terms: 'Terms', privacy: 'Privacy',
       netErr: 'Could not reach the server. Please try again later.', install: 'Install app', copy: 'Copy', copied: 'Copied',
       left: 'Expires in', never: 'Never expires', d: 'd', h: 'h', m: 'min',
       iosHint: 'On iPhone: tap the Share button, then “Add to Home Screen”.', offline: 'You are offline – showing what was saved last time.',
@@ -15,7 +15,7 @@
     pl: { nav_home: 'Start', nav_report: 'Zgłoś błąd', nav_known: 'Znane problemy', nav_fixed: 'Co naprawiono', nav_codes: 'Kody', nav_my: 'Moje zgłoszenia', tab_my: 'Moje', langLabel: 'Język', nav_status: 'Status', tab_status: 'Status', getGame: 'Pobierz grę', getGameS: 'Gra',
       st_online: 'Online', st_offline: 'Offline', st_maintenance: 'Przerwa techniczna', st_degraded: 'Problemy', st_unknown: 'Nieznany',
       tab_home: 'Start', tab_codes: 'Kody', tab_known: 'Problemy', tab_report: 'Zgłoś', tab_fixed: 'Poprawki',
-      newBadge: 'NOWE', discord: 'Dołącz do Discorda', skip: 'Przejdź do treści', rights: 'Stworzone dla graczy', terms: 'Regulamin', privacy: 'Prywatność',
+      newBadge: 'NOWE', discord: 'Dołącz do Discorda', skip: 'Przejdź do treści', q_banner: 'Zespół ma pytanie o Twoje zgłoszenie błędu #{id}.', q_answer: 'Odpowiedz', rights: 'Stworzone dla graczy', terms: 'Regulamin', privacy: 'Prywatność',
       netErr: 'Nie można połączyć się z serwerem. Spróbuj później.', install: 'Zainstaluj aplikację', copy: 'Kopiuj', copied: 'Skopiowano',
       left: 'Wygasa za', never: 'Nie wygasa', d: 'd', h: 'godz.', m: 'min',
       iosHint: 'Na iPhonie: stuknij Udostępnij, a potem „Do ekranu początkowego”.', offline: 'Jesteś offline – pokazujemy ostatnio zapisane dane.',
@@ -233,6 +233,28 @@
     if (!W.cfg.giftcodes) hide('codes');
     else if (!/codes\.html$/.test(location.pathname)) W.codesBadge();
     const tabs = document.querySelector('.tabs'); if (tabs) tabs.style.setProperty('--n', String(tabs.querySelectorAll('.tab:not([hidden])').length));
+    if (!/follow\.html$/.test(location.pathname)) W.questionBanner();
     return W.cfg;
+  };
+
+  // Reports sent from this browser (their private follow links), so the site can say when the team asks something.
+  W.myReports = () => { try { return JSON.parse(store.get('wos.reports') || '[]'); } catch (e) { return []; } };
+  W.rememberReport = (b, t, title) => {
+    const list = W.myReports().filter(x => String(x.b) !== String(b));
+    list.unshift({ b: String(b), t: String(t), title: title || '', at: Date.now() });
+    store.set('wos.reports', JSON.stringify(list.slice(0, 10)));
+  };
+  W.questionBanner = async () => {
+    const list = W.myReports().filter(x => Date.now() - x.at < 60 * 86400000).slice(0, 5);
+    for (const x of list) {
+      let d; try { d = await W.api('/public/ticket?b=' + encodeURIComponent(x.b) + '&t=' + encodeURIComponent(x.t)); } catch (e) { continue; }
+      const last = d.messages[d.messages.length - 1];
+      if (d.open && last && last.kind === 'staff') {
+        const bar = W.el('a', { class: 'qbanner', href: 'follow.html?b=' + encodeURIComponent(x.b) + '&t=' + encodeURIComponent(x.t) },
+          '❓ ' + W.t('q_banner').replace('{id}', x.b) + ' ', W.el('b', {}, W.t('q_answer') + ' →'));
+        const main = document.getElementById('main'); if (main) main.prepend(bar);
+        return;
+      }
+    }
   };
 })();

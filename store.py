@@ -250,6 +250,10 @@ db.executescript(
     CREATE TABLE IF NOT EXISTS temp_bans (     -- bans that end by themselves
         user_id INTEGER PRIMARY KEY, user_name TEXT, until INTEGER NOT NULL, case_id INTEGER
     );
+    CREATE TABLE IF NOT EXISTS web_msgs (      -- website tickets: staff ask a player who reported from the website without Discord
+        id INTEGER PRIMARY KEY AUTOINCREMENT, bug_id INTEGER NOT NULL, ts INTEGER NOT NULL,
+        author TEXT NOT NULL, name TEXT, text TEXT, files TEXT, seen INTEGER NOT NULL DEFAULT 0);
+    CREATE INDEX IF NOT EXISTS web_msgs_bug ON web_msgs(bug_id);
     CREATE TABLE IF NOT EXISTS msg_log (       -- recent chat messages, kept a few days so deleted/edited ones can be read by staff
         message_id INTEGER PRIMARY KEY,
         channel_id INTEGER NOT NULL, channel_name TEXT,
@@ -336,7 +340,7 @@ for _table, _col in (("bug_reports", "created_at INTEGER"), ("suggestions", "cre
                      ("bug_reports", "ai_checked INTEGER"), ("bug_reports", "ai_dup INTEGER"), ("bug_reports", "ai_conf INTEGER"),
                      ("bug_reports", "ai_reason TEXT"), ("bug_reports", "match_en TEXT"), ("bug_reports", "match_lang TEXT"), ("bug_reports", "dev_state TEXT"), ("bug_reports", "dev_note TEXT"),
                      ("bug_reports", "dev_version TEXT"), ("bug_reports", "dev_ts INTEGER"), ("bug_reports", "text_en TEXT"), ("bug_reports", "auto_closed INTEGER"), ("suggestions", "text_en TEXT"), ("bug_files", "img_hash TEXT"),
-                     ("bug_reports", "mod_pinged INTEGER"), ("bug_reports", "dev_reply TEXT"), ("bug_reports", "dev_reply_ts INTEGER"), ("bug_reports", "dev_asked INTEGER"), ("bug_reports", "known_off INTEGER"), ("gift_codes", "reminded INTEGER"), ("partners", "fails INTEGER NOT NULL DEFAULT 0"), ("partners", "bug_channel INTEGER"), ("partners", "bug_msg INTEGER"), ("partners", "bug_msg_ch INTEGER"), ("partners", "gift_ping TEXT"), ("partners", "ann_ping TEXT"), ("bug_reports", "ticket_log TEXT"), ("suggestions", "via_guild INTEGER"), ("partners", "bug_msg_sig TEXT"), ("partners", "list_msgs TEXT"), ("partners", "list_sig TEXT"), ("bug_reports", "via_guild INTEGER"),
+                     ("bug_reports", "mod_pinged INTEGER"), ("bug_reports", "dev_reply TEXT"), ("bug_reports", "dev_reply_ts INTEGER"), ("bug_reports", "dev_asked INTEGER"), ("bug_reports", "known_off INTEGER"), ("gift_codes", "reminded INTEGER"), ("partners", "fails INTEGER NOT NULL DEFAULT 0"), ("partners", "bug_channel INTEGER"), ("partners", "bug_msg INTEGER"), ("partners", "bug_msg_ch INTEGER"), ("partners", "gift_ping TEXT"), ("partners", "ann_ping TEXT"), ("bug_reports", "ticket_log TEXT"), ("suggestions", "via_guild INTEGER"), ("bug_reports", "web_token TEXT"), ("bug_reports", "web_ticket INTEGER"), ("partners", "bug_msg_sig TEXT"), ("partners", "list_msgs TEXT"), ("partners", "list_sig TEXT"), ("bug_reports", "via_guild INTEGER"),
                      ("suggestions", "changes TEXT"), ("suggestions", "changed_at INTEGER"),
                      ("suggestions", "changed_by TEXT"), ("suggestions", "changes_msg_id INTEGER"),
                      ("tickets", "area TEXT"), ("tickets", "title TEXT"), ("tickets", "chief_name TEXT"),
@@ -1464,9 +1468,10 @@ def safe_name(name: str) -> str:
     return n
 
 
-def save_file(bug_id: int, filename: str, data: bytes, max_bytes: int = 25 * 1024 * 1024):
-    """Keep a copy of an attachment on disk. Returns the row id, or None if skipped."""
-    if not cfg("keep_attachments") or not data or len(data) > max_bytes:
+def save_file(bug_id: int, filename: str, data: bytes, max_bytes: int = 25 * 1024 * 1024, always: bool = False):
+    """Keep a copy of an attachment on disk. Returns the row id, or None if skipped.
+    always=True: keep it even when attachments aren't kept (pictures in a website ticket – there is no other copy)."""
+    if not (cfg("keep_attachments") or always) or not data or len(data) > max_bytes:
         return None
     folder = ATTACH_DIR / str(bug_id)
     folder.mkdir(parents=True, exist_ok=True)
@@ -1478,6 +1483,32 @@ def save_file(bug_id: int, filename: str, data: bytes, max_bytes: int = 25 * 102
                      (bug_id, name, str(path.relative_to(ATTACH_DIR)), len(data), int(time.time())))
     db.commit()
     return cur.lastrowid
+
+
+# ------------------------------------------------------------- website tickets
+def web_token_ok(bug_id: int, token: str):
+    """The bug, if token is its private follow-link token (constant-time compare)."""
+    import hmac as _hmac
+    r = get_bug(bug_id) if bug_id else None
+    if r is None or not r["web_token"] or not token or not _hmac.compare_digest(r["web_token"], str(token)):
+        return None
+    return r
+
+
+def web_msg_add(bug_id: int, author: str, name: str, text: str, file_ids=()) -> int:
+    cur = db.execute("INSERT INTO web_msgs (bug_id, ts, author, name, text, files) VALUES (?,?,?,?,?,?)",
+                     (bug_id, int(time.time()), author, (name or "")[:60], (text or "")[:1800], json.dumps([int(x) for x in file_ids if x])))
+    db.commit()
+    return cur.lastrowid
+
+
+def web_msgs(bug_id: int) -> list:
+    return db.execute("SELECT * FROM web_msgs WHERE bug_id=? ORDER BY id", (bug_id,)).fetchall()
+
+
+def web_msgs_seen(bug_id: int, author: str):
+    db.execute("UPDATE web_msgs SET seen=1 WHERE bug_id=? AND author=?", (bug_id, author))
+    db.commit()
 
 
 def bug_files(bug_id: int):

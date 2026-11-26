@@ -1045,6 +1045,8 @@ async def ticket_from_dashboard(bug_id: int, user_id) -> dict:
         raise ValueError("That bug doesn't exist.")
     if r["status"] not in MOD_OPEN:
         raise ValueError("Tickets can only be opened while the bug is waiting for a moderator.")
+    if not r["reporter_id"]:
+        return await web_ticket_open(r, user_id)
     g = bot.get_guild(GUILD_ID)
     member = None
     if user_id and g is not None:
@@ -1073,6 +1075,127 @@ async def ticket_from_dashboard(bug_id: int, user_id) -> dict:
     return {"ok": True, "thread": thread.jump_url, "warnings": [re.sub(r"<@!?\d+>\s*", "", x) for x in problems]}
 
 
+# --------------------------------------------- website tickets (reports from the website without a Discord account)
+def _staff_name(user_id) -> str:
+    g = bot.get_guild(GUILD_ID)
+    m = g.get_member(int(user_id)) if g and user_id else None
+    return m.display_name if m else "Staff"
+
+
+def web_follow_url(r) -> str:
+    return f"{store.site_base() or '/'}follow.html?b={r['id']}&t={r['web_token']}" if r["web_token"] else ""
+
+
+async def web_ticket_open(r, user_id) -> dict:
+    """Ask a website reporter: the conversation lives on the website (their private follow link), not in Discord."""
+    if not r["web_token"]:
+        raise ValueError("This report was sent from the website before private follow links existed, so the player can't be "
+                         "reached." + (f" They left this contact: {r['contact']}" if r["contact"] else ""))
+    if r["web_ticket"]:
+        raise ValueError(f"Bug #{r['id']} already has an open ticket.")
+    who = _staff_name(user_id)
+    set_bug(r["id"], web_ticket=1, status="investigating")
+    record_action("bug", r["id"], "investigating", int(user_id) if user_id else None, who)
+    log_event("mod", f"Bug #{r['id']}: website ticket opened by {who}", int(user_id) if user_id else None, who)
+    await _sync_mod_msg(get_bug(r["id"]), f"Website ticket opened by {who} – questions are answered on the website")
+    return {"ok": True, "thread": "", "web": True, "warnings": []}
+
+
+async def _sync_mod_msg(r, note):
+    ch = chan("mod_channel_id")
+    if ch is not None and r["msg_id"]:
+        try:
+            await ch.get_partial_message(r["msg_id"]).edit(embed=bug_embed(r, note))
+        except discord.HTTPException:
+            pass
+
+
+def web_ticket_view(r, for_staff: bool) -> dict:
+    """The website conversation, for the dashboard (for_staff) or for the player's follow page."""
+    out = []
+    for m in store.web_msgs(r["id"]):
+        files = []
+        for fid in json.loads(m["files"] or "[]"):
+            f = store.get_file(fid)
+            if f is not None:
+                kind = "image" if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")) else "video"
+                files.append({"id": f["id"], "name": f["filename"], "type": kind})
+        if m["author"] == "system" and for_staff:
+            out.append({"id": str(m["id"]), "ts": m["ts"], "author": brand(), "kind": "system", "bot": True, "player": False,
+                        "staff": False, "avatar": "", "text": "🔒 Ticket closed", "files": [], "web": True})
+            continue
+        out.append({"id": str(m["id"]), "ts": m["ts"], "author": m["name"] or ("Staff" if m["author"] == "staff" else "Player"),
+                    "kind": m["author"], "bot": m["author"] == "system", "player": m["author"] == "player",
+                    "staff": m["author"] == "staff", "avatar": "", "text": m["text"] or "", "files": files, "web": True})
+    return {"thread_url": "", "web": True, "archived": not r["web_ticket"], "messages": out}
+
+
+def web_ticket_write(r, author: str, name: str, text: str, files=None, user_id=None) -> dict:
+    text = (text or "").strip()[:1800]
+    if not text and not files:
+        raise ValueError("Write a message first.")
+    ids = [store.save_file(r["id"], n, d, always=True) for n, d in (files or [])[:4]]
+    mid = store.web_msg_add(r["id"], author, name, text, ids)
+    if author == "staff":
+        record_action("bug", r["id"], "ticket_message", int(user_id) if user_id else None, name)
+    return {"ok": True, "id": str(mid)}
+
+
+async def web_ticket_reply(bug_id: int, token: str, text: str, files) -> dict:
+    """The player answers on their follow page."""
+    r = store.web_token_ok(bug_id, token)
+    if r is None:
+        raise ValueError("This link isn't valid.")
+    if not r["web_ticket"]:
+        raise ValueError("The team isn't waiting for an answer on this report right now.")
+    name = r["chief_name"] or "The player"
+    res = web_ticket_write(r, "player", name, text, files)
+    log_event("bug", f"{name} answered on the website about bug #{r['id']}", None, "Website")
+    ch = chan("mod_channel_id")
+    if ch is not None:
+        try:
+            ref = ch.get_partial_message(r["msg_id"]) if r["msg_id"] else None
+            await ch.send(f"💬 **{name} answered on the website about bug #{r['id']}**\n>>> {(text or '(pictures)')[:1500]}\n"
+                          "-# Read and answer in the bug's window on the dashboard.", reference=ref, mention_author=False,
+                          allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+    return res
+
+
+async def web_ticket_close(r, user_id, note: str = "") -> dict:
+    """Close a website ticket: save the conversation with the bug (pictures are already kept), back to the moderators."""
+    who = _staff_name(user_id)
+    msgs = store.web_msgs(r["id"])
+    lines, n_files = [], 0
+    for m in msgs:
+        fids = json.loads(m["files"] or "[]")
+        n_files += len(fids)
+        names = ", ".join(f["filename"] for f in (store.get_file(x) for x in fids) if f)
+        when = time.strftime("%Y-%m-%d %H:%M", time.gmtime(m["ts"]))
+        lines.append(f"[{when} UTC] {m['name'] or m['author']}: {m['text'] or ''}" + (f"  📎 {names}" if names else ""))
+    stamp = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+    head = f"— Website ticket closed by {who} on {stamp} ({len(msgs)} message{'s' if len(msgs) != 1 else ''}) —"
+    log = "\n".join([head] + lines + ([f"Note from {who}: {note}"] if note else []))
+    store.web_msg_add(r["id"], "system", "", "closed")
+    set_bug(r["id"], ticket_log=((r["ticket_log"] + "\n\n") if r["ticket_log"] else "") + log, web_ticket=0, status="new")
+    record_action("bug", r["id"], "ticket_saved", int(user_id) if user_id else None, who)
+    log_event("mod", f"Bug #{r['id']}: website ticket closed by {who} – {len(msgs)} messages saved, back to the moderators",
+              int(user_id) if user_id else None, who)
+    await _sync_mod_msg(get_bug(r["id"]), f"Website ticket closed by {who} – waiting for a moderator")
+    ch = chan("mod_channel_id")
+    if ch is not None:
+        try:
+            ref = ch.get_partial_message(r["msg_id"]) if r["msg_id"] else None
+            await ch.send(f"🗂️ **Website ticket for bug #{r['id']} closed by {who}** – {len(msgs)} messages saved with the report.",
+                          files=[discord.File(io.BytesIO(log.encode()), filename=f"bug-{r['id']}-ticket.txt")], reference=ref,
+                          mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+    await safe_refresh_board()
+    return {"messages": len(msgs), "files": n_files}
+
+
 async def _ticket_thread(bug_id: int):
     r = get_bug(bug_id)
     if r is None or not r["ticket_thread_id"]:
@@ -1086,6 +1209,9 @@ async def _ticket_thread(bug_id: int):
 
 async def ticket_messages(bug_id: int, after: int = 0) -> dict:
     """The ticket thread, for the dashboard: every message with its pictures (Discord links, fresh on each call)."""
+    w = get_bug(bug_id)
+    if w is not None and w["web_ticket"]:
+        return web_ticket_view(w, for_staff=True)
     r, th = await _ticket_thread(bug_id)
     staff = set()
     g = bot.get_guild(GUILD_ID)
@@ -1103,6 +1229,9 @@ async def ticket_messages(bug_id: int, after: int = 0) -> dict:
 
 async def ticket_send(bug_id: int, user_id, text: str, files=None) -> dict:
     """A moderator writes in the ticket from the dashboard: the bot posts it in the thread, signed with their name."""
+    w = get_bug(bug_id)
+    if w is not None and w["web_ticket"]:
+        return web_ticket_write(w, "staff", _staff_name(user_id), text, files, user_id)
     r, th = await _ticket_thread(bug_id)
     g = bot.get_guild(GUILD_ID)
     mem = g.get_member(int(user_id)) if g and user_id else None
@@ -1120,6 +1249,8 @@ async def ticket_send(bug_id: int, user_id, text: str, files=None) -> dict:
 async def ticket_close(bug_id: int, user_id, note: str = "") -> dict:
     """The dashboard's Close ticket button – the same as /closebug in the thread."""
     r = get_bug(bug_id)
+    if r is not None and r["web_ticket"]:
+        return await web_ticket_close(r, user_id, note)
     if r is None or not r["ticket_thread_id"]:
         raise ValueError("This bug has no open ticket.")
     g = bot.get_guild(GUILD_ID)
@@ -1740,7 +1871,8 @@ class WosBot(discord.Client):
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "ticket_from_dashboard": ticket_from_dashboard, "ticket_messages": ticket_messages,
-                         "ticket_send": ticket_send, "ticket_close": ticket_close, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
+                         "ticket_send": ticket_send, "ticket_close": ticket_close,
+                         "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "web_ticket_view": web_ticket_view, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
                          "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
                          "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
@@ -2357,6 +2489,8 @@ async def submit_web_report(f: dict, files: list) -> int:
          f["chief_name"] or None, f["uid"] or None, f["contact"] or None, f.get("ip_hash")))
     db.commit()
     bug_id = cur.lastrowid
+    import secrets
+    set_bug(bug_id, web_token=secrets.token_urlsafe(18))     # the player's private follow link (questions, status)
     r = get_bug(bug_id)
     try:
         try:
