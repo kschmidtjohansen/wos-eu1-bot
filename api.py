@@ -124,7 +124,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             print(f"[dashboard api] {request.method} {request.path} failed: {exc!r}")
             return web.json_response({"error": "Something went wrong in the bot. Check its console."}, status=500)
 
-    AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console", "/api/auth/appeal", "/api/auth/player"}
+    AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console", "/api/auth/appeal", "/api/auth/player", "/api/auth/report"}
     # Moderators get the bug dashboard only: read bugs and stats, handle bugs. Nothing that changes the bot.
     MOD_READ = [r"/api/overview", r"/api/health", r"/api/channels", r"/api/settings", r"/api/bot", r"/api/status", r"/api/insights",
                 r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles",
@@ -424,7 +424,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 for x in store.links_for_uid(r["player_uid"])]
             d.update({"text": r["text"], "extra": r["extra"], "chief_name": r["chief_name"] or "", "ticket_log": r["ticket_log"] or "",
                       "ticket_url": f"https://discord.com/channels/{guild_id}/{r['ticket_thread_id']}" if r["ticket_thread_id"] else "",
-                      "can_ticket": bool(store.cfg("investigate_enabled") and r["reporter_id"] and r["source"] != "web"),
+                      "can_ticket": bool(store.cfg("investigate_enabled") and r["reporter_id"]),
                       "uid": r["player_uid"] or "", "contact": r["contact"] or "", "linked": linked,
                       "files": [{"id": f["id"], "name": f["filename"], "size": f["size"],
                                  "kind": "video" if f["filename"].lower().endswith(MEDIA_VIDEO) else "image"}
@@ -673,9 +673,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             async with s.get(f"{DISCORD_API}/users/@me", headers={"Authorization": "Bearer " + tok["access_token"]}) as r:
                 user = await r.json(content_type=None)
         uid = int(user["id"])
-        if state.startswith(("a.", "m.")):                  # a player logging in (appeal / my reports) – never a dashboard session
+        if state.startswith(("a.", "m.", "r.")):            # a player logging in (appeal / my reports / report) – never a dashboard session
             name = (user.get("global_name") or user.get("username") or str(uid))[:60]
-            resp = web.HTTPFound(appeal_page("appeal.html" if state.startswith("a.") else "my.html"))
+            resp = web.HTTPFound(appeal_page({"a": "appeal.html", "m": "my.html", "r": "report.html"}[state[0]]))
             resp.set_cookie(APPEAL_COOKIE, appeal_sign(uid, name, int(time.time()) + 3600), max_age=3600, httponly=True,
                             samesite="Lax", path="/", secure=c["redirect"].startswith("https://"))
             resp.del_cookie("wos_state", path="/api/auth/")
@@ -2392,6 +2392,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
              "area": clean(fields.get("area"), 40), "version": clean(fields.get("version"), 30),
              "title": clean(fields.get("title"), 100), "description": clean(fields.get("description"), 1800),
              "contact": clean(fields.get("contact"), 100)}
+        me = appeal_user(request)                  # logged in with Discord on the website → the report gets their account
+        if me:
+            f["discord_id"], f["discord_name"] = me
         if f["uid"]:
             try:
                 f["uid"] = store.clean_uid(f["uid"])
@@ -2588,6 +2591,11 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         resp.set_cookie("wos_state", state, max_age=600, httponly=True, samesite="Lax", path="/api/auth/",
                         secure=c["redirect"].startswith("https://"))
         return resp
+
+    @routes.get("/api/auth/report")
+    async def report_login(request):
+        """A player logs in before reporting from the website, so staff can reach them on Discord."""
+        raise player_login("r.")
 
     @routes.get("/api/auth/player")
     async def my_login(request):

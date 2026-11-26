@@ -265,3 +265,4 @@ footer{border-top:1px solid var(--line);color:var(--muted);font-size:14px}
 @media (max-width:600px){.legal .card{padding:4px 18px 20px}}
 .closed{margin:0;font-size:17px;line-height:1.55;color:var(--text)}
 .closed + .btns{margin-top:18px}
+.me{margin:0 0 16px;font-size:15px}.me a{color:var(--ice,#7de3f4);font-weight:600}

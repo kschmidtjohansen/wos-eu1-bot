@@ -40,14 +40,16 @@
 <script src="config.js"></script><script src="app.js"></script>
 <script>
 const S = {
- en: { h1: 'Report a bug', lead: 'Tell us what went wrong. The more detail you give, the faster we can fix it.', chief: 'Chief name', uid: 'Player UID', opt: '(optional)', area: 'Area', ver: 'Game version',
+ en: { meAs: 'Sending as {name} on Discord – we can ask you questions and send you updates.', meLogin: 'Log in with Discord',
+  meWhy: 'so we can ask you questions about your report and send you updates.', h1: 'Report a bug', lead: 'Tell us what went wrong. The more detail you give, the faster we can fix it.', chief: 'Chief name', uid: 'Player UID', opt: '(optional)', area: 'Area', ver: 'Game version',
   ttl: 'Short title', ttlPh: 'e.g. Horse sinks when mounted near water', desc: 'What happened?', descPh: 'What did you do, what did you expect, and what happened instead?', descHint: 'At least 20 characters.',
   files: 'Screenshots or video', filesHint: '(up to 4 files, 8 MB each)', dropT: 'Tap to add files, or drop them here', contact: 'Contact', contactHint: 'Only moderators see this. Leave it empty if you do not need a reply.',
   send: 'Send report', sending: 'Sending…', pick: 'Choose an area…', okH: 'Thank you!', ok: 'Your report was sent to our team.', again: 'Report another bug', off: 'Bug reports from the website are closed right now. Please use our Discord.',
   eTitle: 'Please write a short title (at least 5 characters).', eDesc: 'Please describe what happened (at least 20 characters).', eArea: 'Please choose an area.', eUid: 'The player UID should only contain numbers.',
   eFile: 'You can attach at most 4 files of 8 MB each.', tipsH: 'Tips for a good report', tip1: 'Check the known issues first.', tip2: 'Describe the steps so we can repeat the bug.', tip3: 'Screenshots and short videos help a lot.', tip4: 'One problem per report.',
   similar: 'This may already be reported:', similarNote: 'If it is the same problem, you do not need to send it again.', kiLink: 'Open the known issues list', in: 'fixed in', passed: 'Confirmed', being_investigated: 'Investigating', fixed: 'Fixed' },
- pl: { h1: 'Zgłoś błąd', lead: 'Napisz, co poszło nie tak. Im więcej szczegółów, tym szybciej to naprawimy.', chief: 'Imię wodza', uid: 'UID gracza', opt: '(opcjonalnie)', area: 'Obszar', ver: 'Wersja gry',
+ pl: { meAs: 'Wysyłasz jako {name} na Discordzie – możemy zadać ci pytania i wysyłać aktualizacje.', meLogin: 'Zaloguj się przez Discord',
+  meWhy: 'aby móc zadać ci pytania o zgłoszenie i wysyłać aktualizacje.', h1: 'Zgłoś błąd', lead: 'Napisz, co poszło nie tak. Im więcej szczegółów, tym szybciej to naprawimy.', chief: 'Imię wodza', uid: 'UID gracza', opt: '(opcjonalnie)', area: 'Obszar', ver: 'Wersja gry',
   ttl: 'Krótki tytuł', ttlPh: 'np. Koń tonie przy wsiadaniu przy wodzie', desc: 'Co się stało?', descPh: 'Co zrobiłeś, czego się spodziewałeś i co się stało zamiast tego?', descHint: 'Co najmniej 20 znaków.',
   files: 'Zrzuty ekranu lub wideo', filesHint: '(do 4 plików, po 8 MB)', dropT: 'Stuknij, aby dodać pliki, lub upuść je tutaj', contact: 'Kontakt', contactHint: 'Widzą to tylko moderatorzy. Zostaw puste, jeśli nie potrzebujesz odpowiedzi.',
   send: 'Wyślij zgłoszenie', sending: 'Wysyłanie…', pick: 'Wybierz obszar…', okH: 'Dziękujemy!', ok: 'Twoje zgłoszenie trafiło do zespołu.', again: 'Zgłoś kolejny błąd', off: 'Zgłoszenia ze strony są teraz zamknięte. Użyj naszego Discorda.',
@@ -87,6 +89,13 @@ WOS.init(S).then(c => {
       ...(dc ? [WOS.el('div', { class: 'btns' }, WOS.el('a', { class: 'btn pri', href: dc, rel: 'noopener' }, 'Discord'))] : []));
   }
   if (!c.areas) { say(WOS.t('netErr'), 'err'); }
+  if (c.enabled !== false) WOS.api('/public/my').then(me => {          // who is sending: lets staff open a ticket / DM them
+    const box = WOS.el('p', { class: 'me muted' });
+    const paint = () => box.replaceChildren(...(me.logged_in ? [WOS.t('meAs').replace('{name}', me.name || '')]
+      : [WOS.el('a', { href: ((window.WOS_CONFIG || {}).API_BASE || '').replace(/\/+$/, '') + '/api/auth/report' }, WOS.t('meLogin')), ' ', WOS.t('meWhy')]));
+    if (!me.logged_in && !me.login) return;
+    paint(); WOS.onLang.push(paint); f.prepend(box);
+  }).catch(() => {});
 });
 WOS.onLang.push(() => { $('go').textContent = WOS.t('send'); });
 f.addEventListener('submit', async e => {

@@ -2295,10 +2295,10 @@ async def submit_web_report(f: dict, files: list) -> int:
     if channel is None or not cfg("web_form_enabled"):
         raise ValueError("Bug reports from the website are switched off right now.")
     cur = db.execute(
-        "INSERT INTO bug_reports (reporter_id, text, created_at, summary, area, game_version, chief_name, "
-        "player_uid, source, contact, ip_hash) VALUES (0,?,?,?,?,?,?,?, 'web', ?, ?)",
-        (f["description"], int(time.time()), f["title"], f["area"], f["version"], f["chief_name"] or None,
-         f["uid"] or None, f["contact"] or None, f.get("ip_hash")))
+        "INSERT INTO bug_reports (reporter_id, reporter_name, text, created_at, summary, area, game_version, chief_name, "
+        "player_uid, source, contact, ip_hash) VALUES (?,?,?,?,?,?,?,?,?, 'web', ?, ?)",
+        (f.get("discord_id") or 0, f.get("discord_name"), f["description"], int(time.time()), f["title"], f["area"], f["version"],
+         f["chief_name"] or None, f["uid"] or None, f["contact"] or None, f.get("ip_hash")))
     db.commit()
     bug_id = cur.lastrowid
     r = get_bug(bug_id)
@@ -5651,7 +5651,7 @@ async def dev_update(r, state: Optional[str], version: Optional[str] = None, not
 async def ask_reporter(r, question: str) -> bool:
     """DM the player who reported the bug the developers' question, with an Answer button. False if that's not possible."""
     uid = r["reporter_id"]
-    if not uid or r["source"] == "web":
+    if not uid:
         return False
     lg = store.lang_for(uid)
     e = discord.Embed(title=T("devq.title", lg, id=r["id"]), description=f">>> {question[:1500]}", color=0x5865F2)
