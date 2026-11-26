@@ -310,6 +310,20 @@
 .w-recrow{display:flex;flex-wrap:wrap;gap:6px 14px;flex:1 1 100%;font-size:13.5px;color:var(--w-muted)}
 .w-rec b{color:var(--w-text);font-variant-numeric:tabular-nums}.w-rec.ok b{color:var(--w-ok,#4fd1a1)}.w-rec.bad b{color:var(--w-bad,#ff6b7a)}
 .w-ticketlog{margin-top:10px}.w-ticketlog summary{cursor:pointer;font-weight:600;font-size:14px;padding:6px 0}.w-ticketlog .w-pre{max-height:320px;overflow:auto;font-size:13px}
+.w-chat{border:1px solid var(--w-border);border-radius:18px;padding:12px;margin:12px 0;background:rgba(125,227,244,.03)}
+.w-chat-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:8px}.w-chat-head .w-hint{flex:1}
+.w-chatlog{max-height:380px;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 8px}
+.w-msg{display:flex;gap:10px;align-items:flex-start;max-width:92%}
+.w-msg.staff{align-self:flex-end;flex-direction:row-reverse}.w-msg.staff .w-msg-body{background:rgba(255,166,77,.10);border-color:rgba(255,166,77,.28)}
+.w-msg.bot{opacity:.7;font-size:13px}
+.w-msg-av{width:30px;height:30px;border-radius:50%;flex:none}
+.w-msg-body{border:1px solid var(--w-border);border-radius:14px;padding:8px 11px;background:rgba(255,255,255,.03);min-width:0}
+.w-msg-who{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;margin-bottom:2px}
+.w-msg-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;line-height:1.45}
+.w-msg-files{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.w-msg-files img,.w-msg-files video{max-width:220px;max-height:180px;border-radius:10px;display:block}
+.w-chatform{display:flex;flex-direction:column;gap:6px;margin-top:6px}.w-chatform textarea{resize:vertical;min-height:58px}
+@media (max-width:600px){.w-chat .w-fold summary .w-hint{display:none}}
+.w-chatbtns{display:flex;align-items:center;gap:8px}.w-chatbtns .w-hint{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.w-chatfile{cursor:pointer}
 .w-quick{display:inline-flex;gap:4px}
 .w-qbtn{width:34px;height:32px;border-radius:9px;border:1px solid var(--w-border);background:var(--w-surface);cursor:pointer;font-size:15px;line-height:1;display:grid;place-items:center;transition:transform .1s,border-color .15s}
 .w-qbtn:hover{border-color:var(--w-accent);transform:scale(1.08)}
@@ -885,9 +899,10 @@ async function api(method, path, body) {
   try {
     res = await fetch(S.base.replace(/\/+$/, '') + path, {
       method,
-      headers: Object.assign({ 'X-Requested-With': 'wos' }, S.key ? { Authorization: 'Bearer ' + S.key } : {}, body ? { 'Content-Type': 'application/json' } : {}),
+      headers: Object.assign({ 'X-Requested-With': 'wos' }, S.key ? { Authorization: 'Bearer ' + S.key } : {},
+        body && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
       credentials: 'same-origin',
-      body: body ? JSON.stringify(body) : undefined
+      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined
     });
   } catch (e) {
     const err = new Error("Can't reach the bot. Check that it is running, that the address is right and uses HTTPS, " +
@@ -1651,6 +1666,7 @@ function bugModal() {
     <div class="w-bugtools">${trBox('bugs', b.id)}${b.mod_url ? html`<a class="w-linkbtn" href="${b.mod_url}" target="_blank" rel="noopener">Mod channel ↗</a>` : ''}${b.admin_url ? html`<a class="w-linkbtn" href="${b.admin_url}" target="_blank" rel="noopener">Admin channel ↗</a>` : ''}</div>
 
     ${bugActions(b)}
+    ${b.ticket_url ? ticketChat(b) : ''}
     ${similarBox(b)}
     ${closed ? '' : html`<label class="w-knownbar ${b.public ? 'on' : ''}"><span class="w-switch"><input type="checkbox" data-act="bugKnownModal" ${b.public ? 'checked' : ''}><span></span></span>
       <span><b>📌 Known issue</b><span class="w-hint" style="display:block">${b.public ? 'Players see it on the website and the Known issues board, and can say “I have this too”.' : 'Show it on the website and the Known issues board (title, area and status only).'}</span></span></label>`}
@@ -1726,14 +1742,58 @@ async function fetchFile(bugId, fid) {
   if (!res.ok) throw new Error('missing');
   return URL.createObjectURL(await res.blob());
 }
+// ---- the ticket with the player, right in the bug window: reads the Discord thread, writes into it through the bot
+function ticketChat(b) {
+  return html`<section class="w-chat" aria-label="Ticket with the player">
+    <div class="w-chat-head"><b>🔍 Ticket with the player</b><span class="w-hint" id="m-chatstate">● live</span>
+      <a class="w-linkbtn" href="${b.ticket_url}" target="_blank" rel="noopener">Open in Discord ↗</a></div>
+    <div class="w-chatlog" id="m-chatlog" aria-live="polite"><div class="w-hint">Loading the conversation…</div></div>
+    <div class="w-chatform">
+      <textarea class="w-input" id="m-chatmsg" rows="2" maxlength="1800" placeholder="Write to the player – sent in Discord with your name"></textarea>
+      <div class="w-chatbtns"><label class="w-btn small w-chatfile" title="Add pictures (up to 4)">📎<input type="file" id="m-chatfiles" accept="image/*,video/*" multiple hidden></label>
+        <span class="w-hint" id="m-chatfilenames"></span>
+        <button class="w-btn primary small" data-act="ticketSend">Send</button></div></div>
+    <details class="w-fold" style="margin-top:10px"><summary><b>Close the ticket</b><span class="w-hint">saves everything with the bug – same as /closebug</span></summary>
+      <div class="w-field" style="margin-top:8px"><label class="w-label" for="m-closenote">Short note <span class="w-hint">(optional)</span></label>
+        <input class="w-input" id="m-closenote" maxlength="500" placeholder="e.g. Happens after every server reset"></div>
+      <button class="w-btn" data-act="ticketClose">🔒 Close ticket and save</button></details></section>`;
+}
+function chatHtml(d) {
+  if (!d.messages.length) return '<div class="w-hint">No messages yet.</div>';
+  return d.messages.map(m => String(html`<div class="w-msg ${m.bot ? 'bot' : m.player ? 'player' : 'staff'}">
+    ${m.avatar ? html`<img class="w-msg-av" src="${m.avatar}" alt="" loading="lazy">` : ''}<div class="w-msg-body">
+      <div class="w-msg-who"><b>${m.author}</b>${m.player ? html`<span class="w-badge info">player</span>` : m.staff ? html`<span class="w-badge ok">staff</span>` : ''}<span class="w-hint">${ago(m.ts)}</span></div>
+      ${m.text ? html`<div class="w-msg-text">${m.text}</div>` : ''}
+      ${m.files.length ? html`<div class="w-msg-files">${m.files.map(f => f.type === 'image' ? html`<a href="${f.url}" target="_blank" rel="noopener"><img src="${f.url}" alt="${f.name}" loading="lazy"></a>`
+        : f.type === 'video' ? html`<video src="${f.url}" controls preload="metadata"></video>` : html`<a class="w-linkbtn" href="${f.url}" target="_blank" rel="noopener">📎 ${f.name}</a>`)}</div>` : ''}</div></div>`)).join('');
+}
+async function pollChat(first) {
+  const b = S.detail, log = $('#m-chatlog');
+  if (!b || !b.ticket_url || !log) return stopChat();
+  try {
+    const d = await call('GET', '/api/bugs/' + b.id + '/ticket');
+    const last = d.messages.length ? d.messages[d.messages.length - 1].id + ':' + d.messages.length : '0';
+    if (first || last !== S.chatLast) {
+      const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+      log.innerHTML = chatHtml(d); S.chatLast = last;
+      if (first || near) log.scrollTop = log.scrollHeight;
+    }
+  } catch (e) { const st = $('#m-chatstate'); if (st) st.textContent = e.message; }
+}
+function startChat() { stopChat(); if (!S.detail || !S.detail.ticket_url) return; S.chatLast = null; pollChat(true); S.chatTimer = setInterval(() => pollChat(false), 5000); }
+function stopChat() { if (S.chatTimer) { clearInterval(S.chatTimer); S.chatTimer = null; } }
+
 function showModal() {
   let m = $('#wmodal'); if (m) m.remove();
-  if (!S.detail) return;
+  if (!S.detail) return stopChat();
   root.insertAdjacentHTML('beforeend', String(bugModal()));
   loadThumbs();
+  if (S.detail.ticket_url) startChat(); else stopChat();
+  const fi = $('#m-chatfiles'); if (fi) fi.onchange = () => { $('#m-chatfilenames').textContent = [...fi.files].slice(0, 4).map(f => f.name).join(', '); };
+  const ta = $('#m-chatmsg'); if (ta) ta.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const b = $('[data-act=ticketSend]'); if (b) b.click(); } };
   const c = $('#m-close'); if (c) c.focus();
 }
-function closeModal() { S.detail = null; S.player = null; S.quick = null; S.rejOpen = false; const m = $('#wmodal'); if (m) m.remove(); }
+function closeModal() { stopChat(); S.detail = null; S.player = null; S.quick = null; S.rejOpen = false; const m = $('#wmodal'); if (m) m.remove(); }
 function refreshOverviewSoon() { setTimeout(() => { if (S.tab !== 'overview') call('GET', '/api/overview').then(o => { S.overview = o; refreshNavCount(); }).catch(() => {}); }, 300); }
 async function changeBug(body, okMsg, btn) {
   busy(btn, true, 'Working…');
@@ -3564,6 +3624,18 @@ root.addEventListener('click', async e => {
       } catch (err) { busy(el, false); toast(err.message, 'err'); }
     }
     else if (act === 'bugSummary') changeBug({ summary: $('#m-sum').value }, 'Title saved.', el);
+    else if (act === 'ticketSend') { const b = S.detail, ta = $('#m-chatmsg'), fi = $('#m-chatfiles'); const files = fi ? [...fi.files].slice(0, 4) : [];
+      if (!ta.value.trim() && !files.length) return toast('Write a message first.', 'err');
+      busy(el, true, 'Sending…');
+      try { let body = { text: ta.value };
+        if (files.length) { body = new FormData(); body.append('text', ta.value); files.forEach(f => body.append('files', f)); }
+        await call('POST', '/api/bugs/' + b.id + '/ticket/send', body); ta.value = ''; if (fi) fi.value = ''; $('#m-chatfilenames').textContent = '';
+        busy(el, false); await pollChat(true); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'ticketClose') { const b = S.detail; busy(el, true, 'Saving…');
+      try { const r = await call('POST', '/api/bugs/' + b.id + '/ticket/close', { note: $('#m-closenote').value });
+        toast('Ticket closed – ' + r.messages + ' messages and ' + r.files + ' files saved with the bug.'); stopChat(); await openBug(b.id); loadBugs(true); }
+      catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'bugTicket') { const b = S.detail; busy(el, true, 'Opening…');
       try { const r = await call('POST', '/api/bugs/' + b.id + '/ticket');
         toast(r.warnings && r.warnings.length ? '⚠️ ' + r.warnings[0] : 'Ticket opened – you and the player were added to it in Discord.', r.warnings && r.warnings.length ? 'err' : 'ok');
@@ -4206,6 +4278,15 @@ function makeMock() {
     if (sm) { const b = bugs.find(x => x.id === +sm[1]); const pool = bugs.filter(x => x.id !== b.id && !x.duplicate_of).slice(0, 12);
       const items = (b.dup_suggest ? [bugs.find(x => x.id === b.dup_suggest)] : []).concat(pool.filter(x => x.id !== b.dup_suggest && x.area === b.area)).filter(Boolean).slice(0, 3);
       return { items: items.map((x, i) => Object.assign(briefBug(x), { score: i === 0 && b.dup_suggest ? b.dup_score : 52 - i * 7, snippet: (x.text || '').slice(0, 220) })) }; }
+    const tc = p.match(/^\/api\/bugs\/(\d+)\/ticket(\/send|\/close)?$/);
+    if (tc && (method === 'GET' || tc[2])) {
+      const b = bugs.find(x => x.id === +tc[1]); const chat = (b.chat = b.chat || [
+        { id: '1', ts: now - 900, author: 'WOS EU1', bot: true, player: false, staff: false, avatar: '', text: 'Hi Mira – a moderator has a question about bug #' + b.id + '.', files: [] },
+        { id: '2', ts: now - 600, author: 'Mira', bot: false, player: true, staff: false, avatar: '', text: 'It happens every time I mount near the river.', files: [] }]);
+      if (tc[2] === '/send') { chat.push({ id: String(chat.length + 1), ts: Math.floor(Date.now() / 1000), author: 'You', bot: false, player: false, staff: true, avatar: '', text: (body instanceof FormData ? body.get('text') : body.text) || '', files: [] }); return { ok: true }; }
+      if (tc[2] === '/close') { b.status = 'new'; b.ticket_url = ''; b.ticket_log = chat.map(m => m.author + ': ' + m.text).join('\n'); return { messages: chat.length, files: 0 }; }
+      return { thread_url: '#', archived: false, messages: chat };
+    }
     const tk = p.match(/^\/api\/bugs\/(\d+)\/ticket$/);
     if (tk) { const b = bugs.find(x => x.id === +tk[1]); b.status = 'investigating'; b.ticket_url = 'https://discord.com/channels/1/2';
       b.history.push({ ts: Math.floor(Date.now() / 1000), action: 'investigating', actor: 'Dashboard' }); return { ok: true, thread: '', warnings: [] }; }

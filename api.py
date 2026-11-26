@@ -127,10 +127,10 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     AUTH_OPEN = {"/api/auth/info", "/api/auth/login", "/api/auth/callback", "/api/auth/me", "/api/auth/logout", "/api/auth/console", "/api/auth/appeal", "/api/auth/player", "/api/auth/report"}
     # Moderators get the bug dashboard only: read bugs and stats, handle bugs. Nothing that changes the bot.
     MOD_READ = [r"/api/overview", r"/api/health", r"/api/channels", r"/api/settings", r"/api/bot", r"/api/status", r"/api/insights",
-                r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles",
+                r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/ticket", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles",
                 r"/api/queue", r"/api/reports", r"/api/appeals",
                 r"/api/players/find", r"/api/players/\d+", r"/api/msglog"]
-    MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/ticket"), ("POST", r"/api/bugs/\d+/translate"),
+    MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/ticket"), ("POST", r"/api/bugs/\d+/ticket/send"), ("POST", r"/api/bugs/\d+/ticket/close"), ("POST", r"/api/bugs/\d+/translate"),
                  ("POST", r"/api/reports/\d+"), ("POST", r"/api/appeals/\d+"), ("POST", r"/api/raid"), ("POST", r"/api/spikes"),
                  ("POST", r"/api/players/\d+/notes"), ("POST", r"/api/players/\d+/action")]
     SECRET_SETTING = re.compile(r"(header|secret|token|key|webhook|url)", re.I)
@@ -1507,6 +1507,44 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if r is None:
             raise ApiError(404, "Suggestion not found.")
         return r
+
+    @routes.get("/api/bugs/{id}/ticket")
+    async def bug_ticket_read(request):
+        """The ticket's conversation, for the chat in the dashboard's bug window."""
+        try:
+            return web.json_response(await hooks["ticket_messages"](int(request.match_info["id"]), int(request.query.get("after") or 0)),
+                                     headers={"Cache-Control": "no-store"})
+        except ValueError as exc:
+            raise ApiError(404, str(exc))
+
+    @routes.post("/api/bugs/{id}/ticket/send")
+    async def bug_ticket_send(request):
+        """Write in the ticket from the dashboard (text, and up to 4 pictures as multipart)."""
+        files, text = [], ""
+        if request.content_type.startswith("multipart/"):
+            reader = await request.multipart()
+            async for part in reader:
+                if part.name == "text":
+                    text = (await part.text())[:1800]
+                elif part.name == "files" and part.filename and len(files) < 4:
+                    data = await part.read(decode=False)
+                    if len(data) > 8 * 1024 * 1024:
+                        raise ApiError(413, "Files can be at most 8 MB each.")
+                    files.append((part.filename[:100], bytes(data)))
+        else:
+            text = str((await body_json(request)).get("text") or "")
+        try:
+            return web.json_response(await hooks["ticket_send"](int(request.match_info["id"]), who_id(request), text, files))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+
+    @routes.post("/api/bugs/{id}/ticket/close")
+    async def bug_ticket_close(request):
+        d = await body_json(request)
+        try:
+            return web.json_response(await hooks["ticket_close"](int(request.match_info["id"]), who_id(request), str(d.get("note") or "")))
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
 
     @routes.post("/api/bugs/{id}/ticket")
     async def bug_ticket(request):

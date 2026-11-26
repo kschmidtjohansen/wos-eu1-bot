@@ -26,6 +26,7 @@ import asyncio
 from datetime import datetime, timedelta
 import json
 import re
+import types
 import base64
 import math
 import os
@@ -1072,6 +1073,60 @@ async def ticket_from_dashboard(bug_id: int, user_id) -> dict:
     return {"ok": True, "thread": thread.jump_url, "warnings": [re.sub(r"<@!?\d+>\s*", "", x) for x in problems]}
 
 
+async def _ticket_thread(bug_id: int):
+    r = get_bug(bug_id)
+    if r is None or not r["ticket_thread_id"]:
+        raise ValueError("This bug has no open ticket.")
+    try:
+        th = bot.get_channel(r["ticket_thread_id"]) or await bot.fetch_channel(r["ticket_thread_id"])
+    except discord.HTTPException:
+        raise ValueError("I can't reach the ticket thread any more (deleted, or no access).")
+    return r, th
+
+
+async def ticket_messages(bug_id: int, after: int = 0) -> dict:
+    """The ticket thread, for the dashboard: every message with its pictures (Discord links, fresh on each call)."""
+    r, th = await _ticket_thread(bug_id)
+    staff = set()
+    g = bot.get_guild(GUILD_ID)
+    out = []
+    async for m in th.history(limit=200, oldest_first=True, after=discord.Object(id=after) if after else None):
+        mem = g.get_member(m.author.id) if g else None
+        out.append({"id": str(m.id), "ts": int(m.created_at.timestamp()), "author": m.author.display_name,
+                    "author_id": str(m.author.id), "avatar": str(m.author.display_avatar.url) if m.author.display_avatar else "",
+                    "bot": m.author.bot, "player": m.author.id == r["reporter_id"],
+                    "staff": bool(mem is not None and is_mod(mem)) and m.author.id != r["reporter_id"],
+                    "text": m.clean_content, "files": [{"url": a.url, "name": a.filename, "type": (a.content_type or "").split("/")[0],
+                                                         "size": a.size} for a in m.attachments]})
+    return {"thread_url": th.jump_url, "archived": bool(getattr(th, "archived", False)), "messages": out}
+
+
+async def ticket_send(bug_id: int, user_id, text: str, files=None) -> dict:
+    """A moderator writes in the ticket from the dashboard: the bot posts it in the thread, signed with their name."""
+    r, th = await _ticket_thread(bug_id)
+    g = bot.get_guild(GUILD_ID)
+    mem = g.get_member(int(user_id)) if g and user_id else None
+    who = mem.display_name if mem else "Staff"
+    text = (text or "").strip()[:1800]
+    if not text and not files:
+        raise ValueError("Write a message first.")
+    ups = [discord.File(io.BytesIO(d), filename=n) for n, d in (files or [])][:4]
+    msg = await th.send(f"**{who}** (staff): {text}" if text else f"**{who}** (staff):", files=ups,
+                        allowed_mentions=discord.AllowedMentions(users=[discord.Object(id=r["reporter_id"])] if r["reporter_id"] else []))
+    record_action("bug", r["id"], "ticket_message", int(user_id) if user_id else None, who)
+    return {"ok": True, "id": str(msg.id)}
+
+
+async def ticket_close(bug_id: int, user_id, note: str = "") -> dict:
+    """The dashboard's Close ticket button – the same as /closebug in the thread."""
+    r = get_bug(bug_id)
+    if r is None or not r["ticket_thread_id"]:
+        raise ValueError("This bug has no open ticket.")
+    g = bot.get_guild(GUILD_ID)
+    closer = (g.get_member(int(user_id)) if g and user_id else None) or types.SimpleNamespace(id=None, display_name="Dashboard")
+    return await close_info_ticket(r, closer, (note or "").strip()[:500])
+
+
 async def open_info_ticket(r, member, channel, msg, say):
     """Open a private ticket thread with the player who reported the bug (🔍 on the mod message, or the dashboard).
     channel/msg: the moderator channel and the bug's message there. say(text, seconds): tell the moderator about a problem.
@@ -1684,7 +1739,8 @@ class WosBot(discord.Client):
                          "set_bug_status": apply_bug_status, "send_reply": send_bug_reply,
                          "publish_patchnotes": publish_patchnotes,
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
-                         "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "ticket_from_dashboard": ticket_from_dashboard, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
+                         "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "ticket_from_dashboard": ticket_from_dashboard, "ticket_messages": ticket_messages,
+                         "ticket_send": ticket_send, "ticket_close": ticket_close, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
                          "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
                          "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
