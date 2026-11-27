@@ -284,6 +284,7 @@
 .w-sughead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
 .w-sughead .w-badge{margin-left:auto}
 .w-tr{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 4px}
+.w-trbtn{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px}.w-trbtn .w-select{padding-top:5px;padding-bottom:5px}
 .w-tr .w-select{width:auto;min-width:0;padding-top:5px;padding-bottom:5px;font-size:13px}
 .w-trout{margin-top:6px;border-left:3px solid var(--w-ice,#7de3f4);padding:8px 12px;border-radius:0 10px 10px 0;background:rgba(125,227,244,.07);white-space:pre-wrap;overflow-wrap:anywhere}
 .w-trout small{display:block;color:var(--w-muted);font-size:12px;margin-bottom:4px}
@@ -395,8 +396,14 @@
 .w-simsnip{font-size:13px;color:var(--w-muted);margin-top:4px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .w-simacts{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
 @media (max-width:640px){.w-simrow{grid-template-columns:44px 1fr}.w-simacts{grid-column:1/3;flex-direction:row;justify-content:flex-end}}
-.w-qbtn.w-known{filter:grayscale(1);opacity:.55}
-.w-qbtn.w-known[aria-pressed="true"]{filter:none;opacity:1;border-color:rgba(125,227,244,.6);background:rgba(125,227,244,.12)}
+.w-qbtn svg{width:16px;height:16px}
+.w-qbtn.ok{color:var(--w-ok)}.w-qbtn.bad{color:var(--w-bad)}
+.w-qbtn.w-known{color:var(--w-muted);opacity:.7}
+.w-toolbar:has(.w-more[open]),.wosd[data-theme="wos"] .w-card > .w-toolbar:has(.w-more[open]){z-index:40}
+.w-more{position:relative}.w-more>summary{list-style:none;cursor:pointer}.w-more>summary::-webkit-details-marker{display:none}
+.w-more-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:50;min-width:220px;padding:6px;border-radius:12px;border:1px solid var(--w-border-strong);background:var(--w-surface-solid,var(--w-surface));box-shadow:0 16px 40px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:2px}
+.w-more-menu button{justify-content:flex-start;width:100%;border:0;background:none;white-space:nowrap;text-align:left}.w-more-menu button:hover{background:var(--w-accent-soft)}
+.w-qbtn.w-known[aria-pressed="true"]{color:var(--w-accent);opacity:1;border-color:rgba(125,227,244,.6);background:rgba(125,227,244,.12)}
 .w-knowntag{color:#7de3f4;font-weight:600}
 .w-devtag{font-weight:600;color:var(--w-muted)}.w-devtag.need_info{color:var(--w-warn)}.w-devtag.fixed{color:var(--w-ok)}
 .w-knownbar{display:flex;gap:12px;align-items:center;margin:4px 0 14px;padding:12px 14px;border:1px solid var(--w-border);border-radius:14px;cursor:pointer;background:var(--w-surface-2)}
@@ -665,6 +672,19 @@
 .w-pallist button[aria-selected="true"] .w-ic{color:var(--w-accent)}
 .w-palfoot{display:flex;gap:16px;padding:10px 18px;border-top:1px solid var(--w-border);font-size:12px;color:var(--w-muted)}
 .w-tabbar{display:none}
+/* desktop: “Live · Refresh” sits in the sidebar, so pages start right under their tabs; phones keep it on top */
+@media (max-width:700px){
+  .w-toolbar .w-chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -4px;padding:2px 4px;-webkit-mask-image:linear-gradient(90deg,#000 88%,transparent)}
+  .w-toolbar .w-chips::-webkit-scrollbar{display:none}.w-toolbar .w-chip{flex:none}
+  .w-toolbar .w-search{flex-basis:100%;max-width:none}
+}
+.w-chanopt>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap}.w-chanopt>summary::-webkit-details-marker{display:none}
+.w-chanopt>summary::after{content:"";margin-left:auto;width:9px;height:9px;border-right:2px solid var(--w-muted);border-bottom:2px solid var(--w-muted);transform:rotate(45deg);transition:transform .15s}
+.w-chanopt[open]>summary::after{transform:rotate(-135deg)}.w-chanopt[open]>summary{margin-bottom:8px}
+.w-sidelive .w-livebar{justify-content:flex-start;margin:0;padding:0 6px}.w-sidelive .w-livebar .w-btn{margin-left:auto}
+#bugq{flex:1 1 260px;min-width:200px;max-width:none}
+@media (min-width:861px){#wosd-main>.w-livebar{display:none}}
+@media (max-width:860px){.w-sidelive{display:none}}
 .w-loginlogo{display:block;width:64px;height:64px;border-radius:18px;box-shadow:0 0 0 1px var(--w-border-strong),0 14px 34px -12px var(--w-accent)}
 .w-login .w-beam{background:conic-gradient(from var(--w-ang,0deg),transparent 0 75%,var(--w-accent) 86%,#fff 91%,transparent 96%)}
 @media (max-width:860px){
@@ -770,6 +790,10 @@ const $$ = (sel, el = root) => Array.from(el.querySelectorAll(sel));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const ICON = {
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  pin: '<path d="M12 17v5"/><path d="M9 10.76V6h6v4.76a2 2 0 0 0 1.11 1.79l1.78.9A2 2 0 0 1 19 15.24V17H5v-1.76a2 2 0 0 1 1.11-1.79l1.78-.9A2 2 0 0 0 9 10.76z"/><path d="M8 2h8"/>',
+  more: '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
+  arrowup: '<path d="M12 19V5M5 12l7-7 7 7"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   message: '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   hash: '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
@@ -1128,20 +1152,33 @@ function accessCard() {
     ${bad.length ? html`<div class="w-actions" style="margin-top:12px"><button class="w-btn primary" data-act="auditFix" ${A.can_fix ? '' : 'disabled'}>Close these channels to everyone but staff</button>
       ${A.can_fix ? '' : html`<span class="w-hint">The bot needs “Manage Roles” and “Manage Channels” to do it.</span>`}</div>` : ''}</section>`;
 }
+const REQUIRED_CH = ['report_channel_id', 'mod_channel_id', 'suggestions_channel_id', 'admin_channel_id'];
+function chanRow([k, label, desc]) {
+  return html`<div class="w-row chan">
+        <div><div class="w-row-label">${label}</div><div class="w-row-desc">${desc.replace(/^Optional[.,] ?/, '')}</div></div>
+        <div><select class="w-select" data-k="${k}" aria-label="${label}">${channelOptions(S.draft[k])}</select></div>
+        <div class="full" data-badge="${k}">${badgeFor(k)}</div></div>`;
+}
 function viewChannels() {
   return html`
     <div class="w-pagehead"><h2>Channels</h2><p>Choose where the bot reads and posts. Changes apply as soon as you save.</p></div>
     ${accessCard()}
-    <section class="w-card w-pad">
-      ${CHANNELS.map(([k, label, desc]) => html`<div class="w-row chan">
-        <div><div class="w-row-label">${label}</div><div class="w-row-desc">${desc}</div></div>
-        <div><select class="w-select" data-k="${k}" aria-label="${label}">${channelOptions(S.draft[k])}</select></div>
-        <div class="full" data-badge="${k}">${badgeFor(k)}</div></div>`)}
+    <section class="w-card w-pad"><h3 class="w-h3">Needed for bug reports</h3>
+      <p class="w-sub" style="margin-bottom:6px">The bot can't take reports without these four.</p>
+      ${CHANNELS.filter(c => REQUIRED_CH.includes(c[0])).map(chanRow)}
     </section>
-    <section class="w-card w-pad"><h3 class="w-h3">What goes to the bot log channel</h3>
-      <p class="w-sub" style="margin-bottom:12px">Pick the kinds of activity to post. “Everything” includes kinds added later.</p>
-      <div class="w-chips">${['all'].concat(Object.keys(KINDS)).map(k => html`<button class="w-chip" type="button" data-act="logKind" data-v="${k}" aria-pressed="${String(logKinds().includes(k))}">${k === 'all' ? 'Everything' : KINDS[k][0]}</button>`)}</div>
-    </section>${saveBar()}`;
+    ${(() => {
+      const opt = CHANNELS.filter(c => !REQUIRED_CH.includes(c[0])), set = opt.filter(c => S.settings[c[0]]);
+      const bad = set.filter(c => { const h = S.health.channels.find(x => x.key === c[0]); return h && (!h.found || h.missing.length); });
+      const open = bad.length || opt.some(c => S.draft[c[0]] !== S.settings[c[0]]);
+      return html`<details class="w-card w-pad w-chanopt" ${open ? 'open' : ''}><summary><h3 class="w-h3">Optional channels</h3>
+        <span class="w-hint">${set.length} of ${opt.length} in use${bad.length ? '' : ' · only set the ones you use'}</span>${bad.length ? html`<span class="w-badge warn">${bad.length} need${bad.length === 1 ? 's' : ''} a permission</span>` : ''}</summary>
+        ${opt.map(chanRow)}
+        ${S.draft.log_channel_id ? html`<div class="w-row" style="display:block"><div class="w-row-label">What goes to the bot log channel</div>
+          <div class="w-row-desc" style="margin-bottom:10px">Pick the kinds of activity to post. “Everything” includes kinds added later.</div>
+          <div class="w-chips">${['all'].concat(Object.keys(KINDS)).map(k => html`<button class="w-chip" type="button" data-act="logKind" data-v="${k}" aria-pressed="${String(logKinds().includes(k))}">${k === 'all' ? 'Everything' : KINDS[k][0]}</button>`)}</div></div>` : ''}
+        </details>`;
+    })()}${saveBar()}`;
 }
 function logKinds() { return String(S.draft.log_channel_kinds || 'all').split('\n').filter(Boolean); }
 
@@ -1523,6 +1560,8 @@ function loginCard() {
 const BUG_LABEL = { new: 'New', investigating: 'Info ticket', passed: 'With admins', being_investigated: 'Investigating',
   fixed: 'Fixed', rejected: 'Rejected', admin_rejected: 'Rejected by admins' };
 const BUG_BADGE = { new: 'todo', investigating: 'warn', passed: 'info', being_investigated: 'warn', fixed: 'ok', rejected: 'bad', admin_rejected: 'bad' };
+// the filter chips: both kinds of rejection share one chip ("closed" = rejected by mods or by admins)
+const BUG_CHIPS = [['new', 'New'], ['investigating', 'Info ticket'], ['passed', 'With admins'], ['being_investigated', 'Investigating'], ['fixed', 'Fixed'], ['closed', 'Rejected']];
 const bugBadge = s => html`<span class="w-badge ${BUG_BADGE[s] || 'todo'}">${BUG_LABEL[s] || s}</span>`;
 const ACTION_LABEL = { ticket_closed: 'Info ticket closed – no answer', ticket_saved: 'Closed the ticket – conversation saved', passed: 'Passed to admins', rejected: 'Rejected', investigating: 'Opened an info ticket', being_investigated: 'Marked as being investigated',
   fixed: 'Marked as fixed', admin_rejected: 'Rejected (admins)', replied: 'Sent a message to the reporter' };
@@ -1531,8 +1570,8 @@ const SEV = { critical: '🚨 Critical', major: '🟠 Major', minor: '🟡 Minor
 const areaList = () => String((S.settings && S.settings.bug_areas) || '').split('\n').map(x => x.trim()).filter(Boolean);
 function bugChips() {
   const B = S.bugs, total = Object.entries(B.counts).filter(e => e[0][0] !== '_').reduce((a, e) => a + e[1], 0);
-  return html`${S.user ? html`<button class="w-chip" data-act="bugMine" aria-pressed="${String(!!B.mine)}">👤 Handled by me${B.mine ? ' · ' + B.total : ''}</button>` : ''}${B.counts._dups || B.dups ? html`<button class="w-chip w-chip-dup" data-act="bugDups" aria-pressed="${String(!!B.dups)}">🔁 Possible duplicates ${B.counts._dups || 0}</button>` : ''}<button class="w-chip" data-act="bugStatus" data-s="" aria-pressed="${String(B.status === '' && !B.dups)}">All ${total}</button>
-    ${Object.keys(BUG_LABEL).map(s => html`<button class="w-chip" data-act="bugStatus" data-s="${s}" aria-pressed="${String(B.status === s)}">${BUG_LABEL[s]} ${B.counts[s] || 0}</button>`)}`;
+  return html`${S.user ? html`<button class="w-chip" data-act="bugMine" aria-pressed="${String(!!B.mine)}">Handled by me${B.mine ? ' · ' + B.total : ''}</button>` : ''}${B.counts._dups || B.dups ? html`<button class="w-chip w-chip-dup" data-act="bugDups" aria-pressed="${String(!!B.dups)}">Duplicates? ${B.counts._dups || 0}</button>` : ''}<button class="w-chip" data-act="bugStatus" data-s="" aria-pressed="${String(B.status === '' && !B.dups)}">All ${total}</button>
+    ${BUG_CHIPS.map(([s, label]) => html`<button class="w-chip" data-act="bugStatus" data-s="${s}" aria-pressed="${String(B.status === s)}">${label} ${s === 'closed' ? (B.counts.rejected || 0) + (B.counts.admin_rejected || 0) : B.counts[s] || 0}</button>`)}`;
 }
 function bugList() {
   if (S.bugs.error && !S.bugs.items.length) return html`<div class="w-error" role="alert">Couldn’t load the bugs: ${S.bugs.error}</div>`;
@@ -1547,14 +1586,14 @@ function bugList() {
 }
 const dupHint = b => b.dup_suggest && !b.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(b.status);
 // The same choices as the reaction buttons in Discord: mod channel (new bugs) and admin channel (passed bugs).
-const QUICK = {
-  mod: [['passed', '✅', 'Pass to admins'], ['rejected', '❌', 'Reject (duplicate / works as intended)']],
-  admin: [['being_investigated', '🔍', 'Being investigated'], ['fixed', '✅', 'Fixed'], ['admin_rejected', '❌', 'Reject (admins)']]
+const QUICK = {           // [status, icon, label, tone]
+  mod: [['passed', 'arrowup', 'Pass to admins', 'ok'], ['rejected', 'x', 'Reject (duplicate / works as intended)', 'bad']],
+  admin: [['being_investigated', 'search', 'Being investigated', ''], ['fixed', 'check', 'Fixed', 'ok'], ['admin_rejected', 'x', 'Reject (admins)', 'bad']]
 };
 function quickBtns(b) {
   const set = ['new', 'investigating'].includes(b.status) ? QUICK.mod : ['passed', 'being_investigated'].includes(b.status) && !isMod() ? QUICK.admin : [];
   const canKnow = !b.duplicate_of && !['rejected', 'admin_rejected'].includes(b.status);
-  return html`<span class="w-quick">${canKnow ? html`<button class="w-qbtn w-known" data-act="bugKnown" data-id="${b.id}" aria-pressed="${String(!!b.public)}" title="${b.public ? 'Known issue – tap to remove from the list' : 'Mark as known issue'}" aria-label="#${b.id}: ${b.public ? 'remove from known issues' : 'mark as known issue'}">📌</button>` : ''}${set.filter(q => q[0] !== b.status).map(q => html`<button class="w-qbtn" data-act="bugQuick" data-id="${b.id}" data-s="${q[0]}" title="${q[2]}" aria-label="#${b.id}: ${q[2]}">${q[1]}</button>`)}</span>`;
+  return html`<span class="w-quick">${canKnow ? html`<button class="w-qbtn w-known" data-act="bugKnown" data-id="${b.id}" aria-pressed="${String(!!b.public)}" title="${b.public ? 'Known issue – tap to remove from the list' : 'Mark as known issue'}" aria-label="#${b.id}: ${b.public ? 'remove from known issues' : 'mark as known issue'}">${icon('pin')}</button>` : ''}${set.filter(q => q[0] !== b.status).map(q => html`<button class="w-qbtn ${q[3]}" data-act="bugQuick" data-id="${b.id}" data-s="${q[0]}" title="${q[2]}" aria-label="#${b.id}: ${q[2]}">${icon(q[1])}</button>`)}</span>`;
 }
 function viewBugs() {
   const B = S.bugs;
@@ -1567,11 +1606,11 @@ function viewBugs() {
         <select class="w-select w-fsel" id="bugarea" aria-label="Filter by area"><option value="">All areas</option>${areaList().map(a => html`<option ${B.area === a ? 'selected' : ''}>${a}</option>`)}</select>
         <select class="w-select w-fsel" id="bugsev" aria-label="Filter by severity"><option value="">Any severity</option>${['critical', 'major', 'minor'].map(a => html`<option value="${a}" ${B.severity === a ? 'selected' : ''}>${SEV[a]}</option>`)}</select>
         <input class="w-input w-fsel" id="bugver" placeholder="Version" maxlength="30" value="${B.version}" aria-label="Filter by game version" style="max-width:110px">
-        <button class="w-btn small" data-act="bugsRefresh">${icon('refresh')} Refresh</button>
         <div class="w-spacer"></div>
-        <button class="w-btn small" data-act="export" data-what="bugs.csv">${icon('upload')} Export bugs (CSV)</button>
-        <button class="w-btn small" data-act="export" data-what="suggestions.csv">${icon('upload')} Export suggestions</button>
-        <button class="w-btn small" data-act="bugSelect" id="bugselbtn">${B.selecting ? 'Cancel selecting' : 'Select several'}</button>
+        ${B.selecting ? html`<button class="w-btn small" data-act="bugSelect" id="bugselbtn">Cancel selecting</button>` : html`<details class="w-more"><summary class="w-btn small" aria-label="More actions">${icon('more')} More</summary>
+          <div class="w-more-menu"><button class="w-btn small" data-act="bugSelect" id="bugselbtn">${icon('check')} Select several</button>
+            <button class="w-btn small" data-act="export" data-what="bugs.csv">${icon('upload')} Export bugs (CSV)</button>
+            <button class="w-btn small" data-act="export" data-what="suggestions.csv">${icon('upload')} Export suggestions (CSV)</button></div></details>`}
       </div>
       <div id="bugselbar">${selBar()}</div>
       <div id="buglist">${bugList()}</div>
@@ -1594,7 +1633,15 @@ function renderBugList() {
   const l = $('#buglist'); if (!l) return;
   l.innerHTML = String(bugList()); $('#bugchips').innerHTML = String(bugChips());
   const sb = $('#bugselbar'); if (sb) sb.innerHTML = String(selBar());
-  const btn = $('#bugselbtn'); if (btn) btn.textContent = S.bugs.selecting ? 'Cancel selecting' : 'Select several';
+  const btn = $('#bugselbtn');
+  if (btn && (btn.closest('.w-more') ? S.bugs.selecting : !S.bugs.selecting)) {     // swap the More menu ↔ Cancel button
+    const host = btn.closest('.w-more') || btn;
+    host.outerHTML = S.bugs.selecting ? '<button class="w-btn small" data-act="bugSelect" id="bugselbtn">Cancel selecting</button>'
+      : String(html`<details class="w-more"><summary class="w-btn small" aria-label="More actions">${icon('more')} More</summary>
+          <div class="w-more-menu"><button class="w-btn small" data-act="bugSelect" id="bugselbtn">${icon('check')} Select several</button>
+            <button class="w-btn small" data-act="export" data-what="bugs.csv">${icon('upload')} Export bugs (CSV)</button>
+            <button class="w-btn small" data-act="export" data-what="suggestions.csv">${icon('upload')} Export suggestions (CSV)</button></div></details>`);
+  }
   const m = $('#bugmore'); if (m) m.hidden = S.bugs.items.length >= S.bugs.total;
 }
 async function loadBugs(reset) {
@@ -1629,10 +1676,16 @@ const TR_LANGS = [['en', 'English'], ['da', 'Dansk'], ['de', 'Deutsch'], ['fr', 
   ['sv', 'Svenska'], ['no', 'Norsk'], ['pl', 'Polski'], ['pt', 'Português'], ['ro', 'Română'], ['tr', 'Türkçe'], ['ru', 'Русский'], ['uk', 'Українська'], ['ar', 'العربية']];
 function trTarget() { let t = ''; try { t = localStorage.getItem('wosd.trlang') || ''; } catch (e) { /* private mode */ } return t || 'en'; }
 function trBox(kind, id) {
-  const k = kind + ':' + id, r = (S.trans || {})[k], tg = trTarget();
-  return html`<div class="w-tr"><button class="w-btn small" data-act="trItem" data-kind="${kind}" data-id="${id}">🌐 Translate</button>
-    <label class="w-hint" style="display:inline-flex;align-items:center;gap:6px">to <select class="w-select" data-act-change="trLang" aria-label="Translate to">${TR_LANGS.map(l => html`<option value="${l[0]}" ${l[0] === tg ? 'selected' : ''}>${l[1]}</option>`)}</select></label></div>
-    ${r ? html`<div class="w-trout"><small>${r.same ? 'Already in ' + (TR_LANGS.find(l => l[0] === r.target) || ['', r.target])[1] + ' – nothing to translate.' : '🌐 Translated from ' + (r.source_name || r.source || '?')}</small>${r.same ? '' : r.text}</div>` : ''}`;
+  return html`<div class="w-tr">${trButton(kind, id)}</div>${trOut(kind, id)}`;
+}
+function trButton(kind, id) {           // the Translate button with its language – fits in an action row
+  const tg = trTarget();
+  return html`<span class="w-trbtn"><button class="w-btn small" data-act="trItem" data-kind="${kind}" data-id="${id}">${icon('globe')} Translate</button>
+    <label class="w-hint" style="display:inline-flex;align-items:center;gap:6px">to <select class="w-select" data-act-change="trLang" aria-label="Translate to">${TR_LANGS.map(l => html`<option value="${l[0]}" ${l[0] === tg ? 'selected' : ''}>${l[1]}</option>`)}</select></label></span>`;
+}
+function trOut(kind, id) {
+  const r = (S.trans || {})[kind + ':' + id];
+  return r ? html`<div class="w-trout"><small>${r.same ? 'Already in ' + (TR_LANGS.find(l => l[0] === r.target) || ['', r.target])[1] + ' – nothing to translate.' : 'Translated from ' + (r.source_name || r.source || '?')}</small>${r.same ? '' : r.text}</div>` : '';
 }
 
 // The ticket's own questions – shown small and grey so the player's answers stand out.
@@ -1649,9 +1702,9 @@ function bugActions(b) {
   if (!btns.length && !rej) return isMod() ? '' : html`<details class="w-more"><summary>Change status</summary><div class="w-inline" style="margin-top:8px">${STATUS_BTNS.filter(x => x[0] !== b.status).map(x => html`<button class="w-btn small" data-act="bugSet" data-s="${x[0]}">${x[1]}</button>`)}</div></details>`;
   const ticket = modOpen && !b.ticket_url && !b.web_ticket && b.can_ticket;
   return html`<div class="w-decide">${btns.map(x => html`<button class="w-btn ${x[2]}" data-act="bugSet" data-s="${x[0]}">${x[1]}</button>`)}
-      ${ticket ? html`<button class="w-btn" data-act="bugTicket" title="Opens a private thread with the player in Discord, like 🔍 on the bug in the moderator channel">🔍 Ask the player (ticket)</button>` : ''}
+      ${ticket ? html`<button class="w-btn" data-act="bugTicket" title="Opens a private thread with the player in Discord, like 🔍 on the bug in the moderator channel">${icon('search')} Ask the player (ticket)</button>` : ''}
       ${b.ticket_url ? html`<a class="w-btn" href="${b.ticket_url}" target="_blank" rel="noopener">🔍 Open the ticket</a>` : ''}
-      ${rej ? html`<button class="w-btn" data-act="rejToggle" aria-expanded="${String(!!S.rejOpen)}">❌ Reject…</button>` : ''}</div>
+      ${rej ? html`<button class="w-btn" data-act="rejToggle" aria-expanded="${String(!!S.rejOpen)}">${icon('x')} Reject…</button>` : ''}</div>
     ${rej && S.rejOpen ? html`<div class="w-rejbox"><label class="w-label" for="m-reason">Why? <span class="w-hint">– the player gets this in their DM</span></label>
       ${reasonBox('m-reason', BUG_REASON_KEYS, b.reason)}
       <div class="w-inline" style="margin-top:10px"><button class="w-btn danger" data-act="bugSet" data-s="${rej}">Reject #${b.id}</button><div class="w-spacer"></div>
@@ -1765,7 +1818,7 @@ function ticketChat(b) {
     ${b.ticket_url || b.web_ticket ? html`<details class="w-fold" style="margin-top:10px"><summary><b>Close the ticket</b><span class="w-hint">saves everything with the bug – same as /closebug</span></summary>
       <div class="w-field" style="margin-top:8px"><label class="w-label" for="m-closenote">Short note <span class="w-hint">(optional)</span></label>
         <input class="w-input" id="m-closenote" maxlength="500" placeholder="e.g. Happens after every server reset"></div>
-      <button class="w-btn" data-act="ticketClose">🔒 Close ticket and save</button></details>` : ''}</section>`;
+      <button class="w-btn" data-act="ticketClose">${icon('check')} Close ticket and save</button></details>` : ''}</section>`;
 }
 function chatHtml(d, sugId) {
   if (!d.messages.length) return '<div class="w-hint">No messages yet.</div>';
@@ -1894,7 +1947,7 @@ function viewCodes(sub = 'codes') {
   const on = S.settings.giftcodes_enabled, ch = chanName(S.settings.giftcodes_channel_id);
   const live = C.items.filter(x => x.state !== 'expired'), old = C.items.filter(x => x.state === 'expired');
   const head = html`<div class="w-pagehead"><h2>Gift codes</h2><p>New codes are announced in Discord and marked “New” on the website for ${S.settings.giftcodes_new_hours} h, then join the “Active gift codes” list. Expired codes disappear everywhere by themselves.</p></div>`;
-  if (sub === 'redeem') return html`${head}${redeemCard() || html`<div class="w-card w-pad w-empty">Loading…</div>`}`;
+  if (sub === 'redeem') return html`<div class="w-pagehead"><h2>Auto-redeem</h2><p>The bot redeems every new gift code for the players who linked their in-game account, and tells you how it went.</p></div>${redeemCard() || html`<div class="w-card w-pad w-empty">Loading…</div>`}`;
   const where = x => x.state === 'expired' ? 'expired ' + ago(x.expires_at) : x.where === 'announcement' ? 'own announcement until ' + full(x.created_at + S.settings.giftcodes_new_hours * 3600) : 'in the code list';
   const row = x => html`<div class="w-crow ${x.state}">
       <code class="w-code">${x.code}</code>
@@ -1902,7 +1955,7 @@ function viewCodes(sub = 'codes') {
         <div class="w-hint">${x.state === 'expired' ? '' : timeLeft(x.expires_at) + ' · '}${where(x)} · added ${ago(x.created_at)}${x.by ? ' by ' + x.by : ''}</div></div>
       <div class="w-crow-acts">${x.url ? html`<a class="w-btn small" href="${x.url}" target="_blank" rel="noopener" title="Open in Discord">Discord</a>` : ''}
         ${x.state !== 'expired' ? html`<button class="w-btn small" data-act="codeEnd" data-id="${x.id}" title="Expire it now">End</button>` : ''}
-        <button class="w-btn small danger" data-act="codeDelete" data-id="${x.id}" aria-label="Delete ${x.code}">✕</button></div></div>`;
+        <button class="w-btn small danger" data-act="codeDelete" data-id="${x.id}" aria-label="Delete ${x.code}">${icon('x')}</button></div></div>`;
   return html`${head}
     ${!on || !ch ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>${!on ? 'Gift codes are switched off' : 'No gift-codes channel chosen'}</b>
       <div class="w-sub">${!on ? 'Turn them on under Settings, so players see them on the website and with /codes.' : 'Choose one on the Channels page, otherwise new codes are not announced.'}</div></div>
@@ -2016,11 +2069,11 @@ function reportCard(r) {
     <blockquote class="w-flagged">${r.content || '(no text)'}${r.attachments.length ? html`<span class="w-hint" style="display:block">${r.attachments.length} attachment${r.attachments.length === 1 ? '' : 's'} – open in Discord to see</span>` : ''}</blockquote>
     <p class="w-hint" style="margin:6px 0">Reported by ${r.reporters.map(p => p.name + (p.reason ? ' (“' + p.reason + '”)' : '')).join(', ')}</p>
     ${caseMini(r)}
-    ${open ? html`<div class="w-decide"><button class="w-btn" data-act="repAct" data-a="delete" data-id="${r.id}">🗑️ Delete message</button>
-        <button class="w-btn danger" data-act="repAct" data-a="warn" data-id="${r.id}" ${r.on_server ? '' : 'disabled'}>⚠️ Delete + warn</button>
-        <button class="w-btn danger" data-act="repAct" data-a="timeout" data-id="${r.id}" ${r.on_server ? '' : 'disabled'}>🔇 Delete + timeout</button>
+    ${open ? html`<div class="w-decide"><button class="w-btn" data-act="repAct" data-a="delete" data-id="${r.id}">${icon('x')} Delete message</button>
+        <button class="w-btn danger" data-act="repAct" data-a="warn" data-id="${r.id}" ${r.on_server ? '' : 'disabled'}>${icon('alert')} Delete + warn</button>
+        <button class="w-btn danger" data-act="repAct" data-a="timeout" data-id="${r.id}" ${r.on_server ? '' : 'disabled'}>${icon('clock')} Delete + timeout</button>
         <select class="w-select" id="rep-min-${r.id}" aria-label="Timeout length" style="width:auto"><option value="60">1 hour</option><option value="720">12 hours</option><option value="1440">1 day</option><option value="10080">1 week</option></select>
-        <button class="w-btn" data-act="repAct" data-a="dismiss" data-id="${r.id}">✅ Nothing wrong</button></div>
+        <button class="w-btn" data-act="repAct" data-a="dismiss" data-id="${r.id}">${icon('check')} Nothing wrong</button></div>
       <input class="w-input" id="rep-why-${r.id}" maxlength="300" placeholder="Reason the member sees (optional) – default: “Reported message in #${r.channel}”" style="margin-top:8px" aria-label="Reason">`
       : html`<p class="w-sub" style="margin-top:8px"><b>${r.action}</b> – ${r.handled_by}, ${ago(r.handled_ts)}</p>`}
   </article>`;
@@ -2034,7 +2087,7 @@ function appealCard(a) {
     <blockquote class="w-flagged calm">${a.text}</blockquote>
     ${caseMini(a)}
     ${open ? (mine ? html`<input class="w-input" id="ap-note-${a.id}" maxlength="500" placeholder="Note to the player (optional)" style="margin-top:10px" aria-label="Note to the player">
-        <div class="w-decide"><button class="w-btn primary" data-act="apDecide" data-ok="1" data-id="${a.id}">✅ Accept – remove the ${a.kind}</button><button class="w-btn" data-act="apDecide" data-ok="0" data-id="${a.id}">Decline</button></div>`
+        <div class="w-decide"><button class="w-btn primary" data-act="apDecide" data-ok="1" data-id="${a.id}">${icon('check')} Accept – remove the ${a.kind}</button><button class="w-btn" data-act="apDecide" data-ok="0" data-id="${a.id}">Decline</button></div>`
         : html`<p class="w-hint" style="margin-top:8px">Only admins can decide on a ban appeal.</p>`)
       : html`<p class="w-sub" style="margin-top:8px">${a.handled_by}, ${ago(a.handled_ts)}${a.note ? ' – “' + a.note + '”' : ''}</p>`}
   </article>`;
@@ -2138,11 +2191,11 @@ function playerModal() {
 
     ${p.staff ? '' : html`<div class="w-decide" style="margin-top:14px">
       <input class="w-input" id="pa-why" maxlength="400" placeholder="Reason – the member sees it" aria-label="Reason" style="flex:1 1 100%">
-      ${p.on_server ? html`<button class="w-btn danger" data-act="playerAct" data-a="warn">⚠️ Warn</button>
-        ${p.timeout_until ? html`<button class="w-btn" data-act="playerAct" data-a="untimeout">Remove timeout</button>` : html`<button class="w-btn danger" data-act="playerAct" data-a="timeout">🔇 Timeout</button>
+      ${p.on_server ? html`<button class="w-btn danger" data-act="playerAct" data-a="warn">${icon('alert')} Warn</button>
+        ${p.timeout_until ? html`<button class="w-btn" data-act="playerAct" data-a="untimeout">Remove timeout</button>` : html`<button class="w-btn danger" data-act="playerAct" data-a="timeout">${icon('clock')} Timeout</button>
         <select class="w-select" id="pa-min" aria-label="Timeout length" style="width:auto"><option value="60">1 hour</option><option value="720">12 hours</option><option value="1440">1 day</option><option value="10080">1 week</option></select>`}` : ''}
       ${admin ? (p.banned ? html`<button class="w-btn primary" data-act="playerAct" data-a="unban">Unban</button>`
-        : html`<button class="w-btn danger" data-act="playerAct" data-a="ban">⛔ Ban</button>
+        : html`<button class="w-btn danger" data-act="playerAct" data-a="ban">${icon('shield')} Ban</button>
         <select class="w-select" id="pa-days" aria-label="Ban length" style="width:auto"><option value="1">1 day</option><option value="3">3 days</option><option value="7" selected>7 days</option><option value="30">30 days</option><option value="0">For good</option></select>`) : ''}</div>`}
 
     ${sec('Warnings and cases', p.cases.length, p.cases.length ? p.cases.map(c => html`<div class="w-caseline"><span class="w-badge ${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][0] : 'todo'}">${CASE_BADGE[c.kind] ? CASE_BADGE[c.kind][1] : c.kind}</span><span>${c.reason || '–'}${c.minutes && c.kind === 'timeout' ? ' · ' + c.minutes + ' min' : ''} <i class="w-hint">${c.auto ? 'Auto-mod' : c.moderator}</i></span><time title="${full(c.ts)}">${ago(c.ts)}</time></div>`) : html`<p class="w-hint">None.</p>`, p.cases.length > 0)}
@@ -2206,8 +2259,8 @@ function viewPartners() {
 /* ------------------------------------------------ quick posting from the overview (admins) */
 function quickBar() {
   if (isMod()) return '';
-  return html`<div class="w-quick"><button class="w-btn primary" data-act="qOpen" data-k="code">${icon('gift')} New gift code</button>
-    <button class="w-btn primary" data-act="qOpen" data-k="ann">${icon('send')} New announcement</button>
+  return html`<div class="w-quick"><button class="w-btn" data-act="qOpen" data-k="code">${icon('gift')} New gift code</button>
+    <button class="w-btn" data-act="qOpen" data-k="ann">${icon('send')} New announcement</button>
     <button class="w-btn" data-act="qOpen" data-k="ver">${icon('wrench')} Game version: <b>${S.settings.game_version || 'not set'}</b></button></div>`;
 }
 function quickModal() {
@@ -2292,7 +2345,7 @@ function viewRoleMenus() {
       <span class="w-label">Roles <span class="w-hint">– up to 25. Emoji: a normal emoji like ❄️ or a server emoji like &lt;:frost_star:123&gt;</span></span>
       <div class="w-rmrows">${E.roles.map((r, i) => html`<div class="w-rmrow"><select class="w-select rm-role" aria-label="Role">${roleOptions(r.role_id, true)}</select>
         <input class="w-input rm-label" maxlength="80" placeholder="Button text" value="${r.label}" aria-label="Button text"><input class="w-input rm-emoji" maxlength="60" placeholder="❄️" value="${r.emoji}" aria-label="Emoji">
-        <input class="w-input rm-d" maxlength="100" placeholder="Short description (optional)" value="${r.desc}" aria-label="Description"><button class="w-btn small" data-act="rmDelRow" data-i="${i}" aria-label="Remove row">✕</button></div>`)}</div>
+        <input class="w-input rm-d" maxlength="100" placeholder="Short description (optional)" value="${r.desc}" aria-label="Description"><button class="w-btn small" data-act="rmDelRow" data-i="${i}" aria-label="Remove row">${icon('x')}</button></div>`)}</div>
       <div class="w-actions"><button class="w-btn small" data-act="rmAddRow" ${E.roles.length >= 25 ? 'disabled' : ''}>+ Add a role</button><div class="w-spacer"></div>
         <button class="w-btn" data-act="rmCancel">Cancel</button><button class="w-btn primary" data-act="rmSave">${icon('send')} ${E.id ? 'Save and update in Discord' : 'Post in Discord'}</button></div>
       <p class="w-hint" style="margin-top:8px">Roles shown as “above the bot” can’t be given out – move the bot’s role higher in Server Settings → Roles.</p></section>` : '';
@@ -2371,7 +2424,7 @@ function viewTimers() {
       <button class="w-btn small" data-act="tmSend" data-id="${t.id}">Send now</button><button class="w-btn small" data-act="tmEdit" data-id="${t.id}">${t.kind === 'once' && !t.next_run ? 'Post again later' : 'Edit'}</button><button class="w-btn small danger" data-act="tmDelete" data-id="${t.id}">Delete</button></div></div>`;
   return html`
     <div class="w-pagehead"><h2>Timed messages</h2><p>Write a message now and let the bot post it at the moment you choose – “SvS starts in 1 hour” on Saturday 18:00, a maintenance notice, an event announcement. Repeating ones (every day, every few hours) work too. Times are in ${T.timezone}.</p></div>
-    ${editor || html`<div class="w-actions"><button class="w-btn primary" data-act="tmNew">📅 Schedule a message</button><button class="w-btn" data-act="tmNew" data-preset="bear">🐻 Daily “Bear Hunt in 30 min”</button></div>`}
+    ${editor || html`<div class="w-actions"><button class="w-btn primary" data-act="tmNew">${icon('clock')} Schedule a message</button><button class="w-btn" data-act="tmNew" data-preset="bear">🐻 Daily “Bear Hunt in 30 min”</button></div>`}
     <section class="w-card w-pad"><h3 class="w-h3">Coming up (${upcoming.length})</h3>${upcoming.length ? upcoming.map(item) : html`<div class="w-empty">Nothing scheduled.</div>`}</section>
     ${done.length ? html`<section class="w-card w-pad"><h3 class="w-h3">Already posted (${done.length})</h3>${done.slice(0, 20).map(item)}</section>` : ''}`;
 }
@@ -2522,15 +2575,6 @@ function viewTranslations() {
   return html`
     <div class="w-pagehead"><h2>Translations</h2><p>Every message players get from the bot – tickets, buttons, DMs, gift codes. Each player gets their own language:
       the one they pick in a ticket or with <b>/language</b>, otherwise their Discord language, otherwise the default below.</p></div>
-    ${autoCard()}
-    <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:12px">Languages</h3>
-      <div class="w-langs">${D.languages.map(l => html`<div class="w-lang ${l.code === D.default ? 'def' : ''}"><b>${l.name}</b>
-        <span class="w-hint">${l.code}${l.code === D.default ? ' · default' : ''} · ${l.players} player${l.players === 1 ? '' : 's'}${l.custom ? ' · ' + l.custom + ' edited' : ''}${l.auto ? ' · ' + l.auto + ' auto-translated' : !l.builtin && l.code !== 'en' ? ' · not translated yet' : ''}</span>
-        <div class="w-inline" style="gap:12px;margin-top:6px">${l.code !== D.default ? html`<button class="w-linkbtn" data-act="langDefault" data-l="${l.code}">Make default</button>` : ''}
-          ${l.code !== 'en' ? html`<button class="w-linkbtn" style="color:var(--w-bad)" data-act="langRemove" data-l="${l.code}">Remove</button>` : ''}</div></div>`)}</div>
-      ${addable.length ? html`<div class="w-inline" style="margin-top:14px"><select class="w-select" id="tr-add" style="max-width:220px" aria-label="Language to add">${addable.map(k => html`<option value="${k.code}">${k.name}</option>`)}</select>
-        <button class="w-btn" data-act="langAdd">Add language</button><span class="w-hint">With a Google key, new languages are translated automatically. Without one they use English until you translate them here.</span></div>` : ''}
-    </section>
     <section class="w-card w-pad">
       <div class="w-toolbar">
         <select class="w-select w-fsel" id="tr-lang" aria-label="Language to edit">${D.languages.map(l => html`<option value="${l.code}" ${l.code === D.lang ? 'selected' : ''}>${l.name}</option>`)}</select>
@@ -2547,6 +2591,16 @@ function viewTranslations() {
           ${k.placeholders.length ? html`<div class="w-hint">Keep: ${k.placeholders.map(x => html`<code>{${x}}</code> `)}</div>` : ''}</div>`; })}
         ${list.length ? '' : html`<div class="w-empty">No texts match.</div>`}</div>
     </section>
+    ${autoCard()}
+    <details class="w-card w-pad w-chanopt" ${S.trOpen && S.trOpen.langs ? 'open' : ''} data-fold="langs"><summary><h3 class="w-h3">Languages</h3>
+      <span class="w-hint">${D.languages.length} languages · default ${(D.languages.find(l => l.code === D.default) || { name: D.default }).name}</span></summary>
+      <div class="w-langs">${D.languages.map(l => html`<div class="w-lang ${l.code === D.default ? 'def' : ''}"><b>${l.name}</b>
+        <span class="w-hint">${l.code}${l.code === D.default ? ' · default' : ''} · ${l.players} player${l.players === 1 ? '' : 's'}${l.custom ? ' · ' + l.custom + ' edited' : ''}${l.auto ? ' · ' + l.auto + ' auto-translated' : !l.builtin && l.code !== 'en' ? ' · not translated yet' : ''}</span>
+        <div class="w-inline" style="gap:12px;margin-top:6px">${l.code !== D.default ? html`<button class="w-linkbtn" data-act="langDefault" data-l="${l.code}">Make default</button>` : ''}
+          ${l.code !== 'en' ? html`<button class="w-linkbtn" style="color:var(--w-bad)" data-act="langRemove" data-l="${l.code}">Remove</button>` : ''}</div></div>`)}</div>
+      ${addable.length ? html`<div class="w-inline" style="margin-top:14px"><select class="w-select" id="tr-add" style="max-width:220px" aria-label="Language to add">${addable.map(k => html`<option value="${k.code}">${k.name}</option>`)}</select>
+        <button class="w-btn" data-act="langAdd">Add language</button><span class="w-hint">With a Google key, new languages are translated automatically. Without one they use English until you translate them here.</span></div>` : ''}
+    </details>
     <div class="w-savebar" id="trbar" ${nDirty ? '' : 'hidden'} role="status"><span id="trcount">${nDirty} unsaved change${nDirty === 1 ? '' : 's'}</span>
       <button class="w-btn" data-act="trDiscard">Discard</button><button class="w-btn primary" data-act="trSave">Save translations</button></div>`;
 }
@@ -2559,7 +2613,8 @@ function autoCard() {
   const X = S.tr.x; if (!X) return '';
   const pct = X.limit ? Math.min(100, Math.round(X.usage.chars / X.limit * 100)) : 100, F = X.feed;
   const chans = S.channels.filter(c => c.id !== F.channel_id);
-  return html`<section class="w-card w-pad"><h3 class="w-h3">Automatic translation (Google)</h3>
+  return html`<details class="w-card w-pad w-chanopt" ${S.trOpen && S.trOpen.auto ? 'open' : ''} data-fold="auto"><summary><h3 class="w-h3">Automatic translation &amp; feed</h3>
+    <span class="w-hint">${X.key_set ? 'Google key saved · ' + pct + '% of this month used' : 'No Google key'} · feed ${F.on ? 'on' : 'off'}</span></summary>
     <p class="w-sub" style="margin:4px 0 12px">Used only when someone asks: a player right-clicks a message → <b>Apps → Translate</b> (only they see it, in their Discord language),
       or you press “Translate missing … texts” below. Free up to 500,000 characters a month – the limit stops it before anything costs money.</p>
     ${X.key_set ? html`
@@ -2585,7 +2640,7 @@ function autoCard() {
       <div class="w-label" style="margin:4px 0 6px">Channels to translate (${F.sources.length})</div>
       <div class="w-chanpick">${chans.map(c => html`<label><input type="checkbox" class="trx-src" value="${c.id}" ${F.sources.includes(c.id) ? 'checked' : ''}> #${c.name}${c.category ? html` <span class="w-hint">${c.category}</span>` : ''}</label>`)}</div>
       <div class="w-actions"><button class="w-btn" data-act="trFeedSave">Save feed</button></div></div>
-  </section>`;
+  </details>`;
 }
 async function setLanguages(langs, def) {
   const body = { languages: langs.join('\n') }; if (def) body.default_language = def;
@@ -2636,22 +2691,25 @@ function sugList() {
   if (!G.items.length) return html`<div class="w-empty">${G.loading ? 'Loading…' : 'No suggestions match.'}</div>`;
   return html`${G.items.map(x => html`<div class="w-sugrow${G.selecting && G.sel.includes(x.id) ? ' picked' : ''}" data-id="${x.id}">
     ${G.selecting ? html`<input type="checkbox" class="w-sugpick" data-act="sugPick" data-id="${x.id}" ${G.sel.includes(x.id) ? 'checked' : ''} aria-label="Select suggestion #${x.id}">` : ''}
-    <div class="w-sugbody"><div class="w-sughead"><b>#${x.id}</b> <span class="w-sub">${x.author}${x.source === 'web' ? ' · 🌐 website' + (x.uid ? ' · UID ' + x.uid : '') : ''} · <time title="${full(x.created_at)}">${ago(x.created_at)}</time></span>
-      <span class="w-badge ${SUG_BADGE[x.status]}">${SUG_LABEL[x.status]}</span>${x.unread ? html` <span class="w-badge warn" id="sug-unread-${x.id}" title="The player wrote on the website">💬 ${x.unread} new</span>` : ''}</div>
+    <div class="w-sugbody"><div class="w-sughead"><b>#${x.id}</b> <span class="w-sub">${x.author}${x.source === 'web' ? ' · website' + (x.uid ? ' · UID ' + x.uid : '') : ''} · <time title="${full(x.created_at)}">${ago(x.created_at)}</time></span>
+      <span class="w-badge ${SUG_BADGE[x.status]}">${SUG_LABEL[x.status]}</span>${x.unread ? html` <span class="w-badge warn" id="sug-unread-${x.id}" title="The player wrote on the website">${x.unread} new message${x.unread === 1 ? '' : 's'}</span>` : ''}</div>
       <p class="w-sugtext">${x.text}</p>
-      ${trBox('suggestions', x.id)}
-      ${x.status === 'rejected' && x.reason ? html`<div class="w-hint" style="margin:-4px 0 10px">💬 Reason sent: ${x.reason}</div>` : ''}
+      ${trOut('suggestions', x.id)}
+      ${x.status === 'rejected' && x.reason ? html`<div class="w-hint" style="margin:-4px 0 10px">Reason sent: ${x.reason}</div>` : ''}
+      ${x.status === 'accepted' && x.changes ? html`<div class="w-hint" style="margin:-4px 0 10px">${icon('wrench')} <b>What we changed:</b> ${x.changes} · posted ${ago(x.changed_at)}${x.changed_by ? ' by ' + x.changed_by : ''}${x.changes_url ? html` · <a href="${x.changes_url}" target="_blank" rel="noopener">see in Discord</a>` : ''}</div>` : ''}
       ${x.status === 'new' ? html`<div class="w-changes" id="rej-${x.id}" hidden><label class="w-label" for="rr-${x.id}">Why are you rejecting it?</label>${reasonBox('rr-' + x.id, SUG_REASON_KEYS, '')}
         <div class="w-inline" style="margin-top:8px"><span class="w-hint">${x.web_chat ? 'The player sees this reason on their idea page.' : 'The player gets this reason in their DM.'}</span><div class="w-spacer"></div><button class="w-btn small danger" data-act="sugDecide" data-id="${x.id}" data-s="rejected">Reject with this reason</button></div></div>` : ''}
-      ${x.status === 'accepted' ? html`<div class="w-changes${x.changes ? ' done' : ''}">
-        <label class="w-label" for="chg-${x.id}">🛠️ What we changed ${x.changes ? html`<span class="w-hint">· posted ${ago(x.changed_at)}${x.changed_by ? ' by ' + x.changed_by : ''}${x.changes_url ? html` · <a href="${x.changes_url}" target="_blank" rel="noopener">see in Discord</a>` : ''}</span>` : html`<span class="w-hint">– tell players what you actually changed</span>`}</label>
+      ${x.status === 'accepted' ? html`<div class="w-changes${x.changes ? ' done' : ''}" id="chgbox-${x.id}" hidden>
+        <label class="w-label" for="chg-${x.id}">What we changed ${x.changes ? html`<span class="w-hint">· posted ${ago(x.changed_at)}${x.changed_by ? ' by ' + x.changed_by : ''}${x.changes_url ? html` · <a href="${x.changes_url}" target="_blank" rel="noopener">see in Discord</a>` : ''}</span>` : html`<span class="w-hint">– tell players what you actually changed</span>`}</label>
         <textarea class="w-textarea" id="chg-${x.id}" maxlength="1000" placeholder="e.g. Bear Trap now has a 10-minute warning in alliance chat (from version 1.34).">${x.changes || ''}</textarea>
         <div class="w-inline" style="margin-top:8px"><span class="w-hint">Posted as a reply under the suggestion in Discord${x.changes ? ' (updated in place)' : x.web_chat ? ' and shown on the player’s idea page' : ' and sent to the player by DM'}.</span><div class="w-spacer"></div>
           <button class="w-btn small primary" data-act="sugChanges" data-id="${x.id}">${icon('send')} ${x.changes ? 'Update' : 'Post update'}</button></div></div>` : ''}
       <div class="w-inline">${x.status === 'new' ? html`<button class="w-btn small" data-act="sugDecide" data-id="${x.id}" data-s="accepted">${icon('check')} Accept</button>
         <button class="w-btn small" data-act="sugReject" data-id="${x.id}">Reject…</button>` : ''}
+        ${x.status === 'accepted' ? html`<button class="w-btn small${x.changes ? '' : ' primary'}" data-act="sugChgOpen" data-id="${x.id}" aria-controls="chgbox-${x.id}">${icon('wrench')} ${x.changes ? 'Edit what changed' : 'Tell players what changed…'}</button>` : ''}
+        ${trButton('suggestions', x.id)}
         ${x.mod_url ? html`<a class="w-btn small" href="${x.mod_url}" target="_blank" rel="noopener">Open in Discord</a>` : ''}
-        ${x.web_chat ? html`<button class="w-btn small" data-act="sugChat" data-id="${x.id}" aria-expanded="${String(G.chat === x.id)}">💬 ${G.chat === x.id ? 'Hide messages' : 'Messages with the player'}</button>` : ''}
+        ${x.web_chat ? html`<button class="w-btn small" data-act="sugChat" data-id="${x.id}" aria-expanded="${String(G.chat === x.id)}">${icon('message')} ${G.chat === x.id ? 'Hide messages' : 'Messages with the player'}</button>` : ''}
         <div class="w-spacer"></div><button class="w-btn small danger" data-act="sugDelete" data-id="${x.id}">Delete</button></div>
       ${G.chat === x.id ? sugChat(x) : ''}</div></div>`)}`;
 }
@@ -2707,7 +2765,7 @@ function viewSuggestions() {
       <div class="w-toolbar"><div class="w-chips" id="sugchips" role="group" aria-label="Filter by status">${sugChips()}</div></div>
       <div class="w-toolbar">
         <input class="w-input w-search" id="sugq" type="search" placeholder="Search text, player or #number…" value="${G.q}" aria-label="Search suggestions">
-        <button class="w-btn small" data-act="sugRefresh">${icon('refresh')} Refresh</button><div class="w-spacer"></div>
+        <div class="w-spacer"></div>
         <button class="w-btn small" data-act="sugSelect" id="sugselbtn">${G.selecting ? 'Cancel selecting' : 'Select to delete'}</button>
       </div>
       <div id="sugselbar">${sugSelBar()}</div>
@@ -2842,9 +2900,9 @@ function driveCard(G) {
 }
 function viewData() {
   const D = S.data;
-  if (!D) return html`<div class="w-pagehead"><h2>Data</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  if (!D) return html`<div class="w-pagehead"><h2>Data &amp; backups</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
   return html`
-    <div class="w-pagehead"><h2>Data</h2><p>The bot keeps everything in one small database file. A copy is saved every day.</p></div>
+    <div class="w-pagehead"><h2>Data &amp; backups</h2><p>The bot keeps everything in one small database file. A copy is saved every day.</p></div>
     <div class="w-tiles w-tiles4">
       <div class="w-card w-tile"><b>${fmtBytes(D.db_bytes)}</b><span>Database size</span></div>
       <div class="w-card w-tile"><b>${D.storage.files}</b><span>Kept screenshots & videos</span></div>
@@ -2901,10 +2959,10 @@ function viewPatch() {
 /* ---- moderation: ready-made replies + blocklist ---- */
 function viewMod() {
   const R = S.replies, Bk = S.blocks, WB = S.webblocks || [];
-  if (!R || !Bk) return html`<div class="w-pagehead"><h2>Moderation</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
+  if (!R || !Bk) return html`<div class="w-pagehead"><h2>Auto-mod &amp; replies</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
   const ed = R.find(r => r.id === S.replyEdit) || { title: '', text: '' };
   return html`
-    <div class="w-pagehead"><h2>Moderation</h2><p>Ready-made replies for moderators, and players who are blocked from sending reports.</p></div>
+    <div class="w-pagehead"><h2>Auto-mod &amp; replies</h2><p>Ready-made replies for moderators, and players who are blocked from sending reports.</p></div>
     <section class="w-card w-pad">
       <div class="w-sec-head"><h3 class="w-h3">Ready-made replies</h3></div>
       <p class="w-sub" style="margin-bottom:8px">Moderators use them with <b>/reply</b> in Discord, and you can send them from a bug's page. <code>{bug}</code> becomes the bug number and <code>{summary}</code> its title.</p>
@@ -3033,7 +3091,7 @@ async function loadTab(t) {
 /* ---- live data: every tab switch fetches fresh data; the open page refreshes itself in the background ---- */
 function liveBar() {
   return html`<div class="w-livebar" role="status"><span class="w-live-dot${S.syncing ? ' busy' : S.syncErr ? ' err' : ''}" aria-hidden="true"></span>
-    <span id="w-updated">${liveText()}</span><button class="w-btn small" data-act="refresh" title="Get the newest data now">${icon('refresh')} Refresh</button></div>`;
+    <span class="w-live-txt">${liveText()}</span><button class="w-btn small" data-act="refresh" title="Get the newest data now">${icon('refresh')} Refresh</button></div>`;
 }
 function liveText() {
   if (S.syncing) return 'Updating…';
@@ -3043,9 +3101,10 @@ function liveText() {
   return 'Updated ' + (s < 5 ? 'just now' : s < 60 ? s + ' s ago' : Math.round(s / 60) + ' min ago');
 }
 function setLive() {
-  const bar = $('.w-livebar'); if (!bar) return;
-  bar.querySelector('#w-updated').textContent = liveText();
-  bar.querySelector('.w-live-dot').className = 'w-live-dot' + (S.syncing ? ' busy' : S.syncErr ? ' err' : '');
+  document.querySelectorAll('.w-livebar').forEach(bar => {
+    bar.querySelector('.w-live-txt').textContent = liveText();
+    bar.querySelector('.w-live-dot').className = 'w-live-dot' + (S.syncing ? ' busy' : S.syncErr ? ' err' : '');
+  });
 }
 function paint(t) {
   const m = $('#wosd-main'); if (!m) return;
@@ -3182,6 +3241,7 @@ function renderApp() {
         </div>
         <div class="w-status"><span class="w-pill"><i class="w-dot"></i>Online${b.latency_ms != null ? ' · ' + b.latency_ms + ' ms' : ''}</span>
           ${S.demo ? html`<span class="w-pill w-demo">Demo – nothing saved</span>` : ''}</div>
+        <div class="w-sidelive">${liveBar()}</div>
         ${S.user ? html`<div class="w-me">${S.user.avatar ? html`<img src="${S.user.avatar}" alt="">` : ''}<div><b>${S.user.name}</b><span class="w-hint">${S.user.role === 'admin' ? 'Admin' : 'Moderator'} · logged in with Discord</span></div></div>` : ''}
         <button class="w-search-btn" data-act="palette" aria-keyshortcuts="Control+K Meta+K">${icon('search')}<span>Search</span><kbd>Ctrl K</kbd></button>
         <nav class="w-nav" role="tablist" aria-label="Sections">
@@ -3800,6 +3860,9 @@ root.addEventListener('click', async e => {
     }
     else if (act === 'bugDetails') changeBug({ area: $('#m-area').value, severity: $('#m-sev').value, game_version: $('#m-ver').value, fixed_version: $('#m-fix').value }, 'Details saved.', el);
     else if (act === 'areaGo') { S.bugs.area = el.dataset.v === '(none)' ? '' : el.dataset.v; S.tab = 'bugs'; renderTab(); }
+    else if (act === 'sugChgOpen') {
+      const box = $('#chgbox-' + el.dataset.id); if (box) { box.hidden = !box.hidden; el.setAttribute('aria-expanded', String(!box.hidden)); if (!box.hidden) { const t = box.querySelector('textarea'); if (t) t.focus(); } }
+    }
     else if (act === 'sugChat') {
       const id = +el.dataset.id; S.sugs.chat = S.sugs.chat === id ? null : id; renderSugList();
     }
@@ -4082,6 +4145,8 @@ function onInput(e) {
 }
 root.addEventListener('input', onInput);
 root.addEventListener('change', onInput);
+document.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.fold) { S.trOpen = S.trOpen || {}; S.trOpen[d.dataset.fold] = d.open; } }, true);
+document.addEventListener('click', e => { document.querySelectorAll('details.w-more[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.w-more-menu button')) d.open = false; }); });
 
 /* ============================================================ demo mode */
 function makeMock() {
@@ -4241,7 +4306,7 @@ function makeMock() {
     if (p === '/api/bugs' && method === 'GET') {
       const off = parseInt(q.get('offset') || '0', 10), lim = parseInt(q.get('limit') || '25', 10), s = q.get('status'), t = (q.get('q') || '').toLowerCase().replace(/^#/, '');
       const isDup = b => b.dup_suggest && !b.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(b.status);
-      const f = bugs.filter(b => (!q.get('dups') || isDup(b)) && (!s || b.status === s) && (!q.get('area') || b.area === q.get('area')) && (!q.get('severity') || b.severity === q.get('severity')) && (!q.get('version') || b.version.includes(q.get('version'))) && (!t || String(b.id) === t || (b.summary + ' ' + b.reporter + ' ' + b.text).toLowerCase().includes(t)));
+      const f = bugs.filter(b => (!q.get('dups') || isDup(b)) && (!s || b.status === s || (s === 'closed' && b.status.endsWith('rejected'))) && (!q.get('area') || b.area === q.get('area')) && (!q.get('severity') || b.severity === q.get('severity')) && (!q.get('version') || b.version.includes(q.get('version'))) && (!t || String(b.id) === t || (b.summary + ' ' + b.reporter + ' ' + b.text).toLowerCase().includes(t)));
       const counts = { _dups: bugs.filter(isDup).length }; bugs.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
       return { items: f.slice(off, off + lim).map(b => Object.assign(briefBug(b), { dup_suggest: b.dup_suggest, dup_score: b.dup_score, dup_title: b.dup_title, duplicate_of: b.duplicate_of })), total: f.length, counts };
     }

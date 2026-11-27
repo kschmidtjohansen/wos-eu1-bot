@@ -470,7 +470,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     async def list_bugs(request):
         q = request.query
         status = q.get("status") or None
-        if status and status not in store.BUG_STATUSES:
+        if status and status not in store.BUG_STATUSES and status != "closed":
             raise ApiError(400, "Unknown status.")
         try:
             limit = max(1, min(int(q.get("limit", 25)), 100))

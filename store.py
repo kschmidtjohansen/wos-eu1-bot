@@ -829,7 +829,9 @@ def query_bugs(status=None, q=None, limit=50, offset=0, area=None, version=None,
         if val:
             where.append(f'{col}=?')
             args.append(val)
-    if status:
+    if status == "closed":                               # both kinds of rejection
+        where.append("status IN ('rejected','admin_rejected')")
+    elif status:
         where.append("status=?")
         args.append(status)
     if q:
