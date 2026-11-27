@@ -143,6 +143,13 @@ is to proxy `/api` through your server and add the key there – tell me if you 
   channel exactly as it was. Also on *Reports & appeals → Raid mode*, and optionally automatic with raid mode.
 - **Ready-made replies in chats:** the replies from Moderation → ⚙ can be inserted in ticket and website chats.
 
+## New staff dashboard (being built) – `/staff/v2/`
+`dashboard-v2.html` is the new dashboard, built around the daily work: **To do** (everything waiting for a
+person, with its buttons), **Bugs**, **Ideas**, **Community** and **More**. It uses the same login and API as
+the current dashboard and is installed next to it at `/staff/v2/` by the update script. Community and More
+still open the matching page of the current dashboard until those parts are rebuilt. Try it with
+`dashboard-v2.html?demo` (or `?demo=mod` for the moderator view).
+
 ## The website (`site/`)
 A small multi-page site with a shared menu (Home · Report a bug · Known issues · What's fixed), a mobile menu and an
 English/Polish switch: `index.html`, `report.html`, `known-issues.html`, `changelog.html` (+ `style.css`, `app.js`,
