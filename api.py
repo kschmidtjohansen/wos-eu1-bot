@@ -1948,18 +1948,19 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                                      "('new','investigating','passed','being_investigated') ORDER BY created_at").fetchall()
         for r in open_bugs:
             title = r["summary"] or r["ai_title"] or (r["text"] or "")[:80]
+            preview = store.clean_report(r["text"] or "")          # the player's words without the form's questions
             ref = {"status": r["status"], "severity": r["severity"] or "", "area": r["area"] or "", "source": r["source"] or "discord"}
             crit = (r["severity"] or "") == "critical"
             if r["dup_suggest"] and r["status"] in ("new", "investigating"):
                 d = store.get_bug(r["dup_suggest"])
-                add("bug_dup", r["id"], r["created_at"], title, r["text"], r["reporter_name"], False, dup_suggest=r["dup_suggest"],
+                add("bug_dup", r["id"], r["created_at"], title, preview, r["reporter_name"], False, dup_suggest=r["dup_suggest"],
                     dup_title=(d["summary"] if d is not None else "") or "", dup_score=r["dup_score"] or 0, **ref)
             elif r["status"] == "new":
-                add("bug_new", r["id"], r["created_at"], title, r["text"], r["reporter_name"], crit, **ref)
+                add("bug_new", r["id"], r["created_at"], title, preview, r["reporter_name"], crit, **ref)
             elif r["status"] == "investigating":
-                add("bug_info", r["id"], r["created_at"], title, r["text"], r["reporter_name"], False, **ref)
+                add("bug_info", r["id"], r["created_at"], title, preview, r["reporter_name"], False, **ref)
             elif admin:
-                add("bug_admin", r["id"], r["created_at"], title, r["text"], r["reporter_name"], crit, **ref)
+                add("bug_admin", r["id"], r["created_at"], title, preview, r["reporter_name"], crit, **ref)
             if admin and r["dev_reply_ts"] and (r["dev_reply_ts"] or 0) > (r["dev_ts"] or 0):
                 add("dev_reply", r["id"], r["dev_reply_ts"], title, r["dev_reply"], r["reporter_name"], False, **ref)
         unread = store.web_unread()

@@ -62,6 +62,7 @@ refresh_web() {
   [[ -n "$keep" ]] && printf '%s\n' "$keep" > $WWW/bugs/config.js
   [[ -d $SRC/staff ]] && cp -r $SRC/staff/. $WWW/staff/      # staff app icons + manifest
   sed 's|apiBase: "",|apiBase: "same-origin",|' $SRC/dashboard.html > $WWW/staff/index.html
+  mkdir -p $WWW/staff/v2 && sed 's|apiBase: "",|apiBase: "same-origin",|' $SRC/dashboard-v2.html > $WWW/staff/v2/index.html      # new dashboard (being built), next to the current one
   chmod -R a+rX $WWW
 }
 deploy() {   # deploy <commit> [changes text]

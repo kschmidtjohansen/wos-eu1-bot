@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c121b" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png"><link rel="icon" href="../icons/icon-192.png">
+<title>WOS EU1 – Staff</title>
+<style>
+/* =====================================================================================================
+   WOS EU1 staff dashboard v2 – built around the daily work (see docs/superpowers/specs/…-staff-dashboard-v2-design.md)
+   Look: “snowfield” (light) and “polar night” (dark), following the device. One ember accent for the single main
+   action on a screen, ice blue for links and focus. Status always has a word or an icon, never colour alone.
+   ===================================================================================================== */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --surface-2:#eef1f5; --text:#111827; --muted:#5b6474; --line:#dfe3ea; --line-2:#cbd2dc;
+  --accent:#e8590c; --accent-ink:#ffffff; --accent-soft:#fdeee5; --ice:#0e7490; --ice-soft:#e2f3f7;
+  --ok:#15803d; --ok-soft:#e6f4ea; --warn:#a16207; --warn-soft:#fbf2dc; --bad:#c2261d; --bad-soft:#fbe9e7;
+  --shadow:0 1px 2px rgba(17,24,39,.06),0 8px 24px -12px rgba(17,24,39,.18);
+  --r-sm:8px; --r:10px; --r-lg:14px;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --rail:84px; --pane:min(520px,42vw);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0c121b; --surface:#121a26; --surface-2:#182231; --text:#e6ebf2; --muted:#93a0b4; --line:#223042; --line-2:#2e3e54;
+  --accent:#ff7a2f; --accent-ink:#1a0b02; --accent-soft:#3a2014; --ice:#67d4e8; --ice-soft:#123341;
+  --ok:#4fd08a; --ok-soft:#123222; --warn:#f2c35b; --warn-soft:#3a2f12; --bad:#ff8577; --bad-soft:#3e1b1a;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -16px rgba(0,0,0,.7);
+}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 var(--font);-webkit-text-size-adjust:100%}
+body{min-height:100dvh}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--ice)}
+[hidden]{display:none !important}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+.ic{width:18px;height:18px;flex:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- buttons and fields ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:6px 13px;border-radius:var(--r);border:1px solid var(--line-2);
+  background:var(--surface);color:var(--text);font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s}
+.btn:hover{background:var(--surface-2)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.main{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.main:hover{filter:brightness(1.06)}
+.btn.ok{color:var(--ok)}.btn.bad{color:var(--bad)}
+.btn.go{color:var(--ice);border-color:color-mix(in srgb,var(--ice) 45%,var(--line-2))}
+.btn.go:hover{background:var(--ice-soft)}
+.btn.ghost{border-color:transparent;background:none}
+.btn.ghost:hover{background:var(--surface-2)}
+.btn.icon{padding:0;width:36px}
+.btn.sm{min-height:30px;padding:3px 10px;font-size:13px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label,.lbl{font-size:13px;font-weight:600;color:var(--muted)}
+.in{width:100%;min-height:38px;padding:7px 11px;border-radius:var(--r);border:1px solid var(--line-2);background:var(--surface);color:var(--text)}
+textarea.in{min-height:84px;resize:vertical;line-height:1.45}
+.in:focus{outline:2px solid var(--ice);outline-offset:0;border-color:transparent}
+.check{display:flex;align-items:center;gap:8px;font-size:14px}
+.hint{font-size:13px;color:var(--muted)}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.grow{flex:1}
+
+/* ---------- status words ---------- */
+.tag{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:650;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.bad{background:var(--bad-soft);color:var(--bad)}.tag.ice{background:var(--ice-soft);color:var(--ice)}
+.tag.hot{background:var(--accent-soft);color:var(--accent)}
+
+/* ---------- app frame: rail · page (list + pane) ---------- */
+.app{display:grid;grid-template-columns:var(--rail) minmax(0,1fr);min-height:100dvh}
+.rail{position:sticky;top:0;height:100dvh;display:flex;flex-direction:column;align-items:stretch;gap:2px;padding:14px 8px;border-right:1px solid var(--line);background:var(--surface)}
+.rail .logo{width:40px;height:40px;border-radius:12px;margin:0 auto 14px;display:block;object-fit:cover;background:var(--surface-2)}
+.rail a{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 2px;border-radius:var(--r);color:var(--muted);text-decoration:none;font-size:11.5px;font-weight:650}
+.rail a .ic{width:21px;height:21px}
+.rail a:hover{background:var(--surface-2);color:var(--text)}
+.rail a[aria-current="page"]{background:var(--ice-soft);color:var(--text)}
+.rail a[aria-current="page"] .ic{color:var(--ice)}
+.badge{position:absolute;top:3px;right:12px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:750;line-height:18px;text-align:center}
+.rail .foot{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:8px}
+.me{width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--surface-2)}
+
+.page{min-width:0;display:flex;flex-direction:column}
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:12px 24px;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.top h1{margin:0;font-size:19px;font-weight:750;letter-spacing:-.01em}
+.top .count{color:var(--muted);font-weight:600;font-size:15px}
+.search{display:flex;align-items:center;gap:8px;min-width:220px;min-height:36px;padding:0 12px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.search kbd{margin-left:auto;font:600 11px var(--font);padding:1px 6px;border:1px solid var(--line-2);border-radius:5px}
+.body{display:grid;grid-template-columns:minmax(0,1fr);min-height:0}
+.body.split{grid-template-columns:minmax(0,1fr) var(--pane)}
+.content{min-width:0;padding:18px 24px 48px}
+.pane{position:sticky;top:61px;height:calc(100dvh - 61px);overflow:auto;border-left:1px solid var(--line);background:var(--surface)}
+
+/* ---------- lists ---------- */
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.chip{min-height:32px;padding:4px 12px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:var(--bg)}
+.chip .num{opacity:.7;margin-left:4px}
+.group{margin:0 0 22px}
+.group>h2{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:13px;font-weight:700;color:var(--muted)}
+.list{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.item{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;align-items:start;padding:13px 16px 13px 20px;border-top:1px solid var(--line);cursor:pointer}
+.item:first-child{border-top:0}
+.item:hover{background:var(--surface-2)}
+.item[aria-selected="true"]{background:var(--ice-soft)}
+.item::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:4px;border-radius:0 4px 4px 0;background:var(--heat,transparent)}
+.item.urgent{--heat:var(--accent)}.item.warm{--heat:color-mix(in srgb,var(--accent) 45%,transparent)}
+.item .what{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);font-weight:600}
+.item .title{margin:2px 0 0;font-weight:650;font-size:15px;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.split .item{grid-template-columns:minmax(0,1fr)}.split .item .acts{justify-content:flex-start}
+.item .text{margin:3px 0 0;color:var(--muted);font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.item .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+.item time{font-size:12.5px;color:var(--muted);white-space:nowrap}
+.reason{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px}
+.reason .in{flex:1;min-width:200px}
+.done{opacity:.75}
+.done .item{cursor:default}
+.empty{padding:48px 20px;text-align:center;color:var(--muted)}
+.empty b{display:block;color:var(--text);font-size:17px;margin-bottom:4px}
+.more{display:flex;justify-content:center;padding:14px}
+details.fold>summary{list-style:none;cursor:pointer}
+details.fold>summary::-webkit-details-marker{display:none}
+
+/* ---------- pane ---------- */
+.pane-head{position:sticky;top:0;z-index:2;display:flex;align-items:flex-start;gap:10px;padding:16px 20px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
+.pane-head h2{margin:0;font-size:17px;line-height:1.35;overflow-wrap:anywhere}
+.pane-body{padding:16px 20px 32px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px;color:var(--muted);margin:6px 0 0}
+.sec{margin:0 0 20px}
+.sec>h3{margin:0 0 8px;font-size:13px;font-weight:700;color:var(--muted)}
+.report{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-2);border-radius:var(--r);padding:12px 14px;font-size:14.5px}
+.report .q{display:block;color:var(--muted);font-size:12.5px;margin-top:8px}.report .q:first-child{margin-top:0}
+.actbar{display:flex;flex-wrap:wrap;gap:8px}
+.files{display:flex;flex-wrap:wrap;gap:8px}
+.file{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);font-size:13px;cursor:pointer}
+.chat{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;padding:4px 2px}
+.msg{max-width:88%;padding:8px 12px;border-radius:12px;background:var(--surface-2);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.staff{align-self:flex-end;background:var(--ice-soft)}
+.msg.sys{align-self:center;background:none;color:var(--muted);font-size:12.5px;text-align:center}
+.msg .who{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:2px}
+.composer{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.sim{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
+.sim:first-child{border-top:0}
+.score{flex:none;width:44px;text-align:center;font-weight:750;color:var(--warn)}
+.hist{font-size:13px;color:var(--muted);display:grid;gap:3px}
+.tr{margin-top:8px;padding:10px 12px;border-left:3px solid var(--ice);background:var(--ice-soft);border-radius:0 var(--r) var(--r) 0;font-size:14px;white-space:pre-wrap}
+.blank{display:grid;place-items:center;height:100%;padding:24px;text-align:center;color:var(--muted)}
+
+/* ---------- cards (Community / More) ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.card{display:flex;gap:12px;align-items:flex-start;padding:16px;border-radius:var(--r-lg);border:1px solid var(--line);background:var(--surface);color:var(--text);text-decoration:none}
+.card:hover{border-color:var(--line-2);background:var(--surface-2)}
+.card .ic{width:22px;height:22px;color:var(--ice);margin-top:2px}
+.card b{display:block;font-size:15px}.card span{font-size:13px;color:var(--muted)}
+.section-title{font-size:13px;font-weight:700;color:var(--muted);margin:22px 0 10px}
+.section-title:first-child{margin-top:0}
+.note{padding:12px 14px;border-radius:var(--r);background:var(--surface-2);font-size:13.5px;color:var(--muted);margin-bottom:16px}
+
+/* ---------- sheets, toasts, search ---------- */
+.scrim{position:fixed;inset:0;z-index:100;background:rgba(8,12,20,.42);display:grid;place-items:center;padding:16px}
+.sheet{width:100%;max-width:520px;max-height:calc(100dvh - 32px);overflow:auto;border-radius:var(--r-lg);background:var(--surface);box-shadow:var(--shadow);padding:18px 20px 20px}
+.sheet h2{margin:0 0 12px;font-size:17px}
+.seg{display:flex;gap:4px;padding:3px;border-radius:var(--r);background:var(--surface-2);margin-bottom:14px}
+.seg button{flex:1;min-height:34px;border:0;border-radius:8px;background:none;font-weight:650;font-size:13.5px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.toasts{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:200;display:grid;gap:8px;width:min(440px,calc(100vw - 24px))}
+.toast{padding:11px 14px;border-radius:var(--r);background:var(--text);color:var(--bg);font-size:14px;box-shadow:var(--shadow)}
+.toast.err{background:var(--bad);color:#fff}
+.palette{position:fixed;inset:0;z-index:150;background:rgba(8,12,20,.42);display:flex;justify-content:center;align-items:flex-start;padding:12vh 16px 16px}
+.palette .box{width:min(560px,100%);border-radius:var(--r-lg);background:var(--surface);box-shadow:var(--shadow);overflow:hidden}
+.palette input{width:100%;border:0;border-bottom:1px solid var(--line);padding:16px 18px;background:none;font-size:16px;outline:none}
+.palette ul{list-style:none;margin:0;padding:6px;max-height:50vh;overflow:auto}
+.palette li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);cursor:pointer}
+.palette li[aria-selected="true"]{background:var(--ice-soft)}
+.palette li small{margin-left:auto;color:var(--muted)}
+.login{min-height:100dvh;display:grid;place-items:center;padding:24px}
+.login .box{width:min(380px,100%);text-align:center}
+.login img{width:64px;height:64px;border-radius:18px}
+
+/* ---------- phones ---------- */
+@media (max-width:860px){
+  :root{--rail:0px}
+  .app{grid-template-columns:minmax(0,1fr)}
+  .rail{position:sticky;top:0;z-index:30;height:auto;flex-direction:row;justify-content:space-around;gap:0;padding:6px 4px;border-right:0;border-bottom:1px solid var(--line)}
+  .rail .logo,.rail .foot{display:none}
+  .rail a{flex:1;padding:6px 0;min-height:48px}
+  .badge{right:calc(50% - 22px)}
+  .app.inapp .rail{position:fixed;top:auto;bottom:0;left:0;right:0;border-bottom:0;border-top:1px solid var(--line);padding-bottom:calc(6px + env(safe-area-inset-bottom))}
+  .app.inapp .page{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+  .app.inapp .toasts{bottom:calc(84px + env(safe-area-inset-bottom))}
+  .top{top:0;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top))}
+  .app:not(.inapp) .top{top:61px}
+  .search{min-width:0;width:40px;padding:0;justify-content:center}.search span,.search kbd{display:none}
+  .content{padding:14px 12px 40px}
+  .body.split{grid-template-columns:minmax(0,1fr)}
+  .pane{position:fixed;inset:0;z-index:60;height:100dvh;border-left:0;padding-bottom:env(safe-area-inset-bottom)}
+  .pane-head{padding-top:calc(14px + env(safe-area-inset-top))}
+  .item{grid-template-columns:minmax(0,1fr);padding:13px 14px 13px 18px}
+  .item .acts{justify-content:flex-start}
+  .chips{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;margin-left:-12px;margin-right:-12px;padding:0 12px}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;min-height:38px}
+  .btn{min-height:42px}.btn.sm{min-height:38px}.btn.icon{width:42px}
+  .in,select.in,textarea.in{font-size:16px;min-height:44px}
+  .scrim{align-items:end;padding:0}
+  .sheet{max-width:none;border-radius:var(--r-lg) var(--r-lg) 0 0;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(() => {
+'use strict';
+/* ============================================================ setup */
+const CFG = window.WOS_DASHBOARD_CONFIG = window.WOS_DASHBOARD_CONFIG || {
+  apiBase: "",            // "same-origin" when /api is on this site (the deploy script sets it), or the bot's address
+  classic: "../"          // the current dashboard (Community and More link there during phase 1)
+};
+const Q = new URLSearchParams(location.search);
+const root = document.getElementById('app');
+const S = {
+  base: CFG.apiBase === 'same-origin' ? location.origin : (CFG.apiBase || location.origin),
+  demo: Q.has('demo'), user: null, overview: null, settings: null,
+  place: 'todo', todo: null, todoFilter: 'all', done: [], open: null, sel: null,
+  bugs: { items: [], total: 0, counts: {}, status: '', q: '', offset: 0, loading: false },
+  ideas: { items: [], total: 0, counts: {}, status: 'new', q: '', loading: false },
+  replies: null, channels: null, trLang: (() => { try { return localStorage.getItem('wos2.tr') || 'en'; } catch (e) { return 'en'; } })()
+};
+const inApp = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone || Q.has('app');
+
+/* ============================================================ tiny helpers */
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+class Raw { constructor(v) { this.v = v; } toString() { return this.v; } }
+const raw = v => new Raw(v);
+const part = v => v instanceof Raw ? v.v : Array.isArray(v) ? v.map(part).join('') : (v == null || v === false) ? '' : esc(v);
+const html = (s, ...vals) => { let o = s[0]; vals.forEach((v, i) => { o += part(v) + s[i + 1]; }); return new Raw(o); };
+const $ = (sel, el = document) => el.querySelector(sel);
+const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
+const ICON = {
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  pin: '<path d="M12 17v5"/><path d="M9 10.76V6h6v4.76a2 2 0 0 0 1.11 1.79l1.78.9A2 2 0 0 1 19 15.24V17H5v-1.76a2 2 0 0 1 1.11-1.79l1.78-.9A2 2 0 0 0 9 10.76z"/><path d="M8 2h8"/>',
+  more: '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
+  arrowup: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  message: '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  hash: '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
+  sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  bot: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 5v3M9 14h.01M15 14h.01"/><circle cx="12" cy="3.6" r="1.1"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  circle: '<circle cx="12" cy="12" r="8"/>',
+  refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/>',
+  upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+  play: '<polygon points="6 4 20 12 6 20 6 4"/>',
+  db: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+  userplus: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4zM22 2 11 13"/>',
+  bug: '<rect x="8" y="7" width="8" height="12" rx="4"/><path d="M12 7V4M8 11H4M16 11h4M8 16H5M16 16h3M9 4l1.5 1.5M15 4l-1.5 1.5"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M7 15v3M12 9v9M17 12v6"/>',
+  wrench: '<path d="M14.7 6.3a4 4 0 0 0-5 5L3 18l3 3 6.7-6.7a4 4 0 0 0 5-5l-2.4 2.4-2.6-.6-.6-2.6z"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6z"/>',
+  pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  party: '<path d="M4 20 9 6l9 9z"/><path d="M14 4v2M19 9h2M17 3l-1 2M20 6l-2 1"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',
+  gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
+};
+Object.assign(ICON, {
+  todo: '<path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', back: '<path d="M15 18l-6-6 6-6"/>', ext: '<path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>',
+  bulb: '<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>', paperclip: '<path d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'
+});
+const icon = n => raw(`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n] || ICON.circle || ''}</svg>`);
+const now = () => Math.floor(Date.now() / 1000);
+function ago(ts) {
+  const s = Math.max(0, now() - ts);
+  if (s < 45) return 'just now'; if (s < 3600) return Math.round(s / 60) + ' min ago';
+  if (s < 86400) return Math.round(s / 3600) + ' h ago'; if (s < 86400 * 14) return Math.round(s / 86400) + ' d ago';
+  return new Date(ts * 1000).toLocaleDateString();
+}
+const fullTime = ts => new Date(ts * 1000).toLocaleString();
+const isMod = () => !!(S.user && S.user.role === 'mod');
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
+function toast(text, kind) {
+  let box = $('.toasts');
+  if (!box) { box = document.createElement('div'); box.className = 'toasts'; box.setAttribute('aria-live', 'polite'); root.appendChild(box); }
+  const t = document.createElement('div'); t.className = 'toast ' + (kind || ''); t.textContent = text; box.appendChild(t);
+  setTimeout(() => t.remove(), kind === 'err' ? 7000 : 3800);
+}
+function busy(el, on, label) {
+  if (!el) return;
+  if (on) { el.dataset.label = el.innerHTML; el.disabled = true; if (label) el.textContent = label; }
+  else { el.disabled = false; if (el.dataset.label) el.innerHTML = el.dataset.label; }
+}
+
+/* ============================================================ talking to the bot */
+async function call(method, path, body) {
+  if (S.demo) return demoApi(method, path, body);
+  let res;
+  try {
+    res = await fetch(S.base.replace(/\/+$/, '') + path, {
+      method, credentials: 'same-origin',
+      headers: Object.assign({ 'X-Requested-With': 'wos' }, body && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
+      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined
+    });
+  } catch (e) { const err = new Error("Can't reach the bot right now. Check the Status page or try again."); err.network = true; throw err; }
+  let data = null; try { data = await res.json(); } catch (e) { /* empty */ }
+  if (!res.ok) {
+    const err = new Error((data && data.error) || 'Request failed (' + res.status + ')'); err.status = res.status;
+    if (res.status === 401 && S.user) { S.user = null; renderLogin(err.message); }
+    throw err;
+  }
+  return data;
+}
+async function fileUrl(kind, id, fid) {            // pictures need the login cookie, so they are fetched, not linked
+  if (S.demo) return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="#cbd2dc"/><text x="50%" y="50%" text-anchor="middle" font-family="sans-serif" fill="#5b6474">screenshot</text></svg>');
+  const r = await fetch(S.base.replace(/\/+$/, '') + `/api/${kind}/${id}/files/${fid}`, { credentials: 'same-origin' });
+  if (!r.ok) throw new Error('That file is no longer on the bot’s computer.');
+  return URL.createObjectURL(await r.blob());
+}
+/* ============================================================ demo mode (?demo, ?demo=mod) – a small fake bot */
+const DEMO = (() => {
+  const t = now(), H = 3600;
+  const bug = (id, summary, status, ago_s, x = {}) => Object.assign({ id, summary, status, created_at: t - ago_s, reporter: x.reporter || 'Mira', reporter_id: '11',
+    area: x.area || 'City', version: 'V5 · 1.33.9', severity: x.severity || '', source: x.source || 'discord', public: false, unread: 0, duplicates: [], votes: 0, reason: '',
+    dup_suggest: null, dup_score: null, duplicate_of: null, dev: { state: '', note: '', version: '', ts: null },
+    text: x.text || 'What is the bug?\n' + summary + '\nDo you know why it is happening?\nIt started after the last update.\nWhat is the correct way the feature should work?\nIt should work like before.',
+    chief_name: x.chief || 'Chief ' + (x.reporter || 'Mira'), uid: '123450000', files: x.files || [], web_chat: x.source === 'web', web_ticket: false, ticket_url: '',
+    can_ticket: true, history: [{ ts: t - ago_s, action: 'submitted', actor: x.reporter || 'Mira' }], mod_url: '#', admin_url: '' }, x.extra || {});
+  const bugs = [
+    bug(64, 'Horse sinks when mounted near water', 'new', 900, { area: 'City', files: [{ id: 1, name: 'horse.png', size: 120000, kind: 'image' }] }),
+    bug(63, 'Server crashes when opening the alliance shop', 'new', 2400, { severity: 'critical', area: 'Alliance', reporter: 'Jonas' }),
+    bug(62, 'Guild bank deposit loses items', 'new', 5400, { area: 'Alliance', reporter: 'Anders', extra: { dup_suggest: 60, dup_score: 81, dup_title: 'Guild bank deposit loses items (older)' } }),
+    bug(61, 'Pet stays at 0% when hatching', 'investigating', 4 * H, { area: 'Pets', reporter: 'Ida', source: 'web' }),
+    bug(60, 'Guild bank deposit loses items (older)', 'passed', 26 * H, { area: 'Alliance', reporter: 'Sofie', severity: 'major' }),
+    bug(59, 'Fishing rod breaks after one cast', 'being_investigated', 30 * H, { area: 'Events', reporter: 'Lars' }),
+    bug(58, 'Chat freezes after teleporting', 'fixed', 50 * H, { area: 'Chat' }),
+    bug(57, 'Wrong price for iron ingots', 'rejected', 70 * H, { area: 'Shop', extra: { reason: 'Works as intended' } }),
+    bug(56, 'هذا تقرير طويل جدًا عن مشكلة في المتجر '.repeat(40).trim(), 'new', 8 * H, { area: 'Shop', reporter: 'Omar', text: 'هذا تقرير طويل جدًا عن مشكلة في المتجر '.repeat(45) })
+  ];
+  const chats = { 61: [{ id: '1', ts: t - 4 * H, kind: 'system', author: 'WOS EU1', text: '👋 Standard welcome message sent to the player', files: [] },
+    { id: '2', ts: t - 3 * H, kind: 'staff', author: 'Freya', text: 'Which pet was it? A screenshot helps.', files: [] },
+    { id: '3', ts: t - 600, kind: 'player', author: 'Ida', text: 'The dragon pet. It stays at 0% even after a restart.', files: [] }] };
+  bugs.find(b => b.id === 61).unread = 1;
+  const ideas = [
+    { id: 23, text: 'Bear Trap warning in alliance chat 10 minutes before it starts', status: 'new', created_at: t - 3 * H, author: 'Jonas', source: 'web', uid: '48213377', web_chat: true, unread: 1, reason: '', changes: '' },
+    { id: 22, text: 'Let us rename pets', status: 'new', created_at: t - 9 * H, author: 'Mira', source: 'discord', web_chat: false, unread: 0, reason: '', changes: '' },
+    { id: 21, text: 'More daily quests on weekends', status: 'accepted', created_at: t - 40 * H, author: 'Anders', source: 'discord', reason: '', changes: '' },
+    { id: 20, text: 'Free gems every day', status: 'rejected', created_at: t - 80 * H, author: 'Lars', source: 'discord', reason: 'Not possible on this server', changes: '' }];
+  const ideaChats = { 23: [{ id: '1', ts: t - 3 * H, kind: 'system', author: 'WOS EU1', text: '👋 Standard welcome message sent to the player', files: [] },
+    { id: '2', ts: t - 2 * H, kind: 'staff', author: 'Kasper', text: 'For all members or only R4/R5?', files: [] },
+    { id: '3', ts: t - 1200, kind: 'player', author: 'Jonas', text: 'All members please.', files: [] }] };
+  const reports = [{ id: 7, ts: t - 1800, status: 'open', content: 'You are all idiots, quit the game', channel: 'general', target_id: '901', target: 'Grimnir', on_server: true,
+    reporters: [{ name: 'Astrid', reason: 'Insulting players', ts: t - 1800 }], attachments: [], context: [{ name: 'Astrid', text: 'gg everyone' }], warnings: 1, cases: [] }];
+  const appeals = [{ id: 3, ts: t - 5 * H, status: 'open', kind: 'timeout', text: 'I was joking with my friend, sorry.', user_id: '902', user: 'Kai', case_reason: 'Spam', warnings: 2, cases: [] },
+    { id: 4, ts: t - 20 * H, status: 'open', kind: 'ban', text: 'My account was hacked when it posted those links.', user_id: '903', user: 'Nova', case_reason: 'Honeypot', warnings: 0, cases: [] }];
+  const replies = [{ id: 1, title: 'Need more info', text: 'Could you add a screenshot or video of {bug}? That helps us find the cause.' },
+    { id: 2, title: 'Working as intended', text: 'Thanks for reporting {bug}. We checked it and this works as designed.' }];
+  const codes = [{ id: 5, code: 'FROST2026', reward: '500 gems', expires_at: t + 2 * H }];
+  let spike = { key: 'Alliance', area: 'Alliance', count: 6, bug: 62, ts: t - 1500, known: false };
+  return { bugs, chats, ideas, ideaChats, reports, appeals, replies, codes, get spike() { return spike; }, set spike(v) { spike = v; }, settings: { game_version: 'V5 · 1.33.9', announce_channel_id: '2' } };
+})();
+const brief = b => { const o = Object.assign({}, b); delete o.text; return o; };
+const cleanReport = t => String(t || '').split('\n').filter(l => l.trim() && !/\?\s*:?$/.test(l.trim())).join(' ');
+function demoTodo() {
+  const items = [], admin = !isMod(), add = (kind, id, ts, title, text, who, urgent, ref) => items.push({ kind, id, ts, title, text: (text || '').slice(0, 300), who: who || '', urgent: !!urgent, ref: ref || {} });
+  DEMO.bugs.filter(b => !b.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(b.status)).forEach(b => {
+    const ref = { status: b.status, severity: b.severity, area: b.area, source: b.source };
+    if (b.dup_suggest && ['new', 'investigating'].includes(b.status)) add('bug_dup', b.id, b.created_at, b.summary, cleanReport(b.text), b.reporter, false, Object.assign(ref, { dup_suggest: b.dup_suggest, dup_title: b.dup_title, dup_score: b.dup_score }));
+    else if (b.status === 'new') add('bug_new', b.id, b.created_at, b.summary, cleanReport(b.text), b.reporter, b.severity === 'critical', ref);
+    else if (b.status === 'investigating') add('bug_info', b.id, b.created_at, b.summary, cleanReport(b.text), b.reporter, false, ref);
+    else if (admin) add('bug_admin', b.id, b.created_at, b.summary, cleanReport(b.text), b.reporter, b.severity === 'critical', ref);
+    if (b.unread) add('chat', b.id, now() - 600, b.summary, 'The dragon pet. It stays at 0% even after a restart.', b.reporter, false, { bug: b.id, unread: b.unread });
+  });
+  if (admin) DEMO.ideas.filter(x => x.status === 'new').forEach(x => {
+    add('idea_new', x.id, x.created_at, x.text, x.text, x.author, false, { source: x.source });
+    if (x.unread) add('chat', x.id, now() - 1200, x.text, 'All members please.', x.author, false, { idea: x.id, unread: x.unread });
+  });
+  DEMO.reports.filter(r => r.status === 'open').forEach(r => add('report', r.id, r.ts, 'Reported message by ' + r.target, r.content, '', false, { user_id: r.target_id, channel: r.channel }));
+  DEMO.appeals.filter(a => a.status === 'open' && (admin || a.kind !== 'ban')).forEach(a => add('appeal', a.id, a.ts, a.user + ' appeals a ' + a.kind, a.text, a.user, false, { kind: a.kind, user_id: a.user_id }));
+  if (DEMO.spike && !DEMO.spike.known) add('spike', DEMO.spike.key, DEMO.spike.ts, DEMO.spike.count + ' reports about “' + DEMO.spike.area + '” in a short time', '', '', true, { bug: DEMO.spike.bug, area: DEMO.spike.area });
+  if (admin) DEMO.codes.forEach(c => add('code_ending', c.id, c.expires_at, 'Gift code ' + c.code + ' ends soon', c.reward, '', false, { expires: c.expires_at }));
+  if (Q.get('empty') !== null) items.length = 0;
+  items.sort((a, b) => (b.urgent - a.urgent) || (a.ts - b.ts));
+  const counts = {}; items.forEach(i => { counts[i.kind] = (counts[i.kind] || 0) + 1; });
+  return { generated: now(), counts, items };
+}
+async function demoApi(method, path, body) {
+  await new Promise(r => setTimeout(r, 60));
+  const fail = Q.get('fail'); if (fail && method !== 'GET' && path.includes(fail)) { const e = new Error('That was already handled by someone else.'); e.status = 400; throw e; }
+  const [p, qs] = path.split('?'), q = new URLSearchParams(qs || ''), body2 = body instanceof FormData ? Object.fromEntries(body.entries()) : (body || {});
+  let m;
+  if (p === '/api/auth/me') return Q.get('demo') === 'mod' ? { id: '2', name: 'Sofie', avatar: '', role: 'mod' } : { id: '1', name: 'Kasper', avatar: '', role: 'admin' };
+  if (p === '/api/overview') return { bot: { name: 'WOS EU1', avatar_url: 'staff/icons/icon-192.png' }, guild: { name: 'WOS EU1' } };
+  if (p === '/api/todo') return demoTodo();
+  if (p === '/api/settings') { if (method === 'PUT') Object.assign(DEMO.settings, body2); return { settings: DEMO.settings }; }
+  if (p === '/api/channels') return { channels: [{ id: '1', name: 'general', category: 'Community' }, { id: '2', name: 'announcements', category: 'Info' }] };
+  if (p === '/api/replies') return { items: DEMO.replies };
+  if (p === '/api/giftcodes' && method === 'POST') return { item: { id: 9, code: body2.code } };
+  if ((m = p.match(/^\/api\/giftcodes\/(\d+)$/))) { DEMO.codes = DEMO.codes.filter(c => c.id !== +m[1]); return { ok: true }; }
+  if (p === '/api/announce') return { channel: 'announcements', partners: 0 };
+  if (p === '/api/spikes') { DEMO.spike = null; return { ok: true }; }
+  if (p === '/api/raid' || p === '/api/lockdown') return { active: false, lockdown: { active: !!body2.active } };
+  if (p === '/api/players/find') return { items: [{ id: '901', name: 'Grimnir', chief: 'Chief Grim', uid: '41000000' }].filter(x => (x.name + x.chief).toLowerCase().includes((q.get('q') || '').toLowerCase())) };
+  if (p === '/api/bugs' && method === 'GET') {
+    const st = q.get('status') || '', s = (q.get('q') || '').toLowerCase().replace(/^#/, '');
+    const f = DEMO.bugs.filter(b => (!st || b.status === st || (st === 'closed' && b.status.endsWith('rejected'))) && (!s || String(b.id) === s || b.summary.toLowerCase().includes(s)));
+    const counts = {}; DEMO.bugs.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
+    const off = +(q.get('offset') || 0), lim = +(q.get('limit') || 25);
+    return { items: f.slice(off, off + lim).map(brief), total: f.length, counts };
+  }
+  if ((m = p.match(/^\/api\/bugs\/(\d+)(\/.*)?$/))) {
+    const b = DEMO.bugs.find(x => x.id === +m[1]); if (!b) { const e = new Error('Bug not found.'); e.status = 404; throw e; }
+    const sub = m[2] || '';
+    if (sub === '/similar') return { items: DEMO.bugs.filter(x => x.id !== b.id && x.area === b.area).slice(0, 2).map(x => Object.assign(brief(x), { score: 64, snippet: x.summary })) };
+    if (sub === '/translate') return { text: '(English) ' + b.summary, source_name: 'Arabic', target: body2.target || 'en' };
+    if (sub === '/reply') return { ok: true };
+    if (sub === '/ticket' && method === 'GET') return { web: b.source === 'web', archived: false, thread_url: '', messages: DEMO.chats[b.id] || [] };
+    if (sub === '/ticket' && method === 'POST') { b.status = 'investigating'; DEMO.chats[b.id] = DEMO.chats[b.id] || []; return { web: b.source === 'web', url: '' }; }
+    if (sub === '/ticket/send') { (DEMO.chats[b.id] = DEMO.chats[b.id] || []).push({ id: String(Date.now()), ts: now(), kind: 'staff', author: 'You', text: body2.text || '', files: [] }); b.unread = 0; return { ok: true }; }
+    if (sub === '/ticket/close') { b.status = 'new'; return { messages: 3, files: 0 }; }
+    if (method === 'PUT') {
+      if (body2.dup_dismiss) { b.dup_suggest = null; } else if (body2.duplicate_of) { b.duplicate_of = +body2.duplicate_of; b.status = 'rejected'; }
+      if (body2.status) { b.status = body2.status; if (body2.reason) b.reason = body2.reason; }
+      return Object.assign({}, b);
+    }
+    if (b.unread) b.unread = 0;
+    return Object.assign({}, b);
+  }
+  if (p === '/api/suggestions' && method === 'GET') {
+    const st = q.get('status') || '', s = (q.get('q') || '').toLowerCase().replace(/^#/, '');
+    const f = DEMO.ideas.filter(x => (!st || x.status === st) && (!s || String(x.id) === s || x.text.toLowerCase().includes(s)));
+    const counts = {}; DEMO.ideas.forEach(x => { counts[x.status] = (counts[x.status] || 0) + 1; });
+    return { items: f, total: f.length, counts };
+  }
+  if ((m = p.match(/^\/api\/suggestions\/(\d+)(\/.*)?$/))) {
+    const x = DEMO.ideas.find(y => y.id === +m[1]); const sub = m[2] || '';
+    if (sub === '/chat' && method === 'GET') { x.unread = 0; return { web: true, open: x.status !== 'rejected', messages: DEMO.ideaChats[x.id] || [] }; }
+    if (sub === '/chat') { (DEMO.ideaChats[x.id] = DEMO.ideaChats[x.id] || []).push({ id: String(Date.now()), ts: now(), kind: 'staff', author: 'You', text: body2.text || '', files: [] }); return { ok: true }; }
+    if (sub === '/translate') return { text: '(English) ' + x.text, source_name: 'English', same: true, target: 'en' };
+    if (method === 'PUT') { if (body2.status) { x.status = body2.status; x.reason = body2.reason || ''; } if (body2.changes) x.changes = body2.changes; return x; }
+  }
+  if (p === '/api/reports') return { items: DEMO.reports, open: DEMO.reports.filter(r => r.status === 'open').length };
+  if ((m = p.match(/^\/api\/reports\/(\d+)$/))) { const r = DEMO.reports.find(x => x.id === +m[1]); r.status = body2.action === 'dismiss' ? 'dismissed' : 'actioned'; return r; }
+  if (p === '/api/appeals') return { items: DEMO.appeals };
+  if ((m = p.match(/^\/api\/appeals\/(\d+)$/))) { const a = DEMO.appeals.find(x => x.id === +m[1]); a.status = body2.accept ? 'accepted' : 'declined'; return a; }
+  if (p.startsWith('/api/export/')) return {};
+  return {};
+}
+/* ============================================================ places, links and Back */
+const PLACES = [['todo', 'To do', 'todo'], ['bugs', 'Bugs', 'bug'], ['ideas', 'Ideas', 'bulb'], ['community', 'Community', 'users'], ['more', 'More', 'grid']];
+const places = () => PLACES.filter(p => !(isMod() && p[0] === 'ideas'));
+let navReady = false, pushedPane = false, fromPop = false;
+function hashFor() { return '#' + (S.open ? S.open.kind + '-' + S.open.id : S.place); }
+function syncHash() {
+  if (fromPop) return;
+  const h = hashFor(), first = !navReady; navReady = true;
+  if (location.hash === h) return;
+  try { if (first) history.replaceState(null, '', h); else { history.pushState(null, '', h); pushedPane = !!S.open; } } catch (e) { /* sandbox */ }
+}
+function readHash() {
+  const h = decodeURIComponent(location.hash.slice(1)), m = h.match(/^(bug|idea|report|appeal)-(\w+)$/);
+  if (m) return { pane: { kind: m[1], id: /^\d+$/.test(m[2]) ? +m[2] : m[2] } };
+  if (places().some(p => p[0] === h)) return { place: h };
+  return {};
+}
+window.addEventListener('popstate', () => {
+  const r = readHash(); fromPop = true;
+  try {
+    if (r.pane) openPane(r.pane.kind, r.pane.id);
+    else { if (S.open) closePane(); if (r.place && r.place !== S.place) go(r.place); }
+  } finally { fromPop = false; }
+});
+function go(place) { S.place = place; S.open = null; S.sel = null; render(); load(place); }
+
+/* ============================================================ the frame */
+function render() {
+  const o = S.overview || { bot: { name: 'WOS EU1', avatar_url: '' } }, total = S.todo ? S.todo.items.length : 0;
+  root.innerHTML = String(html`<div class="app${inApp ? ' inapp' : ''}">
+    <nav class="rail" aria-label="Sections">
+      ${o.bot.avatar_url ? html`<img class="logo" src="${o.bot.avatar_url}" alt="">` : ''}
+      ${places().map(([k, label, ic]) => html`<a href="#${k}" data-go="${k}" aria-current="${S.place === k ? 'page' : 'false'}">${icon(ic)}<span>${label}</span>${k === 'todo' && total ? html`<b class="badge num" aria-label="${total} waiting">${total}</b>` : ''}</a>`)}
+      <div class="foot">${S.user && S.user.avatar ? html`<img class="me" src="${S.user.avatar}" alt="${S.user.name}" title="${S.user.name}">` : ''}
+        <button class="btn ghost icon" data-act="logout" title="Log out" aria-label="Log out">${icon('logout')}</button></div>
+    </nav>
+    <div class="page">
+      <header class="top">
+        <h1>${(PLACES.find(p => p[0] === S.place) || [])[1]}${S.place === 'todo' && S.todo ? html` <span class="count num">${total}</span>` : ''}</h1>
+        <div class="grow"></div>
+        <button class="search" data-act="search" aria-keyshortcuts="Control+K Meta+K" aria-label="Search">${icon('search')}<span>Search</span><kbd>Ctrl K</kbd></button>
+        ${isMod() ? '' : html`<button class="btn main" data-act="new" aria-haspopup="dialog">${icon('plus')}<span class="new-l">New</span></button>`}
+      </header>
+      <div class="body${S.open ? ' split' : ''}"><main class="content" id="main">${view()}</main>${S.open ? html`<aside class="pane" id="pane" aria-label="Details">${paneView()}</aside>` : ''}</div>
+    </div>
+  </div>`);
+  afterRender();
+}
+function renderMain() { const m = $('#main'); if (!m) return render(); m.innerHTML = String(view()); afterRender(); }
+function afterRender() {
+  const b = $('.rail a[data-go="todo"]');
+  if (b && S.todo) { const n = S.todo.items.length, badge = b.querySelector('.badge'); if (badge) badge.textContent = n; }
+  if (S.open && !S.paneData) loadPane();
+}
+function view() {
+  return ({ todo: viewTodo, bugs: viewBugs, ideas: viewIdeas, community: viewCommunity, more: viewMore }[S.place] || viewTodo)();
+}
+
+/* ============================================================ To do */
+const KIND = {
+  bug_new: ['New bug', 'bug', 'Bugs'], bug_dup: ['Possible duplicate', 'list', 'Bugs'], bug_info: ['Asking the player', 'message', 'Bugs'],
+  bug_admin: ['With admins', 'shield', 'Bugs'], chat: ['Player wrote', 'message', 'Bugs'], dev_reply: ['Answer for the developers', 'message', 'Bugs'],
+  idea_new: ['New idea', 'bulb', 'Ideas'], report: ['Reported message', 'alert', 'Moderation'], appeal: ['Appeal', 'shield', 'Moderation'],
+  spike: ['Report spike', 'pulse', 'Bugs'], raid: ['Raid mode', 'shield', 'Moderation'], code_ending: ['Gift code', 'gift', 'Bugs'],
+  setup: ['Setup problem', 'wrench', 'Moderation'], job: ['Bot problem', 'alert', 'Moderation']
+};
+const paneOf = i => i.kind.startsWith('bug_') || i.kind === 'dev_reply' ? ['bug', i.id] : i.kind === 'idea_new' ? ['idea', i.id]
+  : i.kind === 'chat' ? (i.ref.idea ? ['idea', i.ref.idea] : ['bug', i.ref.bug]) : i.kind === 'report' ? ['report', i.id] : i.kind === 'appeal' ? ['appeal', i.id]
+  : i.kind === 'spike' && i.ref.bug ? ['bug', i.ref.bug] : null;
+// [label, icon, tone, run(item, reason) -> promise, options]
+function actionsFor(i) {
+  const st = i.ref.status, A = [];
+  const put = (body, msg) => it => call('PUT', '/api/bugs/' + it.id, body(it)).then(() => msg);
+  if (i.kind === 'bug_new' || i.kind === 'bug_info') {
+    A.push(['Pass to admins', 'arrowup', 'main', put(() => ({ status: 'passed' }), 'Passed to the admins')]);
+    if (i.kind === 'bug_new') A.push(['Ask the player', 'message', '', it => call('POST', '/api/bugs/' + it.id + '/ticket').then(() => 'Asked the player – the chat is open')]);
+    A.push(['Reject', 'x', 'bad', (it, why) => call('PUT', '/api/bugs/' + it.id, { status: 'rejected', reason: why }).then(() => 'Rejected'), { reason: 'Why? The player sees this.' }]);
+  } else if (i.kind === 'bug_dup') {
+    A.push(['Merge into #' + i.ref.dup_suggest, 'list', 'main', it => call('PUT', '/api/bugs/' + it.id, { duplicate_of: it.ref.dup_suggest, reason: 'This bug was already reported.' }).then(() => 'Merged into #' + it.ref.dup_suggest)]);
+    A.push(['Not a duplicate', 'x', '', put(() => ({ dup_dismiss: true }), 'Kept as its own bug')]);
+  } else if (i.kind === 'bug_admin') {
+    if (st === 'passed') A.push(['Investigating', 'search', '', put(() => ({ status: 'being_investigated' }), 'Marked as being investigated')]);
+    A.push(['Fixed', 'check', 'main', put(() => ({ status: 'fixed' }), 'Marked as fixed – the reporter is told')]);
+    A.push(['Reject', 'x', 'bad', (it, why) => call('PUT', '/api/bugs/' + it.id, { status: 'admin_rejected', reason: why }).then(() => 'Rejected'), { reason: 'Why? The player sees this.' }]);
+  } else if (i.kind === 'chat' || i.kind === 'dev_reply') {
+    A.push(['Reply', 'message', 'main', null]);
+  } else if (i.kind === 'idea_new') {
+    A.push(['Accept', 'check', 'main', it => call('PUT', '/api/suggestions/' + it.id, { status: 'accepted' }).then(() => 'Accepted – the player is told')]);
+    A.push(['Reject', 'x', 'bad', (it, why) => call('PUT', '/api/suggestions/' + it.id, Object.assign({ status: 'rejected' }, why ? { reason: why } : {})).then(() => 'Rejected'), { reason: 'Why? The player sees this (optional).', optional: true }]);
+  } else if (i.kind === 'report') {
+    const rep = a => (it, why) => call('POST', '/api/reports/' + it.id, { action: a, reason: why || '' });
+    A.push(['Delete message', 'x', 'main', (it, w) => rep('delete')(it, w).then(() => 'Message deleted')]);
+    A.push(['Warn', 'alert', '', (it, w) => rep('warn')(it, w).then(() => 'Warned'), { reason: 'Reason for the warning (the member sees it)', optional: true }]);
+    A.push(['Timeout', 'clock', '', (it, w) => rep('timeout')(it, w).then(() => 'Timed out'), { reason: 'Reason (the member sees it)', optional: true }]);
+    A.push(['Nothing wrong', 'check', '', (it, w) => rep('dismiss')(it, w).then(() => 'Closed – nothing wrong')]);
+  } else if (i.kind === 'appeal') {
+    A.push(['Accept', 'check', 'main', (it, w) => call('POST', '/api/appeals/' + it.id, { accept: true, note: w || '' }).then(() => 'Accepted – the ' + it.ref.kind + ' is lifted'), { reason: 'Note to the member (optional)', optional: true }]);
+    A.push(['Decline', 'x', 'bad', (it, w) => call('POST', '/api/appeals/' + it.id, { accept: false, note: w || '' }).then(() => 'Declined'), { reason: 'Why? The member sees this (optional).', optional: true }]);
+  } else if (i.kind === 'spike') {
+    if (i.ref.bug) A.push(['Post #' + i.ref.bug + ' as known issue', 'pin', 'main', it => call('POST', '/api/spikes', { known: it.ref.bug }).then(() => 'On the known-issues list')]);
+    A.push(['Dismiss', 'x', '', it => call('POST', '/api/spikes', { dismiss: it.id }).then(() => 'Dismissed')]);
+  } else if (i.kind === 'raid') {
+    A.push(['Lift raid mode', 'check', 'main', () => call('POST', '/api/raid', { active: false }).then(() => 'Raid mode lifted')]);
+    if (!i.ref.lockdown) A.push(['Lock the chat', 'shield', 'bad', () => call('POST', '/api/lockdown', { active: true, reason: 'Raid' }).then(() => 'Chat channels locked')]);
+  } else if (i.kind === 'code_ending') {
+    A.push(['End it now', 'x', '', it => call('PUT', '/api/giftcodes/' + it.id, { action: 'end' }).then(() => 'Gift code ended')]);
+    A.push(['Open gift codes', 'ext', '', null, { link: 'codes' }]);
+  } else if (i.kind === 'setup') A.push(['Fix', 'wrench', 'main', null, { link: 'channels' }]);
+  else if (i.kind === 'job') A.push(['Open status', 'pulse', 'main', null, { link: 'status' }]);
+  return A;
+}
+const FILTERS = [['all', 'All'], ['Bugs', 'Bugs'], ['Ideas', 'Ideas'], ['Moderation', 'Moderation']];
+function viewTodo() {
+  if (!S.todo) return html`<div class="empty">Loading…</div>`;
+  const items = S.todo.items.filter(i => S.todoFilter === 'all' || KIND[i.kind][2] === S.todoFilter);
+  const urgent = items.filter(i => i.urgent), waiting = items.filter(i => !i.urgent);
+  const count = f => S.todo.items.filter(i => f === 'all' || KIND[i.kind][2] === f).length;
+  return html`
+    <div class="chips" role="group" aria-label="Show">${FILTERS.filter(f => !(isMod() && f[0] === 'Ideas')).map(([k, l]) => html`<button class="chip" data-act="filter" data-f="${k}" aria-pressed="${String(S.todoFilter === k)}">${l}<span class="num">${count(k)}</span></button>`)}</div>
+    ${!items.length ? html`<div class="list"><div class="empty"><b>All done</b>Nothing is waiting for you${S.todoFilter === 'all' ? '' : ' here'}. New reports show up by themselves.</div></div>` : ''}
+    ${urgent.length ? html`<section class="group"><h2>${icon('alert')} Needs you now</h2><div class="list">${urgent.map(todoItem)}</div></section>` : ''}
+    ${waiting.length ? html`<section class="group"><h2>Waiting · oldest first</h2><div class="list">${waiting.map(todoItem)}</div></section>` : ''}
+    <details class="group fold done"${S.doneOpen ? ' open' : ''} data-fold="done"><summary><h2>${icon('check')} Done today <span class="num">${S.done.length}</span></h2></summary>
+      ${S.done.length ? html`<div class="list">${S.done.slice().reverse().map(d => html`<div class="item"><div><div class="what">${KIND[d.kind] ? KIND[d.kind][0] : ''} · ${ago(d.ts)}</div><p class="title">${d.title}</p><p class="text">${d.label}</p></div></div>`)}</div>`
+        : html`<p class="hint">What you handle here today shows up in this list.</p>`}</details>`;
+}
+const keyOf = i => i.kind + ':' + i.id;
+function todoItem(i) {
+  const k = KIND[i.kind] || ['', 'circle'], acts = actionsFor(i), selected = S.sel === keyOf(i), reasonFor = S.reasonFor && S.reasonFor.key === keyOf(i) ? S.reasonFor : null;
+  const sev = i.ref.severity ? html`<span class="tag ${i.ref.severity === 'critical' ? 'bad' : i.ref.severity === 'major' ? 'warn' : ''}">${i.ref.severity}</span>` : '';
+  return html`<div class="item ${i.urgent ? 'urgent' : i.kind === 'chat' || i.kind === 'appeal' ? 'warm' : ''}" data-key="${keyOf(i)}" tabindex="0" aria-selected="${String(selected || (S.open && paneOf(i) && paneOf(i)[0] === S.open.kind && paneOf(i)[1] === S.open.id))}" role="button">
+    <div><div class="what">${icon(k[1])}<span>${k[0]}${i.kind.startsWith('bug') || i.kind === 'chat' && i.ref.bug ? ' #' + (i.ref.bug || i.id) : i.kind === 'idea_new' || i.ref.idea ? ' #' + (i.ref.idea || i.id) : ''}</span>${sev}
+        ${i.ref.area ? html`<span>${i.ref.area}</span>` : ''}${i.ref.source === 'web' ? html`<span class="tag ice">website</span>` : ''}${i.ref.unread ? html`<span class="tag hot">${plural(i.ref.unread, 'new message')}</span>` : ''}
+        <time class="num" title="${fullTime(i.ts)}">${i.kind === 'code_ending' ? 'ends ' + new Date(i.ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ago(i.ts)}</time></div>
+      <p class="title" dir="auto">${i.title}</p>
+      ${i.kind === 'bug_dup' ? html`<p class="text">Looks like #${i.ref.dup_suggest} “${i.ref.dup_title}” · ${i.ref.dup_score}% match</p>` : i.text && i.text !== i.title ? html`<p class="text" dir="auto">${i.who ? i.who + ': ' : ''}${i.text}</p>` : i.who ? html`<p class="text">${i.who}</p>` : ''}</div>
+    <div class="acts">${acts.map((a, n) => html`<button class="btn sm ${a[2] === 'main' ? 'go' : a[2]}" data-act="do" data-key="${keyOf(i)}" data-n="${n}">${icon(a[1])}${a[0]}${a[4] && a[4].reason ? '…' : ''}</button>`)}</div>
+    ${reasonFor ? html`<form class="reason" data-act-submit="reason"><label class="sr" for="why">${reasonFor.label}</label>
+      <input class="in" id="why" maxlength="400" placeholder="${reasonFor.label}" autocomplete="off">
+      <button class="btn sm ${reasonFor.tone === 'bad' ? 'bad' : 'main'}" type="submit">${reasonFor.name}</button><button class="btn sm ghost" type="button" data-act="reasonCancel">Cancel</button></form>` : ''}
+  </div>`;
+}
+function findItem(key) { return S.todo && S.todo.items.find(i => keyOf(i) === key); }
+async function runAction(item, n, why, el) {
+  const a = actionsFor(item)[n]; if (!a) return;
+  if (a[4] && a[4].link) { location.href = CFG.classic + '#' + a[4].link; return; }
+  if (!a[3]) { const p = paneOf(item); if (p) openPane(p[0], p[1]); return; }
+  if (a[4] && a[4].reason && why === undefined) { S.reasonFor = { key: keyOf(item), n, label: a[4].reason, name: a[0], tone: a[2], optional: a[4].optional }; renderMain(); const f = $('#why'); if (f) f.focus(); return; }
+  if (el) busy(el, true, '…');
+  try {
+    const msg = await a[3](item, why);
+    S.reasonFor = null;
+    S.done.push({ kind: item.kind, id: item.id, title: item.title, label: msg, ts: now() }); saveDone();
+    S.todo.items = S.todo.items.filter(i => keyOf(i) !== keyOf(item));
+    if (S.open && paneOf(item) && S.open.kind === paneOf(item)[0] && S.open.id === paneOf(item)[1]) { S.paneData = null; }
+    toast(msg); render();
+    loadTodo(true);
+  } catch (e) {
+    if (el) busy(el, false);
+    toast(e.message, 'err');
+    if (e.status === 400 || e.status === 404 || e.status === 409) { S.reasonFor = null; loadTodo(true); }
+  }
+}
+function saveDone() {
+  try { localStorage.setItem('wos2.done', JSON.stringify({ day: new Date().toDateString(), items: S.done.slice(-80) })); } catch (e) { /* private mode */ }
+}
+function loadDone() {
+  try { const d = JSON.parse(localStorage.getItem('wos2.done') || 'null'); if (d && d.day === new Date().toDateString()) S.done = d.items || []; } catch (e) { /* ignore */ }
+}
+async function loadTodo(quiet) {
+  try { S.todo = await call('GET', '/api/todo'); }
+  catch (e) { if (!quiet) toast(e.message, 'err'); return; }
+  if (S.place === 'todo' && !editingNow()) renderMain(); else afterRender();
+  const b = $('.rail a[data-go="todo"]');
+  if (b) { const n = S.todo.items.length; let badge = b.querySelector('.badge'); if (!badge && n) { b.insertAdjacentHTML('beforeend', '<b class="badge num"></b>'); badge = b.querySelector('.badge'); } if (badge) { badge.textContent = n; badge.hidden = !n; } }
+  const c = $('.top .count'); if (c) c.textContent = S.todo.items.length;
+}
+const editingNow = () => !!(S.reasonFor || (document.activeElement && document.activeElement.closest && document.activeElement.closest('#main') && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)));
+
+/* ============================================================ the detail pane */
+function openPane(kind, id) {
+  if (S.open && S.open.kind === kind && S.open.id === id) return;
+  stopChat(); S.open = { kind, id }; S.paneData = null; S.sel = null; render(); syncHash();
+}
+function closePane() {
+  stopChat(); const had = !!S.open; S.open = null; S.paneData = null; render();
+  if (had && !fromPop && pushedPane) { pushedPane = false; history.back(); } else syncHash();
+}
+async function loadPane() {
+  const o = S.open; if (!o) return; S.paneData = { loading: true };
+  try {
+    let d;
+    if (o.kind === 'bug') d = { bug: await call('GET', '/api/bugs/' + o.id) };
+    else if (o.kind === 'idea') { const r = await call('GET', '/api/suggestions?q=%23' + o.id); d = { idea: r.items.find(x => x.id === o.id) }; if (!d.idea) throw Object.assign(new Error('Idea not found.'), { status: 404 }); }
+    else if (o.kind === 'report') { const r = await call('GET', '/api/reports'); d = { report: r.items.find(x => x.id === o.id) }; if (!d.report) throw Object.assign(new Error('This report was already handled.'), { status: 404 }); }
+    else if (o.kind === 'appeal') { const r = await call('GET', '/api/appeals'); d = { appeal: r.items.find(x => x.id === o.id) }; if (!d.appeal) throw Object.assign(new Error('This appeal was already decided.'), { status: 404 }); }
+    if (S.open !== o) return;
+    S.paneData = d; paintPane();
+    if (d.bug && (d.bug.web_chat || d.bug.ticket_url || d.bug.web_ticket || d.bug.status === 'investigating')) startChat('bug', o.id);
+    if (d.idea && d.idea.web_chat) startChat('idea', o.id);
+    if (d.bug && !d.bug.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(d.bug.status)) {
+      call('GET', '/api/bugs/' + o.id + '/similar').then(r => { if (S.open === o && S.paneData) { S.paneData.similar = r.items; paintPane(); } }).catch(() => {});
+    }
+  } catch (e) { if (S.open === o) { S.paneData = { error: e.message }; paintPane(); } }
+}
+function paintPane() { const p = $('#pane'); if (p) { const sc = p.scrollTop; p.innerHTML = String(paneView()); p.scrollTop = sc; } }
+const BUG_ST = { new: ['New', ''], investigating: ['Asking the player', 'warn'], passed: ['With admins', 'ice'], being_investigated: ['Investigating', 'warn'], fixed: ['Fixed', 'ok'], rejected: ['Rejected', 'bad'], admin_rejected: ['Rejected by admins', 'bad'] };
+const IDEA_ST = { new: ['Open', ''], accepted: ['Accepted', 'ok'], rejected: ['Rejected', 'bad'] };
+function paneView() {
+  const o = S.open, d = S.paneData;
+  const head = title => html`<div class="pane-head"><button class="btn ghost icon" data-act="closePane" aria-label="Close">${icon('back')}</button><div class="grow"><h2>${title}</h2></div></div>`;
+  if (!d || d.loading) return html`${head('Loading…')}<div class="pane-body"><p class="hint">Loading…</p></div>`;
+  if (d.error) return html`${head('Not available')}<div class="pane-body"><p>${d.error}</p><button class="btn" data-act="closePane">Close</button></div>`;
+  if (d.bug) return html`${head('#' + d.bug.id + ' ' + d.bug.summary)}<div class="pane-body">${bugPane(d.bug, d)}</div>`;
+  if (d.idea) return html`${head('Idea #' + d.idea.id)}<div class="pane-body">${ideaPane(d.idea)}</div>`;
+  if (d.report) return html`${head('Reported message')}<div class="pane-body">${reportPane(d.report)}</div>`;
+  if (d.appeal) return html`${head(d.appeal.user + ' – ' + d.appeal.kind + ' appeal')}<div class="pane-body">${appealPane(d.appeal)}</div>`;
+  return head(o.kind);
+}
+function reportText(t) {             // the form's questions small and grey, the player's answers right under them
+  let out = '';
+  String(t || '').split('\n').forEach(l => {
+    if (/\?\s*:?$/.test(l.trim()) && l.length < 90) out += `<span class="q">${esc(l.trim())}</span>`;
+    else if (l.trim() || !out.endsWith('\n')) out += esc(l) + '\n';
+  });
+  return raw(out.replace(/\n+$/, ''));
+}
+function pseudoItem(kind, id, ref) { return { kind, id, ts: now(), title: '', text: '', who: '', urgent: false, ref: ref || {} }; }
+function paneActions(it) {
+  return html`<div class="actbar">${actionsFor(it).filter(a => a[3] || (a[4] && a[4].link)).map((a, n) => html`<button class="btn ${a[2]}" data-act="paneDo" data-kind="${it.kind}" data-id="${it.id}" data-n="${actionsFor(it).indexOf(a)}">${icon(a[1])}${a[0]}${a[4] && a[4].reason ? '…' : ''}</button>`)}</div>
+    ${S.paneReason ? html`<form class="reason" data-act-submit="paneReason" style="margin-top:10px"><input class="in" id="pwhy" maxlength="400" placeholder="${S.paneReason.label}" autocomplete="off">
+      <button class="btn ${S.paneReason.tone === 'bad' ? 'bad' : 'main'}" type="submit">${S.paneReason.name}</button><button class="btn ghost" type="button" data-act="paneReasonCancel">Cancel</button></form>` : ''}`;
+}
+function bugPane(b, d) {
+  const st = BUG_ST[b.status] || [b.status, ''];
+  const kind = b.duplicate_of ? null : b.dup_suggest && ['new', 'investigating'].includes(b.status) ? 'bug_dup' : b.status === 'new' ? 'bug_new' : b.status === 'investigating' ? 'bug_info' : ['passed', 'being_investigated'].includes(b.status) && !isMod() ? 'bug_admin' : null;
+  const it = kind && pseudoItem(kind, b.id, { status: b.status, dup_suggest: b.dup_suggest });
+  return html`
+    <div class="meta"><span class="tag ${st[1]}">${st[0]}</span>${b.severity ? html`<span class="tag ${b.severity === 'critical' ? 'bad' : 'warn'}">${b.severity}</span>` : ''}
+      ${b.area ? html`<span>${b.area}</span>` : ''}<span>${b.reporter}</span>${b.source === 'web' ? html`<span class="tag ice">website</span>` : ''}<span title="${fullTime(b.created_at)}">${ago(b.created_at)}</span>
+      ${b.version ? html`<span>${b.version}</span>` : ''}${b.chief_name ? html`<span>${b.chief_name}${b.uid ? ' · UID ' + b.uid : ''}</span>` : ''}</div>
+    ${b.duplicate_of ? html`<p class="note" style="margin-top:12px">Closed as a duplicate of <a href="#bug-${b.duplicate_of}">#${b.duplicate_of}</a>.</p>` : ''}
+    ${b.reason && b.status.endsWith('rejected') ? html`<p class="note" style="margin-top:12px">Reason given: ${b.reason}</p>` : ''}
+    ${it ? html`<section class="sec" style="margin-top:14px">${paneActions(it)}</section>` : ''}
+    <section class="sec" style="margin-top:14px"><h3>Report</h3><div class="report" dir="auto">${reportText(b.text)}</div>
+      ${d.tr ? html`<div class="tr">${d.tr.same ? 'Already in this language.' : d.tr.text}</div>` : ''}
+      <div class="row" style="margin-top:8px"><button class="btn sm" data-act="translate" data-kind="bugs" data-id="${b.id}">${icon('globe')} Translate</button>
+        ${b.mod_url ? html`<a class="btn sm ghost" href="${b.mod_url}" target="_blank" rel="noopener">${icon('ext')} Discord</a>` : ''}</div></section>
+    ${b.files && b.files.length ? html`<section class="sec"><h3>Files</h3><div class="files">${b.files.map(f => html`<button class="file" data-act="file" data-fid="${f.id}" data-id="${b.id}">${icon('paperclip')}${f.name}</button>`)}</div></section>` : ''}
+    ${chatSection('bug', b)}
+    ${d.similar && d.similar.length ? html`<section class="sec"><h3>Similar bugs</h3>${d.similar.map(x => html`<div class="sim"><span class="score num">${x.score}%</span><div class="grow">
+        <a href="#bug-${x.id}">#${x.id} ${x.summary}</a> <span class="tag ${(BUG_ST[x.status] || ['', ''])[1]}">${(BUG_ST[x.status] || [x.status])[0]}</span><p class="hint" style="margin:2px 0 0">${x.snippet || ''}</p></div>
+        ${!b.duplicate_of && x.id !== b.id ? html`<button class="btn sm" data-act="merge" data-id="${b.id}" data-into="${x.id}">Merge</button>` : ''}</div>`)}</section>` : ''}
+    <details class="sec fold"><summary><h3>History · ${b.history ? b.history.length : 0}</h3></summary><div class="hist">${(b.history || []).map(h => html`<div>${h.action} · ${h.actor} · ${fullTime(h.ts)}</div>`)}</div></details>`;
+}
+function chatSection(kind, x) {
+  const C = S.chat && S.chat.kind === kind && S.chat.id === x.id ? S.chat : null;
+  const can = kind === 'bug' ? (x.web_chat || x.ticket_url || x.web_ticket || x.status === 'investigating') : x.web_chat;
+  if (!can) {
+    if (kind !== 'bug') return '';
+    return html`<section class="sec"><h3>Talk to the player</h3>
+      <p class="hint">${x.can_ticket ? '“Ask the player” opens a private chat with them (in Discord, or on their report page if they used the website).' : 'This report has no way to reach the player.'}</p>
+      ${x.reporter_id && x.reporter_id !== '0' ? html`<div class="composer"><textarea class="in" id="dm" maxlength="1500" placeholder="Or send them one message by DM – {bug} becomes the bug number"></textarea>
+        <div class="row">${repliesPick('dm')}<div class="grow"></div><button class="btn" data-act="dm" data-id="${x.id}">${icon('send')} Send DM</button></div></div>` : ''}</section>`;
+  }
+  return html`<section class="sec"><h3>${kind === 'bug' && x.ticket_url ? 'Ticket with the player' : 'Messages with the player'}${x.ticket_url ? html` · <a href="${x.ticket_url}" target="_blank" rel="noopener">open in Discord</a>` : ''}</h3>
+    <div class="chat" id="chatlog" aria-live="polite">${C && C.messages ? (C.messages.length ? C.messages.map(m => html`<div class="msg ${m.kind === 'staff' ? 'staff' : m.kind === 'system' ? 'sys' : ''}">${m.kind === 'system' ? '' : html`<span class="who">${m.author}</span>`}${m.text}
+        ${(m.files || []).length ? html`<span class="files" style="margin-top:6px">${m.files.map(f => f.id ? html`<button class="file" data-act="chatFile" data-kind="${kind}" data-id="${x.id}" data-fid="${f.id}">${icon('paperclip')}${f.name}</button>` : f.url ? html`<a class="file" href="${f.url}" target="_blank" rel="noopener">${icon('paperclip')}${f.name}</a>` : '')}</span>` : ''}</div>`) : html`<p class="hint">No messages yet.</p>`) : html`<p class="hint">Loading the conversation…</p>`}</div>
+    <form class="composer" data-act-submit="chatSend" data-kind="${kind}" data-id="${x.id}"><label class="sr" for="chatmsg">Message</label>
+      <textarea class="in" id="chatmsg" maxlength="1800" placeholder="Write to the player…"></textarea>
+      <div class="row"><label class="btn sm ghost" title="Add pictures">${icon('paperclip')}<input type="file" id="chatfiles" accept="image/*,video/*" multiple hidden></label>${repliesPick('chatmsg')}
+        <div class="grow"></div>${kind === 'bug' && (x.ticket_url || x.web_ticket) ? html`<button class="btn ghost" type="button" data-act="ticketClose" data-id="${x.id}">Close ticket</button>` : ''}
+        <button class="btn main" type="submit">${icon('send')} Send</button></div></form></section>`;
+}
+function repliesPick(target) {
+  const R = S.replies || []; if (!R.length) return '';
+  return html`<select class="in" style="width:auto;min-height:30px" data-act-change="canned" data-target="${target}" aria-label="Ready-made reply"><option value="">Ready-made reply…</option>${R.map(r => html`<option value="${r.id}">${r.title}</option>`)}</select>`;
+}
+let chatTimer = null;
+function startChat(kind, id) {
+  stopChat(); S.chat = { kind, id, messages: null };
+  const tick = async () => {
+    try {
+      const r = await call('GET', kind === 'bug' ? '/api/bugs/' + id + '/ticket' : '/api/suggestions/' + id + '/chat');
+      if (!S.chat || S.chat.id !== id) return;
+      const changed = JSON.stringify(r.messages) !== JSON.stringify(S.chat.messages);
+      S.chat.messages = r.messages;
+      if (changed && !(document.activeElement && document.activeElement.id === 'chatmsg')) { paintPane(); const l = $('#chatlog'); if (l) l.scrollTop = l.scrollHeight; }
+      else if (changed) { const l = $('#chatlog'); if (l) { l.innerHTML = $('#chatlog', new DOMParser().parseFromString(String(chatSection(kind, S.paneData.bug || S.paneData.idea)), 'text/html')).innerHTML; l.scrollTop = l.scrollHeight; } }
+    } catch (e) { /* keep trying */ }
+  };
+  tick(); chatTimer = setInterval(tick, 6000);
+}
+function stopChat() { if (chatTimer) clearInterval(chatTimer); chatTimer = null; S.chat = null; }
+function ideaPane(x) {
+  const st = IDEA_ST[x.status] || [x.status, ''];
+  const it = x.status === 'new' && !isMod() ? pseudoItem('idea_new', x.id) : null;
+  return html`
+    <div class="meta"><span class="tag ${st[1]}">${st[0]}</span><span>${x.author}</span>${x.source === 'web' ? html`<span class="tag ice">website${x.uid ? ' · UID ' + x.uid : ''}</span>` : ''}<span title="${fullTime(x.created_at)}">${ago(x.created_at)}</span></div>
+    ${it ? html`<section class="sec" style="margin-top:14px">${paneActions(it)}</section>` : ''}
+    <section class="sec" style="margin-top:14px"><h3>Idea</h3><div class="report">${x.text}</div>
+      ${S.paneData.tr ? html`<div class="tr">${S.paneData.tr.same ? 'Already in this language.' : S.paneData.tr.text}</div>` : ''}
+      <div class="row" style="margin-top:8px"><button class="btn sm" data-act="translate" data-kind="suggestions" data-id="${x.id}">${icon('globe')} Translate</button>
+        ${x.mod_url ? html`<a class="btn sm ghost" href="${x.mod_url}" target="_blank" rel="noopener">${icon('ext')} Discord</a>` : ''}</div></section>
+    ${x.reason ? html`<p class="note">Reason given: ${x.reason}</p>` : ''}
+    ${x.status === 'accepted' && !isMod() ? html`<section class="sec"><h3>What we changed</h3>
+      <p class="hint">Players see this under the idea${x.web_chat ? ' and on the player’s idea page' : ' and the player gets a DM'}.</p>
+      <textarea class="in" id="chg" maxlength="1000" placeholder="e.g. Bear Trap now has a 10-minute warning in alliance chat (from 1.34).">${x.changes || ''}</textarea>
+      <div class="row" style="margin-top:8px"><div class="grow"></div><button class="btn main" data-act="changes" data-id="${x.id}">${icon('send')} ${x.changes ? 'Update' : 'Post update'}</button></div></section>` : ''}
+    ${chatSection('idea', x)}`;
+}
+function reportPane(r) {
+  return html`
+    <div class="meta"><span>${r.target}</span><span>#${r.channel}</span><span>${ago(r.ts)}</span>${r.warnings ? html`<span class="tag warn">${plural(r.warnings, 'active warning')}</span>` : ''}</div>
+    <section class="sec" style="margin-top:14px">${paneActions(pseudoItem('report', r.id))}</section>
+    <section class="sec"><h3>Message</h3><div class="report">${r.content || '(no text)'}</div>
+      ${r.url ? html`<a class="btn sm ghost" style="margin-top:8px" href="${r.url}" target="_blank" rel="noopener">${icon('ext')} Show in Discord</a>` : ''}</section>
+    ${(r.context || []).length ? html`<section class="sec"><h3>Just before it</h3>${r.context.map(c => html`<p class="hint" style="margin:2px 0"><b>${c.name}:</b> ${c.text}</p>`)}</section>` : ''}
+    <section class="sec"><h3>Reported by</h3>${(r.reporters || []).map(p => html`<p style="margin:2px 0">${p.name}${p.reason ? html` – <span class="hint">${p.reason}</span>` : ''}</p>`)}</section>`;
+}
+function appealPane(a) {
+  return html`
+    <div class="meta"><span class="tag ${a.kind === 'ban' ? 'bad' : 'warn'}">${a.kind}</span><span>${ago(a.ts)}</span>${a.case_reason ? html`<span>For: ${a.case_reason}</span>` : ''}${a.warnings ? html`<span class="tag warn">${plural(a.warnings, 'active warning')}</span>` : ''}</div>
+    <section class="sec" style="margin-top:14px">${paneActions(pseudoItem('appeal', a.id, { kind: a.kind }))}</section>
+    <section class="sec"><h3>What they wrote</h3><div class="report">${a.text}</div></section>`;
+}
+
+/* ============================================================ Bugs and Ideas */
+const BUG_CHIPS = [['', 'All'], ['new', 'New'], ['investigating', 'Asking the player'], ['passed', 'With admins'], ['being_investigated', 'Investigating'], ['fixed', 'Fixed'], ['closed', 'Rejected']];
+function viewBugs() {
+  const B = S.bugs, c = B.counts || {}, n = k => k === '' ? Object.values(c).reduce((a, x) => a + x, 0) : k === 'closed' ? (c.rejected || 0) + (c.admin_rejected || 0) : c[k] || 0;
+  return html`
+    <div class="chips" role="group" aria-label="Status">${BUG_CHIPS.map(([k, l]) => html`<button class="chip" data-act="bugStatus" data-s="${k}" aria-pressed="${String(B.status === k)}">${l}<span class="num">${n(k)}</span></button>`)}</div>
+    <div class="row" style="margin-bottom:12px"><label class="sr" for="bq">Search bugs</label><input class="in grow" id="bq" type="search" placeholder="Search text, reporter or #number" value="${B.q}">
+      ${isMod() ? '' : html`<a class="btn" href="${S.demo ? '#' : S.base.replace(/\/+$/, '') + '/api/export/bugs.csv'}" download>${icon('upload')} Export</a>`}</div>
+    <div class="list" id="buglist">${B.items.length ? B.items.map(bugRow) : html`<div class="empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`}</div>
+    ${B.items.length < B.total ? html`<div class="more"><button class="btn" data-act="bugsMore">Load more</button></div>` : ''}`;
+}
+function bugRow(b) {
+  const st = BUG_ST[b.status] || [b.status, ''], key = 'bug:' + b.id;
+  return html`<div class="item ${b.severity === 'critical' && !['fixed', 'rejected', 'admin_rejected'].includes(b.status) ? 'urgent' : ''}" data-open="bug" data-id="${b.id}" data-key="${key}" tabindex="0" role="button" aria-selected="${String(S.sel === key || (S.open && S.open.kind === 'bug' && S.open.id === b.id))}">
+    <div><div class="what"><span class="num">#${b.id}</span><span class="tag ${st[1]}">${st[0]}</span>${b.severity ? html`<span class="tag ${b.severity === 'critical' ? 'bad' : 'warn'}">${b.severity}</span>` : ''}${b.area ? html`<span>${b.area}</span>` : ''}
+      ${b.source === 'web' ? html`<span class="tag ice">website</span>` : ''}${b.unread ? html`<span class="tag hot">${plural(b.unread, 'new message')}</span>` : ''}${b.dup_suggest && !b.duplicate_of ? html`<span class="tag warn">duplicate?</span>` : ''}
+      <time class="num">${ago(b.created_at)}</time></div><p class="title">${b.summary}</p><p class="text">${b.reporter}${b.version ? ' · ' + b.version : ''}</p></div></div>`;
+}
+async function loadBugs(reset) {
+  const B = S.bugs; if (B.loading) return; B.loading = true;
+  if (reset) { B.offset = 0; }
+  try {
+    const qs = new URLSearchParams({ limit: 25, offset: B.offset }); if (B.status) qs.set('status', B.status); if (B.q) qs.set('q', B.q);
+    const r = await call('GET', '/api/bugs?' + qs);
+    B.items = reset ? r.items : B.items.concat(r.items); B.total = r.total; B.counts = r.counts || B.counts; B.offset = B.items.length;
+  } catch (e) { toast(e.message, 'err'); }
+  B.loading = false; if (S.place === 'bugs') { const f = document.activeElement && document.activeElement.id === 'bq'; renderMain(); if (f) { const i = $('#bq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
+}
+const IDEA_CHIPS = [['new', 'Open'], ['accepted', 'Accepted'], ['rejected', 'Rejected'], ['', 'All']];
+function viewIdeas() {
+  const I = S.ideas, c = I.counts || {}, n = k => k === '' ? Object.values(c).reduce((a, x) => a + x, 0) : c[k] || 0;
+  return html`
+    <div class="chips" role="group" aria-label="Status">${IDEA_CHIPS.map(([k, l]) => html`<button class="chip" data-act="ideaStatus" data-s="${k}" aria-pressed="${String(I.status === k)}">${l}<span class="num">${n(k)}</span></button>`)}</div>
+    <div class="row" style="margin-bottom:12px"><label class="sr" for="iq">Search ideas</label><input class="in grow" id="iq" type="search" placeholder="Search text, player or #number" value="${I.q}"></div>
+    <div class="list">${I.items.length ? I.items.map(x => { const st = IDEA_ST[x.status] || [x.status, '']; const key = 'idea:' + x.id; return html`<div class="item" data-open="idea" data-id="${x.id}" data-key="${key}" tabindex="0" role="button" aria-selected="${String(S.sel === key || (S.open && S.open.kind === 'idea' && S.open.id === x.id))}">
+      <div><div class="what"><span class="num">#${x.id}</span><span class="tag ${st[1]}">${st[0]}</span>${x.source === 'web' ? html`<span class="tag ice">website</span>` : ''}${x.unread ? html`<span class="tag hot">${plural(x.unread, 'new message')}</span>` : ''}<time class="num">${ago(x.created_at)}</time></div>
+        <p class="title">${x.text}</p><p class="text">${x.author}</p></div></div>`; }) : html`<div class="empty">${I.loading ? 'Loading…' : 'No ideas match.'}</div>`}</div>`;
+}
+async function loadIdeas() {
+  const I = S.ideas; I.loading = true;
+  try { const qs = new URLSearchParams({ limit: 100 }); if (I.status) qs.set('status', I.status); if (I.q) qs.set('q', I.q); const r = await call('GET', '/api/suggestions?' + qs); I.items = r.items; I.total = r.total; I.counts = r.counts || I.counts; }
+  catch (e) { toast(e.message, 'err'); }
+  I.loading = false; if (S.place === 'ideas') { const f = document.activeElement && document.activeElement.id === 'iq'; renderMain(); if (f) { const i = $('#iq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
+}
+
+/* ============================================================ Community and More (phase 1: open the current dashboard) */
+const COMMUNITY = [
+  ['Gift codes', [['codes', 'Gift codes', 'Add, end and list codes', 'gift'], ['redeem', 'Auto-redeem', 'Codes redeemed for linked players', 'gift']]],
+  ['Posts', [['patch', 'Patch notes', 'Announce fixed bugs', 'wrench'], ['timers', 'Timed messages', 'Scheduled and repeating posts', 'clock'], ['giveaways', 'Giveaways', 'Start, end and reroll', 'party'], ['info', 'Info channel', 'Rules and how to report', 'list'], ['partners', 'Promoter servers', 'Servers that get our posts', 'globe']]],
+  ['Members', [['players', 'Players', 'Linked game accounts, notes, actions', 'users'], ['warnings', 'Warnings', 'Cases, timeouts and bans', 'alert'], ['invites', 'Invites', 'Who invited whom', 'userplus'], ['welcome', 'Welcome', 'Greeting for new members', 'userplus'], ['access', 'Access & languages', 'Language chats, device question', 'globe'], ['rolemenus', 'Role menus', 'Self-assign roles', 'tag']]],
+  ['Moderation', [['queue', 'Reports & appeals', 'History and raid mode', 'shield'], ['msglog', 'Deleted messages', 'What was deleted or edited', 'list']]]
+];
+const MORE = [
+  ['Stats', [['insights', 'Insights', 'Bugs by area, version and time', 'chart'], ['moderators', 'Moderators', 'Who handled what, and how fast', 'timer'], ['status', 'Server status', 'Bot, website, backups, jobs', 'pulse'], ['log', 'Activity log', 'Everything the bot and staff did', 'list']]],
+  ['Settings', [['panel', 'Bug panel', 'The report message in Discord', 'bug'], ['channels', 'Channels', 'Where the bot reads and posts', 'hash'], ['website', 'Website', 'Reports, ideas, status, notifications', 'globe'], ['translations', 'Translations', 'Texts in every language', 'globe'], ['bot', 'Bot profile', 'Name, picture, staff login', 'bot'], ['data', 'Data & backups', 'Backups and clean-up', 'db'], ['mod', 'Auto-mod & safety', 'Honeypot, scam guard, auto-mod', 'shield'], ['devs', 'Developers', 'The developers’ bug list', 'users']]]
+];
+const MOD_OK = ['queue', 'msglog', 'insights', 'moderators', 'status', 'players', 'warnings'];
+function cardGrid(groups) {
+  return html`<p class="note">These pages open in the current dashboard while the new one is being built.</p>${groups.map(([title, cards]) => {
+    const list = cards.filter(c => !isMod() || MOD_OK.includes(c[0])); if (!list.length) return '';
+    return html`<h2 class="section-title">${title}</h2><div class="cards">${list.map(([k, t, d, ic]) => html`<a class="card" href="${CFG.classic}#${k}">${icon(ic)}<div><b>${t}</b><span>${d}</span></div></a>`)}</div>`;
+  })}`;
+}
+const viewCommunity = () => cardGrid(COMMUNITY);
+const viewMore = () => cardGrid(MORE);
+
+/* ============================================================ + New (gift code, announcement, game version) */
+function openNew(tab) {
+  closeSheet(); S.newTab = tab || S.newTab || 'code';
+  const T = S.newTab, st = S.settings || {};
+  root.insertAdjacentHTML('beforeend', String(html`<div class="scrim" id="sheet" data-act="sheetBg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
+    <h2 id="sheet-h">New</h2>
+    <div class="seg" role="group" aria-label="What">${[['code', 'Gift code'], ['ann', 'Announcement'], ['ver', 'Game version']].map(([k, l]) => html`<button type="button" data-act="newTab" data-t="${k}" aria-pressed="${String(T === k)}">${l}</button>`)}</div>
+    ${T === 'code' ? html`<form data-act-submit="newCode"><div class="field"><label for="nc-code">Code</label><input class="in" id="nc-code" maxlength="40" autocomplete="off" required></div>
+        <div class="field"><label for="nc-reward">Reward <span class="hint">(optional)</span></label><input class="in" id="nc-reward" maxlength="100" placeholder="e.g. 500 gems"></div>
+        <div class="field"><label for="nc-h">Ends after</label><select class="in" id="nc-h"><option value="">Never</option>${[6, 12, 24, 48, 72, 168].map(h => html`<option value="${h}" ${h === 48 ? 'selected' : ''}>${h < 48 ? h + ' hours' : h / 24 + ' days'}</option>`)}</select></div>
+        <label class="check" style="margin-bottom:14px"><input type="checkbox" id="nc-ann" checked> Announce it in Discord</label>
+        <div class="row"><div class="grow"></div><button class="btn ghost" type="button" data-act="closeSheet">Cancel</button><button class="btn main" type="submit">Add gift code</button></div></form>`
+    : T === 'ann' ? html`<form data-act-submit="newAnn"><div class="field"><label for="na-title">Title <span class="hint">(optional)</span></label><input class="in" id="na-title" maxlength="200"></div>
+        <div class="field"><label for="na-text">Message</label><textarea class="in" id="na-text" maxlength="3800" required></textarea></div>
+        <div class="row" style="align-items:flex-end"><div class="field grow"><label for="na-ch">Channel</label><select class="in" id="na-ch">${(S.channels || []).map(c => html`<option value="${c.id}" ${String(c.id) === String(st.announce_channel_id || st.patchnotes_channel_id || '') ? 'selected' : ''}>#${c.name}</option>`)}</select></div>
+          <div class="field"><label for="na-tag">Tag</label><select class="in" id="na-tag"><option value="">Nobody</option><option value="here">@here</option><option value="everyone">@everyone</option></select></div></div>
+        <label class="check" style="margin-bottom:14px"><input type="checkbox" id="na-pt"> Also post in promoter servers</label>
+        <div class="row"><div class="grow"></div><button class="btn ghost" type="button" data-act="closeSheet">Cancel</button><button class="btn main" type="submit">Post announcement</button></div></form>`
+    : html`<form data-act-submit="newVer"><div class="field"><label for="nv">Game version players are on</label><input class="in" id="nv" maxlength="40" value="${st.game_version || ''}" required></div>
+        <p class="hint">New bug reports are stamped with it, and fixed bugs get “fixed in” this version.</p>
+        <div class="row"><div class="grow"></div><button class="btn ghost" type="button" data-act="closeSheet">Cancel</button><button class="btn main" type="submit">Save version</button></div></form>`}
+  </div></div>`));
+  const f = $('#sheet input:not([type=checkbox]), #sheet textarea'); if (f) f.focus();
+  if (T === 'ann' && !S.channels) call('GET', '/api/channels').then(r => { S.channels = r.channels; if (S.newTab === 'ann' && $('#sheet')) openNew('ann'); }).catch(() => {});
+}
+function closeSheet() { const s = $('#sheet'); if (s) s.remove(); }
+
+/* ============================================================ search (Ctrl K) */
+function allPages() {
+  return [['todo', 'To do'], ['bugs', 'Bugs'], ...(isMod() ? [] : [['ideas', 'Ideas']])].map(([k, l]) => ({ label: l, hint: 'Page', go: () => go(k) }))
+    .concat(COMMUNITY.concat(MORE).flatMap(([g, cards]) => cards.filter(c => !isMod() || MOD_OK.includes(c[0])).map(c => ({ label: c[1], hint: g, href: CFG.classic + '#' + c[0], words: c[2] }))));
+}
+function openSearch() {
+  closeSearch();
+  root.insertAdjacentHTML('beforeend', '<div class="palette" id="pal" data-act="palBg"><div class="box" role="dialog" aria-modal="true" aria-label="Search"><input id="palq" placeholder="Search pages, #bug number, ideas or players" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="pall"><ul id="pall" role="listbox"></ul></div></div>');
+  S.pal = { items: [], sel: 0, seq: 0 }; $('#palq').focus(); palFill('');
+}
+function closeSearch() { const p = $('#pal'); if (p) p.remove(); S.pal = null; }
+async function palFill(qv) {
+  const P = S.pal; if (!P) return; const seq = ++P.seq, ql = qv.trim().toLowerCase();
+  let items = allPages().filter(x => !ql || (x.label + ' ' + (x.words || '') + ' ' + x.hint).toLowerCase().includes(ql.replace(/^#/, ''))).slice(0, 8);
+  const m = ql.match(/^#?(\d+)$/);
+  if (m) items = [{ label: 'Bug #' + m[1], hint: 'Open', pane: ['bug', +m[1]] }].concat(isMod() ? [] : [{ label: 'Idea #' + m[1], hint: 'Open', pane: ['idea', +m[1]] }]).concat(items);
+  palPaint(items);
+  if (ql.length >= 3 && !m) {
+    try {
+      const [b, pl, ideas] = await Promise.all([call('GET', '/api/bugs?limit=5&q=' + encodeURIComponent(ql)), call('GET', '/api/players/find?q=' + encodeURIComponent(ql)).catch(() => ({ items: [] })),
+        isMod() ? Promise.resolve({ items: [] }) : call('GET', '/api/suggestions?limit=5&q=' + encodeURIComponent(ql))]);
+      if (!S.pal || seq !== S.pal.seq) return;
+      items = items.concat(b.items.map(x => ({ label: '#' + x.id + ' ' + x.summary, hint: 'Bug', pane: ['bug', x.id] })),
+        ideas.items.map(x => ({ label: x.text.slice(0, 70), hint: 'Idea #' + x.id, pane: ['idea', x.id] })),
+        pl.items.slice(0, 5).map(x => ({ label: x.name, hint: 'Player', href: CFG.classic + '#players' })));
+      palPaint(items);
+    } catch (e) { /* offline */ }
+  }
+}
+function palPaint(items) {
+  const P = S.pal; if (!P) return; P.items = items; P.sel = Math.min(P.sel, Math.max(0, items.length - 1));
+  $('#pall').innerHTML = items.length ? items.map((x, i) => `<li role="option" data-i="${i}" aria-selected="${i === P.sel}">${esc(x.label)}<small>${esc(x.hint)}</small></li>`).join('') : '<li aria-disabled="true">Nothing found</li>';
+}
+function palPick(i) {
+  const x = S.pal && S.pal.items[i]; if (!x) return; closeSearch();
+  if (x.pane) { if (!['todo', 'bugs', 'ideas'].includes(S.place)) { S.place = 'bugs'; load('bugs'); } openPane(x.pane[0], x.pane[1]); }
+  else if (x.href) location.href = x.href; else if (x.go) x.go();
+}
+
+/* ============================================================ events */
+root.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act], [data-go], [data-open], .item[data-key]'); if (!el) return;
+  if (el.dataset.go) { e.preventDefault(); if (S.open) { S.open = null; stopChat(); } go(el.dataset.go); syncHash(); return; }
+  const act = el.dataset.act;
+  if (!act && el.dataset.open) { openPane(el.dataset.open, +el.dataset.id); return; }
+  if (!act && el.classList.contains('item')) { if (e.target.closest('button, a, input, select, textarea, form')) return; const it = findItem(el.dataset.key); const p = it && paneOf(it); if (p) openPane(p[0], p[1]); else if (it) { S.sel = el.dataset.key; renderMain(); } return; }
+  if (act === 'do') { const it = findItem(el.dataset.key); if (it) runAction(it, +el.dataset.n, undefined, el); }
+  else if (act === 'reasonCancel') { S.reasonFor = null; renderMain(); }
+  else if (act === 'filter') { S.todoFilter = el.dataset.f; renderMain(); }
+  else if (act === 'closePane') closePane();
+  else if (act === 'paneDo') {
+    const d = S.paneData, ref = d.bug ? { status: d.bug.status, dup_suggest: d.bug.dup_suggest } : d.appeal ? { kind: d.appeal.kind } : {};
+    const it = pseudoItem(el.dataset.kind, isNaN(+el.dataset.id) ? el.dataset.id : +el.dataset.id, ref), a = actionsFor(it)[+el.dataset.n];
+    if (a[4] && a[4].link) { location.href = CFG.classic + '#' + a[4].link; return; }
+    if (a[4] && a[4].reason) { S.paneReason = { kind: it.kind, id: it.id, n: +el.dataset.n, label: a[4].reason, name: a[0], tone: a[2], ref }; paintPane(); const f = $('#pwhy'); if (f) f.focus(); return; }
+    await paneRun(it, a, undefined, el);
+  }
+  else if (act === 'paneReasonCancel') { S.paneReason = null; paintPane(); }
+  else if (act === 'translate') {
+    busy(el, true, '…');
+    try { const r = await call('POST', '/api/' + el.dataset.kind + '/' + el.dataset.id + '/translate', { target: S.trLang }); if (S.paneData) { S.paneData.tr = r; paintPane(); } }
+    catch (err) { busy(el, false); toast(err.message, 'err'); }
+  }
+  else if (act === 'file' || act === 'chatFile') {
+    try { const u = await fileUrl(act === 'file' || el.dataset.kind === 'bug' ? 'bugs' : 'suggestions', el.dataset.id, el.dataset.fid); window.open(u, '_blank', 'noopener'); } catch (err) { toast(err.message, 'err'); }
+  }
+  else if (act === 'merge') {
+    if (!confirm('Close #' + el.dataset.id + ' as a duplicate of #' + el.dataset.into + '?')) return;
+    try { await call('PUT', '/api/bugs/' + el.dataset.id, { duplicate_of: +el.dataset.into, reason: 'This bug was already reported.' }); toast('Merged into #' + el.dataset.into); S.paneData = null; render(); loadTodo(true); }
+    catch (err) { toast(err.message, 'err'); }
+  }
+  else if (act === 'dm') {
+    const t = $('#dm').value.trim(); if (!t) return toast('Write the message first.', 'err');
+    busy(el, true, 'Sending…'); try { await call('POST', '/api/bugs/' + el.dataset.id + '/reply', { text: t }); toast('Sent by DM'); $('#dm').value = ''; } catch (err) { toast(err.message, 'err'); } busy(el, false);
+  }
+  else if (act === 'ticketClose') {
+    if (!confirm('Close the ticket? The conversation is saved with the bug.')) return;
+    try { await call('POST', '/api/bugs/' + el.dataset.id + '/ticket/close', { note: '' }); toast('Ticket closed and saved with the bug'); S.paneData = null; stopChat(); render(); loadTodo(true); } catch (err) { toast(err.message, 'err'); }
+  }
+  else if (act === 'changes') {
+    const t = $('#chg').value.trim(); if (!t) return toast('Write what changed first.', 'err');
+    busy(el, true, 'Posting…'); try { await call('PUT', '/api/suggestions/' + el.dataset.id, { changes: t }); toast('Posted – players can see what changed'); S.paneData = null; render(); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+  }
+  else if (act === 'bugStatus') { S.bugs.status = el.dataset.s; renderMain(); loadBugs(true); }
+  else if (act === 'bugsMore') loadBugs(false);
+  else if (act === 'ideaStatus') { S.ideas.status = el.dataset.s; renderMain(); loadIdeas(); }
+  else if (act === 'new') openNew();
+  else if (act === 'newTab') openNew(el.dataset.t);
+  else if (act === 'closeSheet' || (act === 'sheetBg' && e.target === el)) closeSheet();
+  else if (act === 'search') openSearch();
+  else if (act === 'palBg' && e.target === el) closeSearch();
+  else if (act === 'logout') { try { await call('POST', '/api/auth/logout'); } catch (err) { /* already out */ } location.reload(); }
+});
+async function paneRun(it, a, why, el) {
+  if (el) busy(el, true, '…');
+  try {
+    const msg = await a[3](it, why); S.paneReason = null; toast(msg);
+    S.done.push({ kind: it.kind, id: it.id, title: (S.paneData.bug && S.paneData.bug.summary) || (S.paneData.idea && S.paneData.idea.text) || KIND[it.kind][0], label: msg, ts: now() }); saveDone();
+    if (S.todo) S.todo.items = S.todo.items.filter(i => !(paneOf(i) && paneOf(i)[0] === S.open.kind && paneOf(i)[1] === S.open.id && i.kind === it.kind));
+    S.paneData = null; render(); loadTodo(true); if (S.place === 'bugs') loadBugs(true); if (S.place === 'ideas') loadIdeas();
+  } catch (err) { if (el) busy(el, false); toast(err.message, 'err'); if (err.status === 400 || err.status === 404) { S.paneReason = null; S.paneData = null; render(); loadTodo(true); } }
+}
+root.addEventListener('submit', async e => {
+  const f = e.target; e.preventDefault(); const act = f.dataset.actSubmit, btn = f.querySelector('[type=submit]');
+  if (act === 'reason') {
+    const R = S.reasonFor, it = R && findItem(R.key), v = $('#why').value.trim();
+    if (!it) return; if (!v && !R.optional) { $('#why').focus(); return toast('Write a short reason first.', 'err'); }
+    runAction(it, R.n, v, btn);
+  } else if (act === 'paneReason') {
+    const R = S.paneReason, v = $('#pwhy').value.trim(); if (!R) return;
+    const it = pseudoItem(R.kind, R.id, R.ref), a = actionsFor(it)[R.n];
+    if (!v && !(a[4] && a[4].optional)) { $('#pwhy').focus(); return toast('Write a short reason first.', 'err'); }
+    paneRun(it, a, v, btn);
+  } else if (act === 'chatSend') {
+    const ta = $('#chatmsg'), fi = $('#chatfiles'), text = ta.value.trim(), files = fi ? [...fi.files].slice(0, 4) : [];
+    if (!text && !files.length) return toast('Write a message first.', 'err');
+    const fd = new FormData(); fd.append('text', text); files.forEach(x => fd.append('files', x));
+    busy(btn, true, 'Sending…');
+    try { await call('POST', f.dataset.kind === 'bug' ? '/api/bugs/' + f.dataset.id + '/ticket/send' : '/api/suggestions/' + f.dataset.id + '/chat', fd); ta.value = ''; if (fi) fi.value = ''; busy(btn, false); startChat(f.dataset.kind, +f.dataset.id); loadTodo(true); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  } else if (act === 'newCode') {
+    const code = $('#nc-code').value.trim(); if (!code) return;
+    busy(btn, true, 'Adding…');
+    try { const r = await call('POST', '/api/giftcodes', { code, reward: $('#nc-reward').value.trim(), hours: $('#nc-h').value ? +$('#nc-h').value : null, announce: $('#nc-ann').checked }); closeSheet(); toast(r.warning || 'Gift code ' + ((r.item && r.item.code) || code) + ' added'); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  } else if (act === 'newAnn') {
+    const text = $('#na-text').value.trim(); if (text.length < 2) return;
+    busy(btn, true, 'Posting…');
+    try { const r = await call('POST', '/api/announce', { title: $('#na-title').value.trim(), text, channel_id: $('#na-ch').value, role_id: $('#na-tag').value, image: '', partners: $('#na-pt').checked }); closeSheet(); toast('Posted in #' + r.channel + (r.partners ? ' and ' + plural(r.partners, 'promoter server') : '')); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  } else if (act === 'newVer') {
+    const v = $('#nv').value.trim(); if (!v) return;
+    busy(btn, true, 'Saving…');
+    try { await call('PUT', '/api/settings', { game_version: v }); if (S.settings) S.settings.game_version = v; closeSheet(); toast('Game version is now ' + v); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  }
+});
+root.addEventListener('change', e => {
+  const el = e.target;
+  if (el.dataset.actChange === 'canned') { const r = (S.replies || []).find(x => String(x.id) === el.value), ta = $('#' + el.dataset.target); if (r && ta) { ta.value = r.text.replace(/\{bug\}/g, '#' + (S.open ? S.open.id : '')).replace(/\{summary\}/g, S.paneData && S.paneData.bug ? S.paneData.bug.summary : ''); ta.focus(); } el.value = ''; }
+});
+root.addEventListener('toggle', e => { if (e.target.dataset && e.target.dataset.fold === 'done') S.doneOpen = e.target.open; }, true);
+let searchTimer = null;
+root.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id === 'bq') { clearTimeout(searchTimer); searchTimer = setTimeout(() => { S.bugs.q = el.value.trim(); loadBugs(true); }, 300); }
+  else if (el.id === 'iq') { clearTimeout(searchTimer); searchTimer = setTimeout(() => { S.ideas.q = el.value.trim(); loadIdeas(); }, 300); }
+  else if (el.id === 'palq') palFill(el.value);
+});
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); S.pal ? closeSearch() : openSearch(); return; }
+  if (S.pal) {
+    if (e.key === 'Escape') closeSearch();
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); S.pal.sel = Math.max(0, Math.min(S.pal.items.length - 1, S.pal.sel + (e.key === 'ArrowDown' ? 1 : -1))); palPaint(S.pal.items); }
+    else if (e.key === 'Enter') { e.preventDefault(); palPick(S.pal.sel); }
+    return;
+  }
+  if (e.key === 'Escape' && $('#sheet')) { closeSheet(); return; }
+  if (e.target.closest && e.target.closest('input, textarea, select')) { if (e.key === 'Escape') e.target.blur(); return; }
+  if (e.key === 'Escape') { if ($('#sheet')) closeSheet(); else if (S.open) closePane(); return; }
+  if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('item')) { e.target.click(); return; }
+  if (e.key === 'j' || e.key === 'k') {
+    const rows = $$('#main .item[data-key]'); if (!rows.length) return;
+    let i = rows.findIndex(r => r.dataset.key === S.sel); i = i < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, i + (e.key === 'j' ? 1 : -1)));
+    S.sel = rows[i].dataset.key; rows.forEach(r => r.setAttribute('aria-selected', String(r.dataset.key === S.sel))); rows[i].focus(); rows[i].scrollIntoView({ block: 'nearest' });
+  }
+});
+root.addEventListener('click', e => { const li = e.target.closest && e.target.closest('#pall li[data-i]'); if (li) palPick(+li.dataset.i); });
+
+/* ============================================================ loading and start */
+function load(place) {
+  if (place === 'todo') loadTodo();
+  if (place === 'bugs') loadBugs(true);
+  if (place === 'ideas') loadIdeas();
+}
+function renderLogin(msg) {
+  root.innerHTML = String(html`<div class="login"><div class="box"><img src="../icons/icon-192.png" alt="">
+    <h1 style="font-size:22px;margin:14px 0 6px">WOS EU1 staff</h1><p class="hint">${msg || 'Log in with your Discord account. Your staff role decides what you can see.'}</p>
+    <a class="btn main" style="margin-top:14px" href="${S.base.replace(/\/+$/, '')}/api/auth/login?next=${encodeURIComponent(location.pathname)}">Log in with Discord</a>
+    <p class="hint" style="margin-top:18px"><a href="${CFG.classic}">Open the current dashboard</a></p></div></div>`);
+}
+async function boot() {
+  loadDone();
+  try { S.user = await call('GET', '/api/auth/me'); }
+  catch (e) { return renderLogin(e.status === 401 || e.status === 403 ? '' : e.message); }
+  const h = readHash();
+  if (h.place) S.place = h.place;
+  if (h.pane) S.open = h.pane;
+  try { S.overview = await call('GET', '/api/overview'); } catch (e) { /* the frame works without it */ }
+  render(); syncHash(); load(S.place); if (S.place !== 'todo') loadTodo(true);
+  call('GET', '/api/settings').then(r => { S.settings = r.settings; }).catch(() => {});
+  call('GET', '/api/replies').then(r => { S.replies = r.items; }).catch(() => { S.replies = []; });
+  setInterval(() => { if (!document.hidden && !$('#sheet')) loadTodo(true); }, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadTodo(true); });
+}
+boot();
+})();
+</script>
+</body>
+</html>
