@@ -353,6 +353,7 @@ const DEMO = (() => {
     bug(57, 'Wrong price for iron ingots', 'rejected', 70 * H, { area: 'Shop', extra: { reason: 'Works as intended' } }),
     bug(56, 'هذا تقرير طويل جدًا عن مشكلة في المتجر '.repeat(40).trim(), 'new', 8 * H, { area: 'Shop', reporter: 'Omar', text: 'هذا تقرير طويل جدًا عن مشكلة في المتجر '.repeat(45) })
   ];
+  for (let i = 55; i >= 30; i--) bugs.push(bug(i, ['Quest log', 'Map lag', 'Mail', 'Shop icon', 'Rally timer'][i % 5] + ' issue ' + i, 'fixed', (80 + (55 - i) * 9) * H, { area: ['Quests', 'Map', 'Mail', 'Shop', 'Events'][i % 5] }));
   const chats = { 61: [{ id: '1', ts: t - 4 * H, kind: 'system', author: 'WOS EU1', text: '👋 Standard welcome message sent to the player', files: [] },
     { id: '2', ts: t - 3 * H, kind: 'staff', author: 'Freya', text: 'Which pet was it? A screenshot helps.', files: [] },
     { id: '3', ts: t - 600, kind: 'player', author: 'Ida', text: 'The dragon pet. It stays at 0% even after a restart.', files: [] }] };
