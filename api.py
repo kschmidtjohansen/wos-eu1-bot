@@ -130,7 +130,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     MOD_READ = [r"/api/overview", r"/api/health", r"/api/channels", r"/api/settings", r"/api/bot", r"/api/status", r"/api/insights",
                 r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/ticket", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles",
                 r"/api/queue", r"/api/reports", r"/api/appeals",
-                r"/api/players/find", r"/api/players/\d+", r"/api/msglog", r"/api/replies"]
+                r"/api/players/find", r"/api/players/\d+", r"/api/msglog", r"/api/replies", r"/api/todo"]
     MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/ticket"), ("POST", r"/api/bugs/\d+/ticket/send"), ("POST", r"/api/bugs/\d+/ticket/close"), ("POST", r"/api/bugs/\d+/translate"),
                  ("POST", r"/api/reports/\d+"), ("POST", r"/api/appeals/\d+"), ("POST", r"/api/raid"), ("POST", r"/api/lockdown"), ("POST", r"/api/spikes"),
                  ("POST", r"/api/players/\d+/notes"), ("POST", r"/api/players/\d+/action")]
@@ -600,6 +600,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
 
     # ------------------------------------------------------------ Discord login for the dashboard
     pending_logins = {}       # state -> time; the state is also kept in a cookie for the same browser
+    login_next: dict = {}        # login state -> /staff/... page to return to (v2 dashboard)
 
     def oauth_conf():
         return {"secret": store.get_raw("oauth_secret") or "", "redirect": store.get_raw("oauth_redirect") or "",
@@ -624,6 +625,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         for k in [k for k, t in pending_logins.items() if now - t > 600]:
             pending_logins.pop(k, None)
         pending_logins[state] = now
+        nxt = request.query.get("next", "")
+        if re.fullmatch(r"/staff/[A-Za-z0-9/_-]*", nxt or ""):        # only back into the staff pages (no open redirect)
+            login_next[state] = nxt
         from urllib.parse import urlencode
         url = "https://discord.com/oauth2/authorize?" + urlencode({"client_id": client_id(), "response_type": "code",
               "scope": "identify", "redirect_uri": c["redirect"], "state": state, "prompt": "none"})
@@ -681,6 +685,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             return await partner_callback(request, state, code)
         if not state or state != request.cookies.get("wos_state") or pending_logins.pop(state, None) is None:
             return page("This login link expired. Please try again.", 400)
+        back_to = login_next.pop(state, None) or c["return_to"]
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
             async with s.post(f"{DISCORD_API}/oauth2/token", data={
                     "client_id": client_id(), "client_secret": c["secret"], "grant_type": "authorization_code",
@@ -710,7 +715,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         avatar = str(m.display_avatar.replace(size=64).url) if m else ""
         token = store.create_session(uid, name, avatar)
         store.log_event("settings", f"{name} logged in to the dashboard ({'full access' if role == 'admin' else 'moderator view'})", uid, name)
-        resp = web.HTTPFound(c["return_to"])
+        resp = web.HTTPFound(back_to)
         resp.set_cookie(SESSION_COOKIE, token, max_age=store.SESSION_DAYS * 86400, httponly=True, samesite="Lax", path="/",
                         secure=c["redirect"].startswith("https://"))
         resp.del_cookie("wos_state", path="/api/auth/")
@@ -1928,6 +1933,88 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         if res["failed"] and not res["changed"]:
             raise ApiError(403, "I couldn't change the channels – give the bot the “Manage Channels” permission.")
         return web.json_response(dict(raid_dict(), changed=res["changed"], failed=res["failed"]))
+
+    @routes.get("/api/todo")
+    async def todo(request):
+        """Everything waiting for a person, for the v2 start screen – one request. Moderators get only their part."""
+        return web.json_response(todo_payload(request.get("role", "admin")), headers={"Cache-Control": "no-store"})
+
+    def todo_payload(role: str) -> dict:
+        admin, now, items = role == "admin", int(time.time()), []
+        def add(_kind, _id, _ts, _title, _text="", _who="", _urgent=False, **ref):
+            items.append({"kind": _kind, "id": _id, "ts": int(_ts or now), "title": _title, "text": (_text or "")[:300], "who": _who or "",
+                          "urgent": bool(_urgent), "ref": ref})
+        open_bugs = store.db.execute("SELECT * FROM bug_reports WHERE duplicate_of IS NULL AND status IN "
+                                     "('new','investigating','passed','being_investigated') ORDER BY created_at").fetchall()
+        for r in open_bugs:
+            title = r["summary"] or r["ai_title"] or (r["text"] or "")[:80]
+            ref = {"status": r["status"], "severity": r["severity"] or "", "area": r["area"] or "", "source": r["source"] or "discord"}
+            crit = (r["severity"] or "") == "critical"
+            if r["dup_suggest"] and r["status"] in ("new", "investigating"):
+                d = store.get_bug(r["dup_suggest"])
+                add("bug_dup", r["id"], r["created_at"], title, r["text"], r["reporter_name"], False, dup_suggest=r["dup_suggest"],
+                    dup_title=(d["summary"] if d is not None else "") or "", dup_score=r["dup_score"] or 0, **ref)
+            elif r["status"] == "new":
+                add("bug_new", r["id"], r["created_at"], title, r["text"], r["reporter_name"], crit, **ref)
+            elif r["status"] == "investigating":
+                add("bug_info", r["id"], r["created_at"], title, r["text"], r["reporter_name"], False, **ref)
+            elif admin:
+                add("bug_admin", r["id"], r["created_at"], title, r["text"], r["reporter_name"], crit, **ref)
+            if admin and r["dev_reply_ts"] and (r["dev_reply_ts"] or 0) > (r["dev_ts"] or 0):
+                add("dev_reply", r["id"], r["dev_reply_ts"], title, r["dev_reply"], r["reporter_name"], False, **ref)
+        unread = store.web_unread()
+        for key, n in unread.items():
+            if key > 0:
+                b = store.get_bug(key)
+                if b is not None:
+                    last = store.db.execute("SELECT ts, text, name FROM web_msgs WHERE bug_id=? AND author='player' ORDER BY id DESC LIMIT 1", (key,)).fetchone()
+                    add("chat", key, last["ts"] if last else now, b["summary"] or "Bug #%d" % key, last["text"] if last else "",
+                        last["name"] if last else "", False, bug=key, unread=n)
+            elif admin:
+                sg = store.get_suggestion(-key)
+                if sg is not None:
+                    last = store.db.execute("SELECT ts, text, name FROM web_msgs WHERE bug_id=? AND author='player' ORDER BY id DESC LIMIT 1", (key,)).fetchone()
+                    add("chat", -key, last["ts"] if last else now, (sg["text"] or "")[:80], last["text"] if last else "",
+                        last["name"] if last else "", False, idea=-key, unread=n)
+        if admin:
+            for r in store.db.execute("SELECT * FROM suggestions WHERE status='new' ORDER BY created_at").fetchall():
+                add("idea_new", r["id"], r["created_at"], (r["text"] or "")[:80], r["text"], r["author_name"] or "", False,
+                    source=r["source"] or "discord")
+        for r in store.msg_reports("open"):
+            add("report", r["id"], r["ts"], f"Reported message by {r['target_name'] or 'a member'}", r["content"], "", False,
+                user_id=str(r["target_id"]), channel=r["channel_name"] or "")
+        for a in store.appeals("open"):
+            if a["kind"] == "ban" and not admin:
+                continue
+            add("appeal", a["id"], a["ts"], f"{a['user_name'] or 'A member'} appeals a {a['kind']}", a["text"], a["user_name"] or "", False,
+                kind=a["kind"], user_id=str(a["user_id"]))
+        for sp in (hooks["active_spikes"]() if "active_spikes" in hooks else []):
+            if not sp.get("known"):
+                add("spike", sp["key"], sp["ts"], f"{sp['count']} reports about “{sp['area'] or 'one thing'}” in a short time", "", "", True,
+                    bug=sp.get("bug"), area=sp.get("area") or "")
+        rd = raid_dict()
+        if rd["active"]:
+            add("raid", "raid", rd["since"], "Raid mode is on", f"{rd['joined']} joined while it was on", rd["by"], True, lockdown=rd["lockdown"]["active"])
+        if admin:
+            soon = now + int(store.cfg("giftcodes_remind_hours") or 0) * 3600
+            for gc in store.active_gift_codes(now):
+                if gc["expires_at"] and gc["expires_at"] <= soon:
+                    add("code_ending", gc["id"], gc["expires_at"], f"Gift code {gc['code']} ends soon", gc["reward"] or "", "", False, expires=gc["expires_at"])
+            try:
+                for ch in health_payload()["channels"]:
+                    if ch["configured"] and (not ch["found"] or ch["missing"]):
+                        add("setup", ch["key"], now, f"{ch['label']}: " + ("channel not found" if not ch["found"] else "missing " + ", ".join(ch["missing"])),
+                            "", "", False, key=ch["key"])
+            except Exception:  # noqa: BLE001 – the guild may still be loading
+                pass
+            for j in (hooks["job_health"]() if "job_health" in hooks else []):
+                if j["fails"]:
+                    add("job", j["name"], j["err"] or now, f"Background job “{j['name']}” is failing", j["error"], "", True, fails=j["fails"])
+        items.sort(key=lambda i: (not i["urgent"], i["ts"]))
+        counts: dict = {}
+        for i in items:
+            counts[i["kind"]] = counts.get(i["kind"], 0) + 1
+        return {"generated": now, "counts": counts, "items": items}
 
     @routes.get("/api/queue")
     async def queue(request):
