@@ -130,9 +130,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     MOD_READ = [r"/api/overview", r"/api/health", r"/api/channels", r"/api/settings", r"/api/bot", r"/api/status", r"/api/insights",
                 r"/api/modstats", r"/api/bugs", r"/api/mybugs", r"/api/bugs/\d+", r"/api/bugs/\d+/similar", r"/api/bugs/\d+/ticket", r"/api/bugs/\d+/files/[\w.-]+", r"/api/roles",
                 r"/api/queue", r"/api/reports", r"/api/appeals",
-                r"/api/players/find", r"/api/players/\d+", r"/api/msglog"]
+                r"/api/players/find", r"/api/players/\d+", r"/api/msglog", r"/api/replies"]
     MOD_WRITE = [("PUT", r"/api/bugs/\d+"), ("POST", r"/api/bugs/\d+/reply"), ("POST", r"/api/bugs/\d+/ticket"), ("POST", r"/api/bugs/\d+/ticket/send"), ("POST", r"/api/bugs/\d+/ticket/close"), ("POST", r"/api/bugs/\d+/translate"),
-                 ("POST", r"/api/reports/\d+"), ("POST", r"/api/appeals/\d+"), ("POST", r"/api/raid"), ("POST", r"/api/spikes"),
+                 ("POST", r"/api/reports/\d+"), ("POST", r"/api/appeals/\d+"), ("POST", r"/api/raid"), ("POST", r"/api/lockdown"), ("POST", r"/api/spikes"),
                  ("POST", r"/api/players/\d+/notes"), ("POST", r"/api/players/\d+/action")]
     SECRET_SETTING = re.compile(r"(header|secret|token|key|webhook|url)", re.I)
     DEFAULT_STAFF_ROLES = {"admin": ["Admin", "Boss", "Developer"], "mod": ["Senior Moderator", "Moderator"]}
@@ -1917,7 +1917,16 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
     def raid_dict():
         st = store.raid_state()
         return {"active": st["active"], "since": st["since"], "by": st["by"] or "", "ended": st["ended"], "joined": len(st["joins"]),
-                "gate": '"member_role"' in (store.get_raw("access") or "")}
+                "gate": '"member_role"' in (store.get_raw("access") or ""),
+                "lockdown": hooks["lockdown_dict"]() if "lockdown_dict" in hooks else {"active": False, "channels": []}}
+
+    @routes.post("/api/lockdown")
+    async def lockdown_set(request):
+        d = await body_json(request)
+        res = await hooks["lockdown"](bool(d.get("active")), None, who_id(request), who(request), str(d.get("reason") or "")[:200])
+        if res["failed"] and not res["changed"]:
+            raise ApiError(403, "I couldn't change the channels – give the bot the “Manage Channels” permission.")
+        return web.json_response(dict(raid_dict(), changed=res["changed"], failed=res["failed"]))
 
     @routes.get("/api/queue")
     async def queue(request):

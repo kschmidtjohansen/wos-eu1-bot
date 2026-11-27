@@ -1978,7 +1978,7 @@ class WosBot(discord.Client):
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "ticket_from_dashboard": ticket_from_dashboard, "ticket_messages": ticket_messages,
                          "ticket_send": ticket_send, "ticket_close": ticket_close,
-                         "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "submit_web_idea": submit_web_idea, "honeypot_notice_refresh": honeypot_notice_refresh, "idea_chat_view": idea_chat_view, "idea_can_write": idea_can_write, "idea_reply": idea_reply, "idea_staff_send": idea_staff_send, "idea_follow_url": idea_follow_url, "web_ticket_view": web_ticket_view, "web_can_write": web_can_write, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
+                         "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "submit_web_idea": submit_web_idea, "honeypot_notice_refresh": honeypot_notice_refresh, "lockdown": lockdown, "lockdown_dict": lockdown_dict, "idea_chat_view": idea_chat_view, "idea_can_write": idea_can_write, "idea_reply": idea_reply, "idea_staff_send": idea_staff_send, "idea_follow_url": idea_follow_url, "web_ticket_view": web_ticket_view, "web_can_write": web_can_write, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
                          "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
                          "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
@@ -5777,6 +5777,153 @@ async def ban_cmd(interaction: discord.Interaction, member: discord.Member, reas
                                     + f" – case #{c}.", ephemeral=True)
 
 
+# ------------------------------------------------------------ /purge and /lockdown
+async def purge_messages(channel, count: int, member=None, contains: Optional[str] = None, by_id=None, by_name: str = "") -> int:
+    """Delete the last `count` messages in a channel (optionally only from one member / containing a word).
+    The message log keeps a copy, so staff can still read what was removed."""
+    want = (contains or "").lower().strip()
+    picked, cutoff = [], discord.utils.utcnow() - timedelta(days=14)
+    async for m in channel.history(limit=min(500, count * 5 if (member or want) else count)):
+        if member is not None and m.author.id != member.id:
+            continue
+        if want and want not in (m.content or "").lower():
+            continue
+        picked.append(m)
+        if len(picked) >= count:
+            break
+    for m in picked:
+        store.mark_bot_delete(m.id)
+    young = [m for m in picked if m.created_at > cutoff]
+    old = [m for m in picked if m.created_at <= cutoff]
+    for i in range(0, len(young), 100):                  # bulk delete: up to 100 at a time, under 14 days old
+        chunk = young[i:i + 100]
+        if len(chunk) == 1:
+            await chunk[0].delete()
+        else:
+            await channel.delete_messages(chunk)
+    for m in old:                                       # older ones one by one
+        try:
+            await m.delete()
+        except discord.HTTPException:
+            pass
+    log_event("mod", f"{by_name} deleted {len(picked)} message(s) in #{getattr(channel, 'name', '?')}"
+              + (f" from {member.display_name}" if member is not None else "") + (f" containing “{contains}”" if want else ""), by_id, by_name)
+    return len(picked)
+
+
+@bot.tree.command(name="purge", description="Delete recent messages in this channel (moderators)", guild=_GUILD)
+@app_commands.describe(count="How many messages (1–100)", member="Only this member's messages", contains="Only messages containing this text")
+@app_commands.guild_only()
+async def purge_cmd(interaction: discord.Interaction, count: app_commands.Range[int, 1, 100], member: Optional[discord.Member] = None,
+                    contains: Optional[str] = None):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+    try:
+        n = await purge_messages(interaction.channel, count, member, contains, interaction.user.id, interaction.user.display_name)
+    except discord.Forbidden:
+        return await interaction.followup.send("I need the “Manage Messages” and “Read Message History” permissions in this channel.", ephemeral=True)
+    except discord.HTTPException as exc:
+        return await interaction.followup.send(f"Discord refused: {exc.text or exc}", ephemeral=True)
+    await interaction.followup.send(f"🧹 Deleted {n} message(s)." + (" Copies are in Moderation → Deleted messages." if cfg("msglog_enabled") else ""),
+                                    ephemeral=True)
+
+
+def lockdown_state() -> dict:
+    try:
+        return json.loads(get_raw("lockdown") or "{}")
+    except ValueError:
+        return {}
+
+
+def _chat_channels(g) -> list:
+    """Channels where everyone can talk today – the ones a lockdown closes. The honeypot stays open on purpose."""
+    everyone = g.default_role
+    return [c for c in g.text_channels if c.id != cfg("honeypot_channel_id")
+            and c.permissions_for(everyone).view_channel and c.permissions_for(everyone).send_messages]
+
+
+async def lockdown(on: bool, channels=None, by_id=None, by_name: str = "", reason: str = "") -> dict:
+    """Stop @everyone from writing (on) or give the channels back exactly as they were (off). Staff roles keep writing
+    if they have their own permission. Returns {"changed": n, "failed": [names], "active": bool}."""
+    g = bot.get_guild(GUILD_ID)
+    st = lockdown_state()
+    locked = st.get("channels", {})                   # channel id -> previous @everyone [send_messages, send_messages_in_threads]
+    changed, failed = 0, []
+    if on:
+        for c in (channels if channels is not None else _chat_channels(g)):
+            if str(c.id) in locked:
+                continue
+            ow = c.overwrites_for(g.default_role)
+            prev = [ow.send_messages, ow.send_messages_in_threads]
+            ow.send_messages = False
+            ow.send_messages_in_threads = False
+            try:
+                await c.set_permissions(g.default_role, overwrite=ow, reason=f"Lockdown by {by_name}: {reason}"[:500])
+                locked[str(c.id)] = prev
+                changed += 1
+                try:
+                    await c.send("🔒 " + T("lockdown.on", cfg("default_language")) + (f"\n> {reason}" if reason else ""))
+                except discord.HTTPException:
+                    pass
+            except discord.HTTPException:
+                failed.append(c.name)
+        st = {"channels": locked, "since": st.get("since") or int(time.time()), "by": st.get("by") or by_name, "reason": st.get("reason") or reason}
+    else:
+        keep = {}
+        targets = {str(c.id) for c in channels} if channels is not None else set(locked)
+        for cid, prev in locked.items():
+            c = g.get_channel(int(cid))
+            if cid not in targets:
+                keep[cid] = prev
+                continue
+            if c is None:
+                continue
+            ow = c.overwrites_for(g.default_role)
+            ow.send_messages, ow.send_messages_in_threads = prev if isinstance(prev, list) else (prev, None)
+            try:
+                await c.set_permissions(g.default_role, overwrite=None if ow.is_empty() else ow, reason=f"Lockdown lifted by {by_name}"[:500])
+                changed += 1
+                try:
+                    await c.send("🔓 " + T("lockdown.off", cfg("default_language")))
+                except discord.HTTPException:
+                    pass
+            except discord.HTTPException:
+                failed.append(c.name)
+                keep[cid] = prev
+        st = {"channels": keep, "since": st.get("since") if keep else None, "by": st.get("by") if keep else None, "reason": st.get("reason") if keep else None}
+    put_raw("lockdown", json.dumps(st))
+    if changed:
+        log_event("mod", f"{'Locked' if on else 'Unlocked'} {changed} channel(s) – {by_name}" + (f": {reason}" if reason and on else "")
+                  + (f". Failed: {', '.join(failed)[:200]}" if failed else ""), by_id, by_name)
+    return {"changed": changed, "failed": failed, "active": bool(st.get("channels"))}
+
+
+def lockdown_dict() -> dict:
+    st = lockdown_state()
+    g = bot.get_guild(GUILD_ID)
+    names = [getattr(g.get_channel(int(c)), "name", "?") for c in st.get("channels", {})] if g else []
+    return {"active": bool(st.get("channels")), "channels": names, "since": st.get("since"), "by": st.get("by") or "", "reason": st.get("reason") or ""}
+
+
+@bot.tree.command(name="lockdown", description="Stop everyone from writing – this channel or all chat channels (moderators)", guild=_GUILD)
+@app_commands.describe(action="Lock or unlock", where="This channel or every channel where players chat", reason="Shown in the locked channels")
+@app_commands.choices(action=[app_commands.Choice(name="Lock", value="on"), app_commands.Choice(name="Unlock", value="off")],
+                      where=[app_commands.Choice(name="This channel", value="here"), app_commands.Choice(name="All chat channels", value="all")])
+@app_commands.guild_only()
+async def lockdown_cmd(interaction: discord.Interaction, action: app_commands.Choice[str], where: app_commands.Choice[str], reason: Optional[str] = None):
+    if not is_mod(interaction.user):
+        return await interaction.response.send_message("Moderators only.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+    chans = [interaction.channel] if where.value == "here" else None
+    res = await lockdown(action.value == "on", chans, interaction.user.id, interaction.user.display_name, reason or "")
+    if not res["changed"] and not res["failed"]:
+        return await interaction.followup.send("Nothing to change – " + ("already locked." if action.value == "on" else "nothing is locked."), ephemeral=True)
+    await interaction.followup.send(f"{'🔒 Locked' if action.value == 'on' else '🔓 Unlocked'} {res['changed']} channel(s)."
+                                    + (f" Couldn't change: {', '.join(res['failed'])[:300]} – I need “Manage Channels” there." if res["failed"] else ""),
+                                    ephemeral=True)
+
+
 # ------------------------------------------------------------ more auto-mod rules
 _LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i"})
 _recent_text: dict = {}           # user_id -> [(ts, normalized text)]
@@ -7376,6 +7523,11 @@ async def start_raid(by: str, by_id=None, joins=None, auto: bool = False) -> dic
     st = {"active": True, "since": int(time.time()), "by": by, "joins": joins, "ended": None, "alert": alert}
     store.save_raid(st)
     log_event("mod", f"Raid mode ON – {len(joins)} joins in {cfg('raid_minutes')} min" if auto else f"Raid mode switched on by {by}", by_id, by)
+    if cfg("raid_lockdown"):
+        try:
+            await lockdown(True, None, by_id, by, "Raid mode")
+        except Exception as exc:  # noqa: BLE001 – raid mode itself is already on
+            print(f"[raid lockdown] {exc!r}")
     return store.raid_state()
 
 
@@ -7387,6 +7539,11 @@ async def lift_raid(by: str, by_id=None) -> dict:
     store.save_raid(st)
     _recent_joins.clear()
     log_event("mod", f"Raid mode lifted by {by} – {len(st['joins'])} joined while it was on", by_id, by)
+    if lockdown_state().get("reason") == "Raid mode":
+        try:
+            await lockdown(False, None, by_id, by)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[raid lockdown] {exc!r}")
     ch = alert_chan("mod_channel_id")
     if ch is not None and st.get("alert"):
         try:

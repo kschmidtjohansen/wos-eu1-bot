@@ -216,6 +216,8 @@ _EN = [
     ("dm.vote_fixed", "Direct messages", "✔️ Good news! Bug **#{id}** – “{title}” – that you also had has been fixed. Thanks for letting us know!"),
     # automatic gift-code redeem
     ("dm.guard", "Direct messages", "🛡️ The bot removed your message because it looked like a scam link. If you didn't send it, your account may be hacked – change your Discord password and turn on two-factor login. (Timeout: {minutes} min)"),
+    ("lockdown.on", "Lockdown", "This channel is locked by the moderators for a moment. You can read, but not write. It will open again soon."),
+    ("lockdown.off", "Lockdown", "This channel is open again. Thanks for waiting!"),
     ("honeypot.title", "Honeypot", "⚠️ Do not post in this channel"),
     ("honeypot.text", "Honeypot", "This channel is a trap for spam bots and hacked accounts. **Anything posted here is deleted, and whoever posted it is removed from the server automatically.**\nPlayers: just ignore this channel."),
     ("dm.honeypot", "Direct messages", "🍯 You posted in a trap channel on the server that only spam bots and hacked accounts use, so the bot removed your message. If you didn't post it, your account may be hacked – change your Discord password and turn on two-factor login."),
@@ -467,6 +469,8 @@ _PL = {
     "devq.notyours": "Odpowiedzieć może tylko gracz, który zgłosił ten błąd.",
     "dm.vote_fixed": "✔️ Dobra wiadomość! Błąd **#{id}** – „{title}” – który też miałeś, został naprawiony. Dziękujemy za zgłoszenie!",
     "dm.guard": "🛡️ Bot usunął Twoją wiadomość, bo wyglądała na link oszustów. Jeśli to nie Ty ją wysłałeś, Twoje konto mogło zostać przejęte – zmień hasło do Discorda i włącz logowanie dwuetapowe. (Wyciszenie: {minutes} min)",
+    "lockdown.on": "Moderatorzy na chwilę zablokowali ten kanał. Możesz czytać, ale nie pisać. Wkrótce zostanie otwarty.",
+    "lockdown.off": "Kanał jest znowu otwarty. Dziękujemy za cierpliwość!",
     "honeypot.title": "⚠️ Nie pisz na tym kanale",
     "honeypot.text": "Ten kanał to pułapka na boty spamujące i przejęte konta. **Wszystko, co tu zostanie napisane, jest usuwane, a autor automatycznie usuwany z serwera.**\nGracze: po prostu ignorujcie ten kanał.",
     "dm.honeypot": "🍯 Napisałeś na kanale-pułapce na serwerze, z którego korzystają tylko boty spamujące i przejęte konta, więc bot usunął Twoją wiadomość. Jeśli to nie Ty ją wysłałeś, Twoje konto mogło zostać przejęte – zmień hasło do Discorda i włącz logowanie dwuetapowe.",

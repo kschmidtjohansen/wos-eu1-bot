@@ -564,6 +564,7 @@ SCHEMA = {
     "guard_enabled": {"type": "bool", "default": True},
     "guard_timeout_minutes": {"type": "int", "default": 60, "min": 0, "max": 10080},
     # honeypot: a channel no real player posts in – spam bots and hacked accounts that post there are removed
+    "raid_lockdown": {"type": "bool", "default": False},
     "honeypot_enabled": {"type": "bool", "default": False},
     "honeypot_channel_id": {"type": "channel", "default": None},
     "honeypot_action": {"type": "choice", "default": "softban", "choices": ["softban", "kick", "ban", "timeout"]},

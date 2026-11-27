@@ -135,6 +135,14 @@ is to proxy `/api` through your server and add the key there – tell me if you 
 - **Fixed in version:** set the *current game version* under Features; it is stamped on bugs when marked fixed.
 - **Area / version / severity filters** on the Bugs page and *Bugs by area / version* on Insights.
 
+- **Honeypot (Moderation → ⚙):** pick a trap channel that real players ignore. Anyone who posts there is
+  soft-banned (removed, last hour of messages deleted, may rejoin) – or kicked, banned or timed out. Staff are never
+  touched. The bot keeps a pinned warning in the channel, DMs the person first, alerts staff and logs a case.
+- **`/purge count [member] [contains]` (mods):** deletes recent messages in a channel; copies stay in *Deleted messages*.
+- **`/lockdown lock|unlock this channel|all chat channels` (mods):** stops everyone from writing; unlocking restores each
+  channel exactly as it was. Also on *Reports & appeals → Raid mode*, and optionally automatic with raid mode.
+- **Ready-made replies in chats:** the replies from Moderation → ⚙ can be inserted in ticket and website chats.
+
 ## The website (`site/`)
 A small multi-page site with a shared menu (Home · Report a bug · Known issues · What's fixed), a mobile menu and an
 English/Polish switch: `index.html`, `report.html`, `known-issues.html`, `changelog.html` (+ `style.css`, `app.js`,

@@ -879,7 +879,7 @@ const FEATURE_KEYS = ['warn_timeout_at', 'warn_timeout_minutes', 'warn_ban_at', 
   'reminders_enabled', 'reminder_mod_hours', 'reminder_admin_hours', 'reminder_critical_hours',
   'bug_areas', 'game_version', 'ticket_details_required', 'web_form_enabled', 'web_ideas_enabled', 'known_issues_enabled', 'known_auto_players', 'game_enabled', 'game_site_url', 'game_check_host', 'game_status_alert',
   'keep_attachments', 'attachment_keep_days', 'backups_enabled', 'auto_block_web', 'auto_block_rejects', 'auto_block_days', 'changelog_enabled',
-  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'devlist_enabled', 'devlist_hour', 'devlist_files', 'spike_enabled', 'spike_count', 'spike_minutes', 'msg_reports_enabled', 'appeals_enabled', 'raid_enabled', 'raid_joins', 'raid_minutes', 'raid_auto_lift_minutes', 'msglog_enabled', 'msglog_days', 'update_notice_enabled',
+  'timezone', 'digest_enabled', 'digest_weekday', 'digest_hour', 'devlist_enabled', 'devlist_hour', 'devlist_files', 'spike_enabled', 'spike_count', 'spike_minutes', 'msg_reports_enabled', 'appeals_enabled', 'raid_enabled', 'raid_lockdown', 'raid_joins', 'raid_minutes', 'raid_auto_lift_minutes', 'msglog_enabled', 'msglog_days', 'update_notice_enabled',
   'report_style', 'info_remind_hours', 'info_close_hours', 'ticket_delete_hours', 'giftcodes_enabled', 'giftcodes_ping', 'giftcodes_role_id', 'giftcodes_new_hours', 'giftcodes_remind_hours', 'giftcodes_delete_expired', 'giftcodes_list', 'giftcodes_site_url', 'drive_enabled', 'drive_every_days', 'drive_keep'];
 const WELCOME_KEYS = ['welcome_enabled', 'welcome_channel_id', 'welcome_message'];
 const GROUP = CHANNEL_KEYS.concat(FEATURE_KEYS, WELCOME_KEYS);
@@ -1255,6 +1255,7 @@ const FSEC = {
       ${numberRow('raid_joins', 'Joins', 'This many new members…', 3, 200, 'joins')}
       ${numberRow('raid_minutes', 'Within', '…within this many minutes.', 1, 60, 'minutes')}
       ${numberRow('raid_auto_lift_minutes', 'Lift by itself after', '0 = stays on until a person lifts it.', 0, 1440, 'minutes')}
+      ${toggleRow('raid_lockdown', 'Also lock the chat', 'When raid mode switches on, nobody can write in the chat channels; lifting raid mode opens them again. Needs “Manage Channels”.')}
     </section>`,
   devlist: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Daily list for the developers</div>
@@ -1313,7 +1314,7 @@ const FSEC = {
         <div><select class="w-select" data-k="honeypot_channel_id" aria-label="Honeypot channel">${channelOptions(S.draft.honeypot_channel_id)}</select></div>
         <div class="full" data-badge="honeypot_channel_id">${badgeFor('honeypot_channel_id')}</div></div>
       <div class="w-row"><div><div class="w-row-label">What happens to them</div><div class="w-row-desc">Soft-ban = removed and their recent messages deleted everywhere, but they can rejoin (best for hacked accounts). Ban also sends them how to appeal.</div></div>
-        <select class="w-select" style="max-width:200px" data-k="honeypot_action" aria-label="What happens to them">${[['softban', 'Soft-ban (recommended)'], ['kick', 'Kick'], ['ban', 'Ban'], ['timeout', 'Timeout']].map(([v, l]) => html`<option value="${v}" ${S.draft.honeypot_action === v ? 'selected' : ''}>${l}</option>`)}</select></div>
+        <select class="w-select" style="max-width:240px;min-width:220px" data-k="honeypot_action" aria-label="What happens to them">${[['softban', 'Soft-ban (recommended)'], ['kick', 'Kick'], ['ban', 'Ban'], ['timeout', 'Timeout']].map(([v, l]) => html`<option value="${v}" ${S.draft.honeypot_action === v ? 'selected' : ''}>${l}</option>`)}</select></div>
       ${numberRow('honeypot_delete_hours', 'Delete their messages from the last', 'Soft-ban and ban only – removes the spam they posted in other channels too. Max 168 (7 days).', 0, 168, 'hours')}
       ${numberRow('honeypot_timeout_minutes', 'Timeout length', 'Only used when “Timeout” is chosen above. 1440 = 1 day.', 1, 40320, 'minutes')}
       ${toggleRow('honeypot_notice', 'Keep a warning in the channel', 'The bot posts and pins “⚠️ Do not post in this channel” in your server language, and puts it back if it is deleted.')}
@@ -1703,7 +1704,7 @@ function bugModal() {
   </div></div>`;
 }
 async function openBug(id) {
-  if (!S.replies) { try { S.replies = isMod() ? [] : (await call('GET', '/api/replies')).items; } catch (e) { S.replies = []; } }
+  if (!S.replies) { try { S.replies = (await call('GET', '/api/replies')).items; } catch (e) { S.replies = []; } }
   if (S.detail && S.detail.id !== id) S.rejOpen = false;
   S.detail = await call('GET', '/api/bugs/' + id); S.similar = null; showModal();
   if (!S.detail.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(S.detail.status)) (async () => {   // in the background
@@ -1759,7 +1760,7 @@ function ticketChat(b) {
     <div class="w-chatform">
       <textarea class="w-input" id="m-chatmsg" rows="2" maxlength="1800" placeholder="${b.web_ticket ? 'Write to the player – they read it on the website' : 'Write to the player – sent in Discord with your name'}"></textarea>
       <div class="w-chatbtns"><label class="w-btn small w-chatfile" title="Add pictures (up to 4)">📎<input type="file" id="m-chatfiles" accept="image/*,video/*" multiple hidden></label>
-        <span class="w-hint" id="m-chatfilenames"></span>
+        <span class="w-hint" id="m-chatfilenames"></span>${cannedPick('m-chatmsg')}
         <button class="w-btn primary small" data-act="ticketSend">Send</button></div></div>
     ${b.ticket_url || b.web_ticket ? html`<details class="w-fold" style="margin-top:10px"><summary><b>Close the ticket</b><span class="w-hint">saves everything with the bug – same as /closebug</span></summary>
       <div class="w-field" style="margin-top:8px"><label class="w-label" for="m-closenote">Short note <span class="w-hint">(optional)</span></label>
@@ -2030,6 +2031,13 @@ function appealCard(a) {
       : html`<p class="w-sub" style="margin-top:8px">${a.handled_by}, ${ago(a.handled_ts)}${a.note ? ' – “' + a.note + '”' : ''}</p>`}
   </article>`;
 }
+function lockCard(L) {          // lockdown: stop everyone from writing in the chat channels (same as /lockdown)
+  return html`<div class="w-sec-head" style="margin-top:16px"><h3 class="w-h3">🔒 Lock the chat</h3><span class="w-badge ${L.active ? 'bad' : 'ok'}">${L.active ? 'Locked' : 'Open'}</span></div>
+    <p class="w-sub">${L.active ? 'Players can read but not write in ' + L.channels.length + ' channel' + (L.channels.length === 1 ? '' : 's') + ' (' + L.channels.slice(0, 6).map(c => '#' + c).join(', ') + (L.channels.length > 6 ? ' …' : '') + ') since ' + ago(L.since) + (L.by ? ' – ' + L.by : '') + '. Unlocking puts every channel back exactly as it was.'
+      : 'Stops everyone from writing in every channel where players chat. Staff keep writing. Use /lockdown in Discord for a single channel.'}</p>
+    ${L.active ? '' : html`<div class="w-field" style="max-width:420px"><label class="w-label" for="q-lockwhy">Reason <span class="w-hint">(optional – shown in the channels)</span></label><input class="w-input" id="q-lockwhy" maxlength="200"></div>`}
+    <div class="w-actions"><button class="w-btn ${L.active ? 'primary' : 'danger'}" data-act="lockSet" data-on="${L.active ? 0 : 1}">${L.active ? 'Unlock all channels' : 'Lock all chat channels'}</button></div>`;
+}
 function viewQueue() {
   const Q = S.queue, R = S.reports, A = S.appeals;
   if (!Q || !R || !A) return html`<div class="w-pagehead"><h2>Reports & appeals</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
@@ -2039,7 +2047,8 @@ function viewQueue() {
     <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Raid mode</h3><span class="w-badge ${Q.raid.active ? 'bad' : 'ok'}">${Q.raid.active ? 'On' : 'Off'}</span></div>
       <p class="w-sub">${Q.raid.active ? 'On since ' + ago(Q.raid.since) + (Q.raid.by ? ' (' + Q.raid.by + ')' : '') + ' · ' + Q.raid.joined + ' joined meanwhile. They wait at the door until you lift it.'
         : 'Switches on by itself when many accounts join within minutes: new members ' + (Q.raid.gate ? 'can’t get past the device question' : 'aren’t welcomed') + ' and staff get a ping.'}</p>
-      <div class="w-actions"><button class="w-btn ${Q.raid.active ? 'primary' : 'danger'}" data-act="raidSet" data-on="${Q.raid.active ? 0 : 1}">${Q.raid.active ? 'Lift raid mode' : 'Switch on now'}</button></div></section>
+      <div class="w-actions"><button class="w-btn ${Q.raid.active ? 'primary' : 'danger'}" data-act="raidSet" data-on="${Q.raid.active ? 0 : 1}">${Q.raid.active ? 'Lift raid mode' : 'Switch on now'}</button></div>
+      ${lockCard(Q.raid.lockdown || { active: false, channels: [] })}</section>
     ${playerFind()}
     <section class="w-card w-pad"><div class="w-sec-head"><h3 class="w-h3">Reported messages${!done && R.items.length ? html` <em class="w-count">${R.items.length}</em>` : ''}</h3>
         <button class="w-btn small" data-act="queueDone">${done ? 'Show waiting' : 'Show handled'}</button></div>
@@ -2639,6 +2648,11 @@ function sugList() {
       ${G.chat === x.id ? sugChat(x) : ''}</div></div>`)}`;
 }
 // ---- ideas sent from the website: the conversation with the player (they read it on their private idea page)
+function cannedPick(target) {           // ready-made replies (Moderation → ⚙) inside a chat box
+  const R = S.replies || [];
+  return R.length ? html`<select class="w-select w-cannedpick" data-act-change="cannedChat" data-target="${target}" aria-label="Ready-made reply" style="max-width:170px">
+    <option value="">Ready-made reply…</option>${R.map(r => html`<option value="${r.id}">${r.title}</option>`)}</select>` : '';
+}
 function sugChat(x) {
   return html`<section class="w-chat" style="margin-top:12px" aria-label="Messages with the player">
     <div class="w-chat-head"><b>💬 Messages with the player</b><span class="w-hint" id="s-chatstate">● live · on the website</span></div>
@@ -2647,7 +2661,7 @@ function sugChat(x) {
     <div class="w-chatform">
       <textarea class="w-input" id="s-chatmsg" rows="2" maxlength="1800" placeholder="Write to the player – they read it on the website"></textarea>
       <div class="w-chatbtns"><label class="w-btn small w-chatfile" title="Add pictures (up to 4)">📎<input type="file" id="s-chatfiles" accept="image/*,video/*" multiple hidden></label>
-        <span class="w-hint" id="s-chatfilenames"></span>
+        <span class="w-hint" id="s-chatfilenames"></span>${cannedPick('s-chatmsg')}
         <button class="w-btn primary small" data-act="sugChatSend" data-id="${x.id}">Send</button></div></div></section>`;
 }
 async function pollSugChat(first) {
@@ -2989,7 +3003,7 @@ const LOADERS = {
     try { S.stickers = isMod() ? null : await call('GET', '/api/stickers'); } catch (e) { S.stickers = null; }
     try { S.emojis = isMod() ? null : await call('GET', '/api/emojis'); } catch (e) { S.emojis = null; } },
   bugs: () => loadBugs(true),
-  suggestions: () => loadSugs(true),
+  suggestions: async () => { if (!S.replies) { try { S.replies = (await call('GET', '/api/replies')).items; } catch (e) { S.replies = []; } } return loadSugs(true); },
   data: async () => { S.data = await call('GET', '/api/data'); },
   msglog: async () => { const k = (S.msglog && S.msglog.kind) || 'deleted', q = (S.msglog && S.msglog.q) || ''; S.msglog = Object.assign(await call('GET', '/api/msglog?kind=' + k + '&q=' + encodeURIComponent(q)), { q }); },
   channels: async () => { S.audit = await call('GET', '/api/staff-audit').catch(() => null); },
@@ -3886,6 +3900,14 @@ root.addEventListener('click', async e => {
     else if (act === 'ptPause') { busy(el, true, '…'); try { Object.assign(S.partners, await call('PUT', '/api/partners/' + el.dataset.id, { paused: el.dataset.on === '1' })); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'ptRemove') { if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Sure? The bot leaves their server'; return; } busy(el, true, '…');
       try { Object.assign(S.partners, await call('DELETE', '/api/partners/' + el.dataset.id)); toast('The bot left the server.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+    else if (act === 'lockSet') {
+      const on = el.dataset.on === '1';
+      if (on && !confirm('Stop everyone from writing in every chat channel?')) return;
+      busy(el, true, on ? 'Locking…' : 'Unlocking…');
+      try { const r = await call('POST', '/api/lockdown', { active: on, reason: on ? ($('#q-lockwhy') || {}).value || '' : '' });
+        if (S.queue) S.queue.raid = r; toast((on ? '🔒 Locked ' : '🔓 Unlocked ') + r.changed + ' channel(s).' + (r.failed.length ? ' Could not change: ' + r.failed.join(', ') : ''), r.failed.length ? 'err' : ''); renderMain();
+      } catch (err) { busy(el, false); toast(err.message, 'err'); }
+    }
     else if (act === 'raidSet') { busy(el, true, '…');
       try { const r = await call('POST', '/api/raid', { active: el.dataset.on === '1' }); if (S.queue) S.queue.raid = r; toast(r.active ? 'Raid mode is on.' : 'Raid mode lifted.'); renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'spikeKnown' || act === 'spikeDismiss') { busy(el, true, '…');
@@ -4034,6 +4056,10 @@ function onInput(e) {
     if (e.type !== 'change') return;
     try { localStorage.setItem('wosd.trlang', el.value); } catch (err) { /* private mode */ }
     document.querySelectorAll('[data-act-change="trLang"]').forEach(x => { x.value = el.value; });
+  } else if (el.dataset.actChange === 'cannedChat') {
+    const r = (S.replies || []).find(x => String(x.id) === el.value), ta = $('#' + el.dataset.target);
+    if (r && ta) { const id = el.dataset.target === 's-chatmsg' ? S.sugs.chat : (S.detail && S.detail.id) || ''; ta.value = r.text.replace(/\{bug\}/g, '#' + id); ta.focus(); }
+    el.value = '';
   } else if (el.id === 'm-canned') {
     const r = (S.replies || []).find(x => String(x.id) === el.value); if (r) $('#m-reply').value = r.text;
   } else if (el.id === 'logauto') { S.log.auto = el.checked; }
@@ -4059,7 +4085,7 @@ function makeMock() {
   const settings = {
     report_channel_id: '1001', mod_channel_id: '1003', suggestions_channel_id: '1005', admin_channel_id: '1004',
     welcome_enabled: true, welcome_channel_id: '1006', patchnotes_channel_id: '1006',
-    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, alerts_channel_id: null, announce_channel_id: null, spike_enabled: true, spike_count: 5, spike_minutes: 60, msg_reports_enabled: true, appeals_enabled: true, raid_enabled: true, raid_joins: 10, raid_minutes: 5, raid_auto_lift_minutes: 0, game_enabled: true, game_site_url: 'https://europa.176.9.65.91.nip.io/', game_check_host: '', game_status_alert: true, msglog_enabled: true, msglog_days: 7, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_remind_hours: 3, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
+    timezone: 'Europe/Copenhagen', digest_enabled: true, digest_weekday: 'monday', digest_hour: 9, digest_channel_id: null, devlist_enabled: true, devlist_hour: 8, devlist_files: true, devlist_channel_id: null, alerts_channel_id: null, announce_channel_id: null, spike_enabled: true, spike_count: 5, spike_minutes: 60, msg_reports_enabled: true, appeals_enabled: true, raid_enabled: true, raid_lockdown: false, raid_joins: 10, raid_minutes: 5, raid_auto_lift_minutes: 0, game_enabled: true, game_site_url: 'https://europa.176.9.65.91.nip.io/', game_check_host: '', game_status_alert: true, msglog_enabled: true, msglog_days: 7, update_notice_enabled: true, giftcodes_enabled: true, giftcodes_channel_id: '1008', giftcodes_ping: 'everyone', giftcodes_role_id: '', giftcodes_new_hours: 24, giftcodes_remind_hours: 3, giftcodes_delete_expired: true, giftcodes_list: true, giftcodes_site_url: '', log_channel_id: null, invites_channel_id: null, invites_enabled: true, invites_fake_days: 7, warn_timeout_at: 3, warn_timeout_minutes: 60, warn_ban_at: 5, warn_expire_days: 30, automod_badwords_on: false, automod_badwords: 'noob*', automod_caps_on: true,
     honeypot_enabled: true, honeypot_channel_id: null, honeypot_action: 'softban', honeypot_delete_hours: 1, honeypot_timeout_minutes: 1440, honeypot_notice: true, honeypot_count: 7,
     automod_mentions_on: true, automod_mentions_max: 5, automod_repeat_on: true, automod_warn: true, weekly_enabled: false, weekly_channel_id: null, weekly_weekday: 'sunday', weekly_hour: 18, push_enabled: true, guard_enabled: true, guard_timeout_minutes: 60, guard_block_invites: false, guard_allow_domains: 'discord.com\ndiscord.gg\ndiscordapp.com\nyoutube.com\ntenor.com', log_channel_kinds: 'all', dup_mode: 'auto', dup_auto_percent: 50, mod_ping_hours: 4, board_channel_id: null, redeem_enabled: false, info_channel_id: null, info_rules: '**1. Be respectful** – no insults, hate speech or threats.\n**2. No cheating or exploits** – report bugs instead.\n**3. No spam or advertising.**\n\n*Breaking the rules can lead to a warning, mute or ban.*', report_style: 'form', info_remind_hours: 48, info_close_hours: 72, ticket_delete_hours: 4, languages: 'en\npl\nar\ntr\nms\nzh-cn\nda\nsv\nno\nde\nid\ntl\nfr\nhi\nes\nnl\nru\npt-br', default_language: 'en', drive_enabled: true, drive_every_days: 7, drive_keep: 8,
     auto_block_web: true, auto_block_rejects: 3, auto_block_days: 3, changelog_enabled: true,
@@ -4448,7 +4474,7 @@ function makeMock() {
         if (a === 'ban') { P.on_server = false; P.banned = { reason: body.reason, until: body.days ? now + body.days * 86400 : null }; P.cases.unshift({ id: 7, kind: 'ban', reason: body.reason + (body.days ? ' (for ' + body.days + ' days)' : ''), ts: now, minutes: null, active: false, auto: false, moderator: 'You' }); }
         if (a === 'unban') P.banned = null; }
       return JSON.parse(JSON.stringify(P)); }
-    if (p === '/api/queue' || p === '/api/raid' || p === '/api/spikes' || p.startsWith('/api/reports') || p.startsWith('/api/appeals') || p.startsWith('/api/devpage')) {
+    if (p === '/api/queue' || p === '/api/raid' || p === '/api/lockdown' || p === '/api/spikes' || p.startsWith('/api/reports') || p.startsWith('/api/appeals') || p.startsWith('/api/devpage')) {
       const M = (window.__mockQ = window.__mockQ || { raid: { active: false, since: null, by: '', ended: null, joined: 0, gate: true },
         spikes: [{ key: 'Alliance', area: 'Alliance', count: 6, bug: 62, ts: now - 900, known: false }], dev: { active: false, created: null },
         reports: [{ id: 3, ts: now - 1200, status: 'open', content: 'you are all idiots, uninstall the game', channel: 'general', url: '#', target_id: '100000000000000001', target: 'Grimnir', on_server: true,
@@ -4461,6 +4487,8 @@ function makeMock() {
             case_reason: 'Scam links', case_ts: now - 90000, note: '', handled_by: '', handled_ts: null, warnings: 0, cases: [{ id: 2, kind: 'ban', reason: 'Scam links', ts: now - 90000, minutes: null, active: false, auto: true, moderator: '' }] }] });
       const open = k => M[k].filter(x => x.status === 'open');
       if (p === '/api/raid') { Object.assign(M.raid, body.active ? { active: true, since: now, by: 'Dashboard', joined: 0 } : { active: false, ended: now }); return M.raid; }
+      if (p === '/api/lockdown') { M.raid.lockdown = body.active ? { active: true, channels: ['general', 'trade', 'polski', 'deutsch'], since: now, by: 'You', reason: body.reason } : { active: false, channels: [] };
+        return Object.assign({}, M.raid, { changed: 4, failed: [] }); }
       if (p === '/api/spikes') { if (body.known) M.spikes.forEach(x => { if (x.bug === body.known) x.known = true; }); if (body.dismiss) M.spikes = M.spikes.filter(x => x.key !== body.dismiss); return { spikes: M.spikes }; }
       if (p === '/api/devpage/link') { M.dev = method === 'DELETE' ? { active: false, created: null } : { active: true, created: now }; return method === 'DELETE' ? M.dev : Object.assign({ token: 'demo-Qx7vN2kLmP9sT4wZ8yB1cD' }, M.dev); }
       if (p === '/api/devpage') return M.dev;
