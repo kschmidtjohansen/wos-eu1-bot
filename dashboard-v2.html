@@ -691,7 +691,8 @@ function reportText(t) {             // the form's questions small and grey, the
 }
 function pseudoItem(kind, id, ref) { return { kind, id, ts: now(), title: '', text: '', who: '', urgent: false, ref: ref || {} }; }
 function paneActions(it) {
-  return html`<div class="actbar">${actionsFor(it).filter(a => a[3] || (a[4] && a[4].link)).map((a, n) => html`<button class="btn ${a[2]}" data-act="paneDo" data-kind="${it.kind}" data-id="${it.id}" data-n="${actionsFor(it).indexOf(a)}">${icon(a[1])}${a[0]}${a[4] && a[4].reason ? '…' : ''}</button>`)}</div>
+  const all = actionsFor(it);          // the pane shows what can be done right here (Reply is the chat below)
+  return html`<div class="actbar">${all.map((a, n) => a[3] || (a[4] && a[4].link) ? html`<button class="btn ${a[2]}" data-act="paneDo" data-kind="${it.kind}" data-id="${it.id}" data-n="${n}">${icon(a[1])}${a[0]}${a[4] && a[4].reason ? '…' : ''}</button>` : '')}</div>
     ${S.paneReason ? html`<form class="reason" data-act-submit="paneReason" style="margin-top:10px"><input class="in" id="pwhy" maxlength="400" placeholder="${S.paneReason.label}" autocomplete="off">
       <button class="btn ${S.paneReason.tone === 'bad' ? 'bad' : 'main'}" type="submit">${S.paneReason.name}</button><button class="btn ghost" type="button" data-act="paneReasonCancel">Cancel</button></form>` : ''}`;
 }
