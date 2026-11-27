@@ -685,6 +685,54 @@
 #bugq{flex:1 1 260px;min-width:200px;max-width:none}
 @media (min-width:861px){#wosd-main>.w-livebar{display:none}}
 @media (max-width:860px){.w-sidelive{display:none}}
+/* ===== phones: thumb-sized controls, no zoom-on-tap, compact header, full-screen windows, tables as cards ===== */
+@media (max-width:860px){
+  .wosd input:not([type=checkbox]):not([type=radio]),.wosd select,.wosd textarea{font-size:16px !important}     /* iOS zooms in below 16px */
+  .wosd .w-btn,.wosd .w-select,.wosd .w-input{min-height:42px}
+  .wosd .w-btn.small{min-height:40px;padding-left:12px;padding-right:12px}
+  .wosd .w-chip{min-height:38px}
+  .wosd .w-qbtn{width:40px;height:40px}
+  .w-hubtabs button{min-height:42px}
+  .w-linkbtn{padding:8px 0}
+  /* compact header: logo, name, refresh and search on one line */
+  .w-side .w-brand .w-avatar{width:34px;height:34px;border-radius:10px}
+  .w-side .w-brand .w-sub{display:none}
+  .w-side .w-status{display:none}
+  .w-sidelive{display:block;order:2}
+  .w-sidelive .w-livebar{padding:0}.w-sidelive .w-live-txt{display:none}
+  .w-sidelive .w-livebar .w-btn{font-size:0;gap:0;width:42px;padding:0;justify-content:center}.w-sidelive .w-livebar .w-btn svg{width:18px;height:18px}
+  #wosd-main>.w-livebar{display:none}
+  #wosd-main>.w-hubtabs{margin-top:6px}
+  .w-side .w-search-btn{order:3;min-height:42px;min-width:42px;justify-content:center}
+  /* page intro: two lines, tap to read the rest */
+  .w-pagehead > p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+  .w-pagehead > p.full{display:block}
+  /* windows (a bug, a quick form) fill the screen with the close button always in reach */
+  .w-modal{padding:0;place-items:stretch}
+  .w-modal-card{max-width:none;min-height:100dvh;border-radius:0;border:0;padding:0 16px calc(24px + env(safe-area-inset-bottom))}
+  .w-modal-head{position:sticky;top:0;z-index:5;margin:0 -16px 14px;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;background:var(--w-surface-solid,var(--w-surface));border-bottom:1px solid var(--w-border)}
+  .w-modal-head h3{font-size:17px}
+  /* toasts sit above the save bar and the bottom menu */
+  .w-toasts{left:12px;right:12px;max-width:none;bottom:calc(16px + env(safe-area-inset-bottom))}
+}
+@media (max-width:600px){
+  .w-table thead{display:none}
+  .w-table,.w-table tbody,.w-table tr,.w-table td{display:block;width:100%}
+  .w-table tr{border:1px solid var(--w-border);border-radius:12px;padding:8px 12px;margin-bottom:8px}
+  .w-table td{display:flex;justify-content:space-between;gap:12px;border:0;padding:5px 0;text-align:right}
+  .w-table td::before{content:attr(data-label);color:var(--w-muted);font-size:12.5px;text-align:left;flex:none}
+  .w-table td:first-child{font-weight:650;text-align:left}.w-table td:first-child::before{display:none}
+  .w-tablewrap{overflow:visible}
+}
+/* installed as an app (no browser bar at the bottom): the menu moves down where the thumb is.
+   .w-app is set by the script (display-mode, or iPhone's own flag), so it also works where the media query doesn't */
+@media (max-width:860px){
+  .wosd.w-app .w-tabbar{position:fixed;top:auto;bottom:0;left:0;right:0;margin:0;padding:6px 6px calc(6px + env(safe-area-inset-bottom));border-bottom:0;border-top:1px solid var(--w-border);border-radius:18px 18px 0 0}
+  .wosd.w-app{padding-top:calc(12px + env(safe-area-inset-top));padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+  .wosd.w-app .w-savebar{bottom:calc(78px + env(safe-area-inset-bottom))}
+  .wosd.w-app .w-toasts{bottom:calc(84px + env(safe-area-inset-bottom))}
+  .w-modal{z-index:9999}
+}
 .w-loginlogo{display:block;width:64px;height:64px;border-radius:18px;box-shadow:0 0 0 1px var(--w-border-strong),0 14px 34px -12px var(--w-accent)}
 .w-login .w-beam{background:conic-gradient(from var(--w-ang,0deg),transparent 0 75%,var(--w-accent) 86%,#fff 91%,transparent 96%)}
 @media (max-width:860px){
@@ -776,6 +824,8 @@ const CFG = Object.assign({ apiBase: '', productName: 'WOS EU1', theme: 'wos', p
                           window.WOS_DASHBOARD_CONFIG || {});
 if (CFG.apiBase === 'same-origin') CFG.apiBase = location.origin;
 const root = document.getElementById('wosd');
+// Opened from the home screen (installed app)? Then the phone menu goes to the bottom. ?app forces it (for testing).
+if ((window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone || /[?&]app\b/.test(location.search)) root.classList.add('w-app');
 root.dataset.theme = CFG.theme;
 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
@@ -1759,7 +1809,7 @@ function bugModal() {
 async function openBug(id) {
   if (!S.replies) { try { S.replies = (await call('GET', '/api/replies')).items; } catch (e) { S.replies = []; } }
   if (S.detail && S.detail.id !== id) S.rejOpen = false;
-  S.detail = await call('GET', '/api/bugs/' + id); S.similar = null; showModal();
+  S.detail = await call('GET', '/api/bugs/' + id); S.similar = null; showModal(); syncHash();
   if (!S.detail.duplicate_of && ['new', 'investigating', 'passed', 'being_investigated'].includes(S.detail.status)) (async () => {   // in the background
     try {
       const r = await call('GET', '/api/bugs/' + id + '/similar');
@@ -1855,7 +1905,10 @@ function showModal() {
   const ta = $('#m-chatmsg'); if (ta) ta.onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const b = $('[data-act=ticketSend]'); if (b) b.click(); } };
   const c = $('#m-close'); if (c) c.focus();
 }
-function closeModal() { stopChat(); S.detail = null; S.player = null; S.quick = null; S.rejOpen = false; const m = $('#wmodal'); if (m) m.remove(); }
+function closeModal() {
+  stopChat(); const wasBug = !!S.detail; S.detail = null; S.player = null; S.quick = null; S.rejOpen = false; const m = $('#wmodal'); if (m) m.remove();
+  if (wasBug && !navPop && location.hash.startsWith('#bug-')) { if (S.pushedBug) { S.pushedBug = false; history.back(); } else syncHash(); }
+}
 function refreshOverviewSoon() { setTimeout(() => { if (S.tab !== 'overview') call('GET', '/api/overview').then(o => { S.overview = o; refreshNavCount(); }).catch(() => {}); }, 300); }
 async function changeBug(body, okMsg, btn) {
   busy(btn, true, 'Working…');
@@ -3109,6 +3162,7 @@ function setLive() {
 function paint(t) {
   const m = $('#wosd-main'); if (!m) return;
   m.innerHTML = String(liveBar()) + String(hubTabs()) + String(VIEWS[t || S.tab]());
+  tableLabels(m);
   if ($('#savebar')) updateSaveBar();
   if (S.tab === 'log') renderLogList();
   if (S.tab === 'bugs' && S.bugs.items) renderBugList();
@@ -3176,9 +3230,39 @@ function tick(scope) {
   };
   requestAnimationFrame(step);
 }
+/* Links and the phone's back button: #bugs opens Bugs, #bug-64 opens bug 64. Every page and bug window is a step
+   in the browser history, so Back goes to the previous page (or closes the bug) instead of leaving the app. */
+let navPop = false;
+function syncHash() {
+  if (navPop || !S.overview) return;
+  const h = '#' + (S.detail && $('#wmodal') ? 'bug-' + S.detail.id : S.tab);
+  const first = !S.navReady; S.navReady = true;
+  if (location.hash === h) return;
+  try {
+    if (first) { history.replaceState(null, '', h); S.pushedBug = false; }      // the page we were opened on
+    else { history.pushState(null, '', h); S.pushedBug = h.startsWith('#bug-'); }
+  } catch (e) { /* sandboxed page */ }
+}
+window.addEventListener('popstate', () => {
+  const h = decodeURIComponent(location.hash.slice(1));
+  navPop = true;
+  try {
+    if (h.startsWith('bug-')) { if (!S.detail || S.detail.id !== +h.slice(4)) openBug(+h.slice(4)).catch(e => toast(e.message, 'err')); }
+    else {
+      if ($('#wmodal')) closeModal();
+      if (h && VIEWS[h] && h !== S.tab && (!isMod() || MOD_TABS.includes(h))) { S.tab = h; renderTab(); }
+    }
+  } finally { navPop = false; }
+});
+function tableLabels(scope) {          // phones show tables as cards: each cell gets its column name
+  (scope || document).querySelectorAll('.w-table').forEach(t => {
+    const heads = [...t.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    if (heads.length) t.querySelectorAll('tbody tr').forEach(tr => [...tr.children].forEach((td, i) => { if (heads[i] && !td.dataset.label) td.dataset.label = heads[i]; }));
+  });
+}
 function renderTab() {
   const main = $('#wosd-main'); if (!main) return;
-  paint(S.tab);
+  paint(S.tab); syncHash();
   if (S.tab === 'overview') tick(main);
   S.hubLast = S.hubLast || {}; S.hubLast[hubOf(S.tab)[0]] = S.tab;
   $$('.w-nav button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.hub === hubOf(S.tab)[0])));
@@ -3230,6 +3314,9 @@ async function palGo(i) {
   else { try { await openBug(x.id); } catch (e) { toast(e.message, 'err'); } }
 }
 function renderApp() {
+  const h0 = decodeURIComponent(location.hash.slice(1));             // opened from a link or an app shortcut
+  if (!S.navReady && VIEWS[h0]) S.tab = h0;
+  if (!S.navReady && /^bug-\d+$/.test(h0)) setTimeout(() => openBug(+h0.slice(4)).catch(e => toast(e.message, 'err')), 0);
   if (isMod() && !MOD_TABS.includes(S.tab)) S.tab = 'overview';
   const o = S.overview, b = o.bot;
   root.innerHTML = String(html`${tabBar()}
@@ -4145,6 +4232,7 @@ function onInput(e) {
 }
 root.addEventListener('input', onInput);
 root.addEventListener('change', onInput);
+document.addEventListener('click', e => { const p = e.target.closest && e.target.closest('.wosd .w-pagehead > p'); if (p && matchMedia('(max-width:860px)').matches) p.classList.toggle('full'); });
 document.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.fold) { S.trOpen = S.trOpen || {}; S.trOpen[d.dataset.fold] = d.open; } }, true);
 document.addEventListener('click', e => { document.querySelectorAll('details.w-more[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.w-more-menu button')) d.open = false; }); });
 
