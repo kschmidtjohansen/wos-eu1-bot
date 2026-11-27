@@ -861,6 +861,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         except OSError:
             upd = []
         since = int(now - 86400)
+        jobs = hooks["job_health"]() if "job_health" in hooks else []
         errs = store.db.execute("SELECT ts, text FROM logs WHERE kind='system' AND ts>=? AND (text LIKE 'Could not%' OR text LIKE '%failed%') "
                                 "ORDER BY id DESC LIMIT 5", (since,)).fetchall()
         lat = client.latency
@@ -872,7 +873,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             "system": {"uptime_s": int(up) if up else None, "load": [round(x, 2) for x in load] if load else None,
                        "cpus": os.cpu_count(), "memory": meminfo(),
                        "disk": {"total": disk.total, "free": disk.free}},
-            "services": services, "website_ok": site_ok, "game": game_public(),
+            "services": services, "website_ok": site_ok, "game": game_public(), "jobs": jobs,
             "data": {"db_bytes": Path("bugs.db").stat().st_size if Path("bugs.db").exists() else 0,
                      "last_backup": backups[0]["ts"] if backups else None, "backups": len(backups)},
             "updates": upd,

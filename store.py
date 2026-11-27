@@ -47,8 +47,16 @@ DEFAULT_PANEL_TEXT = (
 )
 
 # ---------------------------------------------------------------- database
-db = sqlite3.connect("bugs.db")
+db = sqlite3.connect("bugs.db", timeout=30)        # wait for a lock instead of failing at once
 db.row_factory = sqlite3.Row
+try:
+    # WAL: the dashboard, backups and the bot can read while something is being written, and a crash mid-write
+    # can't damage the database. NORMAL is safe with WAL and much faster than FULL.
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA synchronous=NORMAL")
+    db.execute("PRAGMA busy_timeout=30000")
+except sqlite3.DatabaseError as _exc:
+    print(f"[database] could not switch to WAL: {_exc!r}")
 db.executescript(
     """
     CREATE TABLE IF NOT EXISTS bug_reports (
@@ -1632,6 +1640,7 @@ def make_backup(keep: int = 14) -> Path:
     try:
         with out:
             db.backup(out)
+        out.execute("PRAGMA journal_mode=DELETE")        # a backup is one self-contained file (no -wal beside it)
     finally:
         out.close()
     for old in sorted(p for p in BACKUP_DIR.iterdir() if BACKUP_RE.match(p.name))[:-keep]:

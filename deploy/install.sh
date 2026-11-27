@@ -151,7 +151,7 @@ ok "$(python3 -V)"
 step "Copying the bot to $APP"
 id $SVC &>/dev/null || useradd --system --create-home --home-dir $APP --shell /usr/sbin/nologin $SVC
 mkdir -p $APP
-tar -C "$SRC" --exclude=./.git --exclude=./.env --exclude=./bugs.db --exclude=./data --exclude=./venv --exclude='__pycache__' -cf - . | tar -C $APP -xf -
+tar -C "$SRC" --exclude=./.git --exclude=./.env --exclude='./bugs.db*' --exclude=./data --exclude=./venv --exclude='__pycache__' -cf - . | tar -C $APP -xf -
 chown -R $SVC:$SVC $APP
 [[ -x $APP/venv/bin/python ]] || sudo -u $SVC python3 -m venv $APP/venv
 info "Installing the bot's libraries (1–3 minutes)…"

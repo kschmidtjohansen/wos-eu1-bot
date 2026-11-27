@@ -34,6 +34,7 @@ import gzip
 import hashlib
 import io
 import time
+import traceback
 from pathlib import Path
 from typing import Optional, Tuple
 import aiohttp
@@ -1978,7 +1979,7 @@ class WosBot(discord.Client):
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "ticket_from_dashboard": ticket_from_dashboard, "ticket_messages": ticket_messages,
                          "ticket_send": ticket_send, "ticket_close": ticket_close,
-                         "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "submit_web_idea": submit_web_idea, "honeypot_notice_refresh": honeypot_notice_refresh, "lockdown": lockdown, "lockdown_dict": lockdown_dict, "idea_chat_view": idea_chat_view, "idea_can_write": idea_can_write, "idea_reply": idea_reply, "idea_staff_send": idea_staff_send, "idea_follow_url": idea_follow_url, "web_ticket_view": web_ticket_view, "web_can_write": web_can_write, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
+                         "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "submit_web_idea": submit_web_idea, "honeypot_notice_refresh": honeypot_notice_refresh, "job_health": job_health, "lockdown": lockdown, "lockdown_dict": lockdown_dict, "idea_chat_view": idea_chat_view, "idea_can_write": idea_can_write, "idea_reply": idea_reply, "idea_staff_send": idea_staff_send, "idea_follow_url": idea_follow_url, "web_ticket_view": web_ticket_view, "web_can_write": web_can_write, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
                          "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
                          "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
@@ -2015,11 +2016,11 @@ class WosBot(discord.Client):
             await safe_refresh_gift_list()
             await safe_refresh_board()
             start_redeem()
-            asyncio.create_task(safe_task(add_translate_buttons(), "translate buttons"))
-            asyncio.create_task(safe_task(fix_language_flags(), "language flags"))
-            asyncio.create_task(safe_task(honeypot_notice_refresh(), "honeypot warning"))
+            spawn(add_translate_buttons(), "translate buttons")
+            spawn(fix_language_flags(), "language flags")
+            spawn(honeypot_notice_refresh(), "honeypot warning")
             if (access_cfg().get("backfill") or {}).get("state") == "running":
-                _backfill_task[0] = asyncio.create_task(safe_task(run_backfill(), "member backfill"))
+                _backfill_task[0] = spawn(run_backfill(), "member backfill")
             if not await cache_invites():
                 log_event("system", "Invite tracker: give the bot the “Manage Server” permission so it can see who invited whom.", None, brand())
             try:
@@ -2154,9 +2155,16 @@ class WosBot(discord.Client):
             return
         await handle_ticket_message(message)
 
+    async def on_error(self, event_method: str, *args, **kwargs):
+        """An event handler crashed (a message, a reaction, a join …): record it and keep going."""
+        import sys
+        exc = sys.exc_info()[1]
+        if exc is not None:
+            job_failed(f"event: {event_method}", exc)
+
     async def on_guild_join(self, guild: discord.Guild):
         if guild.id != GUILD_ID:
-            asyncio.create_task(safe_task(partner_joined(guild), "promoter server"))
+            spawn(partner_joined(guild), "promoter server")
 
     async def on_guild_remove(self, guild: discord.Guild):
         p = store.get_partner(guild.id)
@@ -2672,11 +2680,8 @@ async def drive_backup(dest=None) -> str:
 
 @tasks.loop(hours=24)
 async def backup_loop():
-    try:
-        if cfg("backups_enabled"):
-            await run_backup()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[backup] {exc!r}")
+    if cfg("backups_enabled"):
+        await run_step("daily backup", run_backup)
 
 
 @backup_loop.before_loop
@@ -3750,14 +3755,7 @@ def start_redeem():
     global _redeem_task
     if not redeem_ready() or (_redeem_task is not None and not _redeem_task.done()):
         return
-    _redeem_task = asyncio.get_running_loop().create_task(_redeem_bg())
-
-
-async def _redeem_bg():
-    try:
-        await run_redeem()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[redeem] {exc!r}")
+    _redeem_task = spawn(run_redeem(), "gift-code redeem")
 
 
 # ------------------------------------------------------------ moderator stats
@@ -3875,7 +3873,9 @@ async def flush_logs():
 async def log_loop():
     try:
         await flush_logs()
-    except Exception as exc:  # noqa: BLE001
+        job_ok("log channel")
+    except Exception as exc:  # noqa: BLE001 – printed only: logging this failure would feed the same queue
+        _jobs.setdefault("log channel", {}).update(err=int(time.time()), error=repr(exc)[:300], fails=_jobs.get("log channel", {}).get("fails", 0) + 1)
         print(f"[log channel] {exc!r}")
 
 
@@ -4215,11 +4215,118 @@ async def handle_translate_button(interaction: discord.Interaction):
     await interaction.followup.send(embed=e, ephemeral=True)
 
 
+# ------------------------------------------------------------ stability: background jobs never take each other down
+_jobs: dict = {}                   # job name -> {"ok": ts, "err": ts, "error": str, "fails": n, "logged": ts}
+_bg_tasks: set = set()             # keeps fire-and-forget tasks alive until they finish (asyncio only holds weak references)
+
+
+def job_failed(name: str, exc: BaseException):
+    """Remember a failure (Status page), print the full traceback (journalctl) and put it in the activity log –
+    at most once an hour per job, so a broken job can't flood the log."""
+    now = int(time.time())
+    j = _jobs.setdefault(name, {})
+    j.update(err=now, error=f"{type(exc).__name__}: {exc}"[:300], fails=j.get("fails", 0) + 1)
+    print(f"[{name}] {exc!r}")
+    traceback.print_exception(type(exc), exc, exc.__traceback__)
+    if now - j.get("logged", 0) > 3600:
+        j["logged"] = now
+        try:
+            log_event("system", f"Background job “{name}” failed: {j['error']}"[:500], None, brand())
+        except Exception:  # noqa: BLE001 – the database itself may be the problem
+            pass
+
+
+def job_ok(name: str):
+    j = _jobs.setdefault(name, {})
+    j["ok"], j["fails"] = int(time.time()), 0
+
+
+async def run_step(name: str, fn, *args):
+    """Run one step of a background loop. A failing step is recorded and skipped – the next steps still run."""
+    try:
+        res = fn(*args)
+        if asyncio.iscoroutine(res):
+            res = await res
+        job_ok(name)
+        return res
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        job_failed(name, exc)
+        return None
+
+
+def job_health() -> list:
+    """For the Status page: every background job, when it last worked and its last error."""
+    return [{"name": n, "ok": j.get("ok"), "err": j.get("err"), "error": j.get("error", ""), "fails": j.get("fails", 0)}
+            for n, j in sorted(_jobs.items())]
+
+
 async def safe_task(coro, label: str):
     try:
         await coro
+        job_ok(label)
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:  # noqa: BLE001
-        print(f"[{label}] {exc!r}")
+        job_failed(label, exc)
+
+
+def spawn(coro, label: str) -> asyncio.Task:
+    """Start a background task that is kept alive until it finishes and whose errors are recorded."""
+    t = asyncio.get_running_loop().create_task(safe_task(coro, label))
+    _bg_tasks.add(t)
+    t.add_done_callback(_bg_tasks.discard)
+    return t
+
+
+def prune_caches():
+    """Short-lived memories used by the guards – drop what is too old to matter, so memory stays flat for months."""
+    now = time.time()
+    for d, keep in ((_recent_posts, 600), (_recent_text, 600)):
+        for k in [k for k, v in d.items() if not v or now - v[-1][0] > keep]:
+            d.pop(k, None)
+    for k in [k for k, t in _honey_seen.items() if now - t > 3600]:
+        _honey_seen.pop(k, None)
+    for k in [k for k, v in _invite_gone.items() if now - (v[3] if len(v) > 3 else 0) > 86400]:
+        _invite_gone.pop(k, None)
+    del _invite_pool[:-200]
+
+
+async def _reply_error(interaction: discord.Interaction, text: str):
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(text, ephemeral=True)
+        else:
+            await interaction.response.send_message(text, ephemeral=True)
+    except discord.HTTPException:
+        pass
+
+
+async def _ui_error(where: str, interaction: discord.Interaction, error: Exception):
+    """Any button, menu, form or command that crashes: the user gets a clear answer instead of “This interaction
+    failed”, and staff see it on the Status page."""
+    err = getattr(error, "original", error)
+    if isinstance(err, discord.Forbidden):
+        msg = "⚠️ I'm missing a Discord permission for that. Staff can check the Status page on the dashboard."
+    elif isinstance(err, discord.NotFound):
+        msg = "⚠️ That message or channel no longer exists."
+    else:
+        msg = "⚠️ Something went wrong. Please try again in a moment – the team can see the error."
+    job_failed(where, err)
+    await _reply_error(interaction, msg)
+
+
+async def _view_on_error(self, interaction, error, item):
+    await _ui_error(f"button: {type(self).__name__}", interaction, error)
+
+
+async def _modal_on_error(self, interaction, error):
+    await _ui_error(f"form: {type(self).__name__}", interaction, error)
+
+
+discord.ui.View.on_error = _view_on_error
+discord.ui.Modal.on_error = _modal_on_error
 
 
 async def add_translate_buttons():
@@ -5066,7 +5173,7 @@ def push_soon(topic: str, title: str, body: str, url: str = "index.html"):
             await push_send(topic, title, body, url)
         except Exception as exc:  # noqa: BLE001
             print(f"[push] {exc!r}")
-    asyncio.get_running_loop().create_task(go())
+    spawn(go(), "phone notification")
 
 
 # ------------------------------------------------------------ weekly public post ("This week in WOS EU1")
@@ -5562,7 +5669,7 @@ def start_backfill(actor_id=None, actor="Dashboard") -> dict:
         a["backfill"] = {"state": "running", "done": 0, "total": 0, "cutoff": time.time()}
     a["gate_on"] = True                                  # from now on, new members answer the question first
     save_access(a)
-    _backfill_task[0] = asyncio.create_task(safe_task(run_backfill(), "member backfill"))
+    _backfill_task[0] = spawn(run_backfill(), "member backfill")
     log_event("settings", f"{actor} started giving the Member role to everyone already here", actor_id, actor)
     return a
 
@@ -6967,7 +7074,7 @@ async def handle_partner_setup(interaction: discord.Interaction):
         if what == "bug":
             await partner_bug_panel(g)
         if what == "gift" and ch is not None:
-            asyncio.create_task(safe_task(partner_backfill_codes(g.id), "promoter codes"))
+            spawn(partner_backfill_codes(g.id), "promoter codes")
         return
     # test post – also brings an old setup message up to date (lists added later appear) and checks the bug button
     try:
@@ -7313,7 +7420,7 @@ async def partner_set(guild_id: int, ann=None, gift=None, paused=None, by: str =
         store.save_partner(guild_id, **upd)
         log_event("admin", f"Promoter server {p['name']} changed by {by}", None, by)
         if upd.get("gift_channel"):
-            asyncio.create_task(safe_task(partner_backfill_codes(guild_id), "promoter codes"))
+            spawn(partner_backfill_codes(guild_id), "promoter codes")
         if "bug_channel" in upd and g is not None:
             await partner_bug_panel(g)
     return partner_info(store.get_partner(guild_id))
@@ -7700,20 +7807,11 @@ def snapshot_members():
 @tasks.loop(minutes=1)
 async def gift_loop():
     """Keeps the gift-code announcements and list exact to the minute; giveaways and timed messages too."""
-    try:
-        await sweep_prompts()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[reason prompts] {exc!r}")
-    try:
-        if cfg("giftcodes_enabled"):
-            await sync_gift_messages()
-            await remind_ending_codes()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[gift codes] {exc!r}")
-    try:
-        await community_tick()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[community] {exc!r}")
+    await run_step("reason prompts", sweep_prompts)
+    if cfg("giftcodes_enabled"):
+        await run_step("gift codes", sync_gift_messages)
+        await run_step("gift codes ending", remind_ending_codes)
+    await run_step("giveaways & timers", community_tick)
 
 
 @gift_loop.before_loop
@@ -7723,15 +7821,14 @@ async def _before_gift():
 
 @tasks.loop(minutes=10)
 async def schedule_loop():
-    try:
-        snapshot_members()
-        await safe_refresh_board()
-        start_redeem()
-        await ping_waiting_bugs()
-        await check_info_tickets()
-        await run_schedules()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[schedule] {exc!r}")
+    # each step on its own: one failing step used to skip everything after it for 10 minutes
+    await run_step("member count", snapshot_members)
+    await run_step("known issues board", safe_refresh_board)
+    await run_step("gift-code redeem start", start_redeem)
+    await run_step("waiting bug pings", ping_waiting_bugs)
+    await run_step("info tickets", check_info_tickets)
+    await run_step("scheduled posts", run_schedules)
+    await run_step("memory clean-up", prune_caches)
 
 
 @schedule_loop.before_loop
@@ -8078,32 +8175,32 @@ async def run_reminders(now: Optional[float] = None) -> list:
 
 @tasks.loop(minutes=30)
 async def reminder_loop():
-    try:
-        await run_reminders()
-    except Exception as exc:  # noqa: BLE001 – a failed reminder must never stop the loop
-        print(f"[reminders] {exc!r}")
-    try:
-        await auto_known()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[auto known] {exc!r}")
-    try:
-        await partner_check()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[promoter check] {exc!r}")
-    try:
-        await honeypot_notice_refresh()                  # someone deleted the warning? put it back
-    except Exception as exc:  # noqa: BLE001
-        print(f"[honeypot] {exc!r}")
-    try:
-        await delete_closed_tickets()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[ticket delete] {exc!r}")
+    await run_step("reminders", run_reminders)
+    await run_step("known issues (auto)", auto_known)
+    await run_step("promoter servers check", partner_check)
+    await run_step("honeypot warning", honeypot_notice_refresh)          # someone deleted the warning? put it back
+    await run_step("delete closed tickets", delete_closed_tickets)
 
 
 @reminder_loop.before_loop
 async def _before_reminders():
     await bot.wait_until_ready()
 
+
+
+@bot.tree.error
+async def _on_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CommandOnCooldown):
+        return await _reply_error(interaction, f"⏳ Slow down – try again in {int(error.retry_after) + 1} s.")
+    if isinstance(error, (app_commands.CheckFailure, app_commands.MissingPermissions)):
+        return await _reply_error(interaction, "You can't use this command.")
+    name = interaction.command.qualified_name if interaction.command else "?"
+    await _ui_error(f"/{name}", interaction, error)
+
+
+for _loop in (reminder_loop, backup_loop, schedule_loop, gift_loop, log_loop):
+    # a loop must never stop for good: anything that slips through is recorded and the loop carries on
+    _loop.add_exception_type(Exception)
 
 
 if __name__ == "__main__":

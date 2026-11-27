@@ -1829,7 +1829,8 @@ function viewStatus() {
   const T = S.status;
   if (!T) return html`<div class="w-pagehead"><h2>Server status</h2></div><div class="w-card w-pad w-empty">Loading…</div>`;
   const B = T.bot, Y = T.system, M = Y.memory, svcBad = T.services.filter(x => x.state !== 'active');
-  const problems = svcBad.length + (T.website_ok === false ? 1 : 0) + (B.online ? 0 : 1);
+  const jobsBad = (T.jobs || []).filter(j => j.fails > 0);
+  const problems = svcBad.length + (T.website_ok === false ? 1 : 0) + (B.online ? 0 : 1) + jobsBad.length;
   const load = Y.load ? Math.round(Y.load[0] / (Y.cpus || 1) * 100) : null;
   const stIc = { active: ['ok', 'check'], failed: ['bad', 'alert'] };
   return html`
@@ -1862,6 +1863,13 @@ function viewStatus() {
           <div><div class="w-check-label">Backups</div><div class="w-check-detail">${T.data.last_backup ? 'Last one ' + ago(T.data.last_backup) + ' · ' + T.data.backups + ' kept' : 'No backup yet'} · database ${fmtBytes(T.data.db_bytes)}</div></div></div>
       </section>
     </div>
+    <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:6px">Background jobs</h3>
+      <p class="w-hint" style="margin:0 0 8px">Things the bot does by itself (gift codes, reminders, backups …). A failing job is skipped and tried again next time – the rest keep running.</p>
+      ${jobsBad.length ? jobsBad.map(j => html`<div class="w-check"><div class="w-check-ic bad">${icon('alert')}</div>
+          <div><div class="w-check-label">${j.name}</div><div class="w-check-detail">Failed ${j.fails}× in a row, last ${ago(j.err)}${j.ok ? ' · last worked ' + ago(j.ok) : ''} – ${j.error}</div></div></div>`)
+        : html`<div class="w-check"><div class="w-check-ic ok">${icon('check')}</div><div><div class="w-check-label">All ${(T.jobs || []).length || ''} jobs are working</div>
+          <div class="w-check-detail">${(T.jobs || []).length ? 'Checked since the bot started ' + fmtDur(B.uptime_s) + ' ago.' : 'They report here after their first run.'}</div></div></div>`}
+    </section>
     <section class="w-card w-pad"><h3 class="w-h3" style="margin-bottom:6px">Updates</h3>
       ${T.updates.length ? html`<div class="w-hist">${T.updates.slice().reverse().map(l => html`<div>${l}</div>`)}</div>` : html`<div class="w-empty" style="padding:14px">No updates installed yet. Write “Update bugbot” to Claude to install a released version.</div>`}
     </section>
@@ -4338,6 +4346,7 @@ function makeMock() {
         system: { uptime_s: 6 * 86400 + 5400, load: [0.12 + Math.random() * 0.1, 0.09, 0.08], cpus: 2, memory: { total: 1004 * 1048576, available: 412 * 1048576, swap_total: 1024 * 1048576, swap_free: 980 * 1048576 }, disk: { total: 29 * 1073741824, free: 21.4 * 1073741824 } },
         services: [{ name: 'wosbot', label: 'Discord bot', state: 'active' }, { name: 'nginx', label: 'Web server (nginx)', state: 'active' }, { name: 'wos-tunnel', label: 'Website ↔ bot link', state: 'active' }, { name: 'wos-update.timer', label: 'Update checker', state: 'active' }],
         website_ok: true, data: { db_bytes: 482304, last_backup: now - 5 * 3600, backups: 7 },
+        jobs: [{ name: 'gift codes', ok: now - 40, fails: 0 }, { name: 'daily backup', ok: now - 3600, fails: 0 }, { name: 'promoter servers check', ok: now - 5400, err: now - 600, fails: 2, error: 'HTTPException: 503 Service Unavailable' }],
         updates: ['2026-11-07 20:55 Installing 3946ab7 – Updates: use HTTPS for a public repository', '2026-11-07 20:57 ✔ Updated to 3946ab7 – Updates: use HTTPS for a public repository'],
         errors: [] };
     }
