@@ -193,7 +193,7 @@ details.fold>summary::-webkit-details-marker{display:none}
   .badge{right:calc(50% - 22px)}
   .app.inapp .rail{position:fixed;top:auto;bottom:0;left:0;right:0;border-bottom:0;border-top:1px solid var(--line);padding-bottom:calc(6px + env(safe-area-inset-bottom))}
   .app.inapp .page{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
-  .app.inapp .toasts{bottom:calc(84px + env(safe-area-inset-bottom))}
+  .toasts.inapp{bottom:calc(84px + env(safe-area-inset-bottom))}
   .top{top:0;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top))}
   .app:not(.inapp) .top{top:61px}
   .search{min-width:0;width:40px;padding:0;justify-content:center}.search span,.search kbd{display:none}
@@ -298,7 +298,7 @@ const isMod = () => !!(S.user && S.user.role === 'mod');
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
 function toast(text, kind) {
   let box = $('.toasts');
-  if (!box) { box = document.createElement('div'); box.className = 'toasts'; box.setAttribute('aria-live', 'polite'); root.appendChild(box); }
+  if (!box) { box = document.createElement('div'); box.className = 'toasts' + (inApp ? ' inapp' : ''); box.setAttribute('aria-live', 'polite'); document.body.appendChild(box); }   // outside #app: survives redraws
   const t = document.createElement('div'); t.className = 'toast ' + (kind || ''); t.textContent = text; box.appendChild(t);
   setTimeout(() => t.remove(), kind === 'err' ? 7000 : 3800);
 }
