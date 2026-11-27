@@ -563,6 +563,13 @@ SCHEMA = {
     "automod_warn": {"type": "bool", "default": True},
     "guard_enabled": {"type": "bool", "default": True},
     "guard_timeout_minutes": {"type": "int", "default": 60, "min": 0, "max": 10080},
+    # honeypot: a channel no real player posts in – spam bots and hacked accounts that post there are removed
+    "honeypot_enabled": {"type": "bool", "default": False},
+    "honeypot_channel_id": {"type": "channel", "default": None},
+    "honeypot_action": {"type": "choice", "default": "softban", "choices": ["softban", "kick", "ban", "timeout"]},
+    "honeypot_delete_hours": {"type": "int", "default": 1, "min": 0, "max": 168},
+    "honeypot_timeout_minutes": {"type": "int", "default": 1440, "min": 1, "max": 40320},
+    "honeypot_notice": {"type": "bool", "default": True},
     "guard_block_invites": {"type": "bool", "default": False},
     "guard_allow_domains": {"type": "lines", "default": "discord.com\ndiscord.gg\ndiscordapp.com\ndiscordapp.net\ndiscord.media\ndiscord.gift\ndiscord.new\nyoutube.com\nyoutu.be\ntwitch.tv\ntenor.com\ngiphy.com\nimgur.com\nreddit.com\nx.com\ntwitter.com\ngoogle.com\ncenturygame.com\nwhiteoutsurvival.com",
                             "max_lines": 60, "max_len": 80},

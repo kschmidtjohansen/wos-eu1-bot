@@ -1978,7 +1978,7 @@ class WosBot(discord.Client):
                          "default_patch_title": default_patch_title, "submit_web_report": submit_web_report,
                          "set_severity": set_severity, "post_dev_list": post_dev_list, "dev_update": dev_update, "ticket_from_dashboard": ticket_from_dashboard, "ticket_messages": ticket_messages,
                          "ticket_send": ticket_send, "ticket_close": ticket_close,
-                         "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "submit_web_idea": submit_web_idea, "idea_chat_view": idea_chat_view, "idea_can_write": idea_can_write, "idea_reply": idea_reply, "idea_staff_send": idea_staff_send, "idea_follow_url": idea_follow_url, "web_ticket_view": web_ticket_view, "web_can_write": web_can_write, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
+                         "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "submit_web_idea": submit_web_idea, "honeypot_notice_refresh": honeypot_notice_refresh, "idea_chat_view": idea_chat_view, "idea_can_write": idea_can_write, "idea_reply": idea_reply, "idea_staff_send": idea_staff_send, "idea_follow_url": idea_follow_url, "web_ticket_view": web_ticket_view, "web_can_write": web_can_write, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
                          "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
                          "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
@@ -2017,6 +2017,7 @@ class WosBot(discord.Client):
             start_redeem()
             asyncio.create_task(safe_task(add_translate_buttons(), "translate buttons"))
             asyncio.create_task(safe_task(fix_language_flags(), "language flags"))
+            asyncio.create_task(safe_task(honeypot_notice_refresh(), "honeypot warning"))
             if (access_cfg().get("backfill") or {}).get("state") == "running":
                 _backfill_task[0] = asyncio.create_task(safe_task(run_backfill(), "member backfill"))
             if not await cache_invites():
@@ -2135,7 +2136,7 @@ class WosBot(discord.Client):
         except Exception as exc:  # noqa: BLE001
             print(f"[message log] {exc!r}")
         try:
-            if await guard_message(message) or await automod_message(message):
+            if await honeypot_message(message) or await guard_message(message) or await automod_message(message):
                 return
         except Exception as exc:  # noqa: BLE001 – the guard must never break normal chat
             print(f"[guard] {exc!r}")
@@ -4575,6 +4576,127 @@ async def guard_message(message) -> bool:
     return True
 
 
+# ------------------------------------------------------------ honeypot
+# A channel no real player posts in (the bot keeps a warning at the top). Spam bots and hacked accounts post in every
+# channel they can see, so anyone who posts here is removed: soft-ban (ban + unban – deletes their recent messages
+# everywhere, they may rejoin), kick, ban or timeout. Staff are never touched. Replaces a separate honeypot bot.
+_honey_seen: dict = {}             # user id -> time, so a burst of messages is handled once
+
+
+def honeypot_stats() -> dict:
+    try:
+        return json.loads(get_raw("honeypot_stats") or "{}")
+    except ValueError:
+        return {}
+
+
+async def honeypot_message(message) -> bool:
+    """True when the message was in the honeypot channel and was handled."""
+    cid = cfg("honeypot_channel_id")
+    if not cfg("honeypot_enabled") or not cid or message.guild is None or message.guild.id != GUILD_ID or message.channel.id != cid:
+        return False
+    m = message.author
+    if getattr(m, "bot", False) or is_mod(m) or not isinstance(m, discord.Member):
+        return False
+    try:
+        store.mark_bot_delete(message.id)
+        await message.delete()
+    except discord.HTTPException:
+        pass
+    now = time.time()
+    if now - _honey_seen.get(m.id, 0) < 60:
+        return True                                  # already being handled
+    _honey_seen[m.id] = now
+    g, action = message.guild, cfg("honeypot_action")
+    hours, minutes = cfg("honeypot_delete_hours"), cfg("honeypot_timeout_minutes")
+    chname = getattr(message.channel, "name", "honeypot")
+    reason = f"Honeypot: posted in #{chname}"
+    age_days = (discord.utils.utcnow() - m.created_at).days if getattr(m, "created_at", None) else None
+    joined_days = (discord.utils.utcnow() - m.joined_at).days if getattr(m, "joined_at", None) else None
+    # tell them first – after a kick or ban the bot can't DM them any more
+    lg = lang_for(m.id)
+    extra = {"softban": "honeypot.rejoin", "kick": "honeypot.rejoin", "ban": "honeypot.banned", "timeout": "honeypot.timeout"}[action]
+    await dm(m.id, T("dm.honeypot", lg) + "\n\n" + T(extra, lg, minutes=minutes))
+    if action == "ban":
+        await tell_appeal(m.id)
+    fail = None
+    try:
+        if action == "timeout":
+            await m.timeout(timedelta(minutes=minutes), reason=reason)
+        elif action == "kick":
+            await m.kick(reason=reason)
+        else:
+            await g.ban(m, reason=reason + (" (soft-ban: messages cleaned, may rejoin)" if action == "softban" else ""),
+                        delete_message_seconds=hours * 3600)
+            if action == "softban":
+                await g.unban(m, reason="Honeypot soft-ban – may rejoin")
+    except discord.Forbidden:
+        fail = {"timeout": "Timeout Members", "kick": "Kick Members"}.get(action, "Ban Members")
+        fail = f"the bot is missing the “{fail}” permission (or its role is below theirs)"
+    except discord.HTTPException as exc:
+        fail = f"Discord refused: {exc.text or exc}"
+    did = {"softban": "soft-banned (removed, recent messages deleted)", "kick": "kicked", "ban": "banned",
+           "timeout": f"timed out for {minutes} min"}[action]
+    if not fail:
+        store.add_case(m.id, m.display_name, action, reason, None, brand(), minutes=minutes if action == "timeout" else None, auto=True)
+    st = honeypot_stats()
+    st["count"], st["last"] = int(st.get("count", 0)) + (0 if fail else 1), int(now)
+    put_raw("honeypot_stats", json.dumps(st))
+    who = f"{m.display_name} ({m.name}, id {m.id})"
+    log_event("guard", f"🍯 Honeypot: {who} posted in #{chname} – " + (f"could NOT be removed: {fail}" if fail else did)
+              + (f". Account {age_days} day(s) old" if age_days is not None else "") + f". Text: {_defang(message.content or '(files only)')}",
+              m.id, m.display_name)
+    ch = chan("alerts_channel_id") or chan("mod_channel_id")
+    if ch is not None:
+        e = discord.Embed(title="🍯 Honeypot caught someone" if not fail else "🍯 Honeypot: action failed",
+                          color=0xF5A524 if not fail else 0xED4245,
+                          description=f"{m.mention} posted in <#{cid}>.\n**{('Could not act: ' + fail) if fail else did.capitalize()}**")
+        e.add_field(name="Account", value=f"{m.name} · id {m.id}\nCreated {age_days if age_days is not None else '?'} day(s) ago"
+                    + (f" · joined {joined_days} day(s) ago" if joined_days is not None else ""), inline=False)
+        e.add_field(name="Message", value=f"```{_defang(message.content or '(files only)')[:900]}```", inline=False)
+        try:
+            await ch.send(embed=e, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+    return True
+
+
+async def honeypot_notice_refresh():
+    """Keep one warning message at the top of the honeypot channel (and remove it from an old channel)."""
+    raw = (get_raw("honeypot_notice") or "").split(":")
+    old_ch, old_id = (int(raw[0]), int(raw[1])) if len(raw) == 2 and raw[0].isdigit() and raw[1].isdigit() else (None, None)
+    cid = cfg("honeypot_channel_id") if cfg("honeypot_enabled") and cfg("honeypot_notice") else None
+    if old_ch and old_ch != cid:                               # turned off or moved: take the old warning down
+        och = bot.get_channel(old_ch)
+        if och is not None:
+            try:
+                await och.get_partial_message(old_id).delete()
+            except discord.HTTPException:
+                pass
+        put_raw("honeypot_notice", "")
+        old_ch = old_id = None
+    if not cid:
+        return
+    ch = bot.get_channel(cid)
+    if ch is None:
+        return
+    lang = cfg("default_language")
+    e = discord.Embed(title=T("honeypot.title", lang), description=T("honeypot.text", lang), color=0xED4245)
+    e.set_footer(text=f"{brand()} · 🍯")
+    if old_id:
+        try:
+            await ch.get_partial_message(old_id).edit(embed=e)
+            return
+        except discord.NotFound:
+            pass
+    msg = await ch.send(embed=e)
+    put_raw("honeypot_notice", f"{cid}:{msg.id}")
+    try:
+        await msg.pin(reason="Honeypot warning")
+    except discord.HTTPException:
+        pass
+
+
 # ------------------------------------------------------------ invite tracker
 # Remembers how often each invite link was used; when someone joins, the link whose count went up is theirs.
 # Needs the bot permission "Manage Server" to read the invite list.
@@ -5580,7 +5702,7 @@ async def warn_member(member, reason: str, mod_id, mod_name: str, auto: bool = F
 
 
 def cases_embed(user, rows) -> discord.Embed:
-    icon = {"warn": "⚠️", "timeout": "🔇", "kick": "👢", "ban": "⛔", "unban": "♻️", "pardon": "🕊️"}
+    icon = {"warn": "⚠️", "timeout": "🔇", "kick": "👢", "softban": "🍯", "ban": "⛔", "unban": "♻️", "pardon": "🕊️"}
     e = discord.Embed(title=f"Cases – {getattr(user, 'display_name', user)}", color=0xFFC15E)
     e.description = "\n".join(f"`#{r['id']}` {icon.get(r['kind'], '•')} **{r['kind']}**" + (f" {r['minutes']} min" if r["minutes"] else "")
                               + (" ~~(pardoned)~~" if r["kind"] == "warn" and not r["active"] else "")
@@ -7811,6 +7933,10 @@ async def reminder_loop():
         await partner_check()
     except Exception as exc:  # noqa: BLE001
         print(f"[promoter check] {exc!r}")
+    try:
+        await honeypot_notice_refresh()                  # someone deleted the warning? put it back
+    except Exception as exc:  # noqa: BLE001
+        print(f"[honeypot] {exc!r}")
     try:
         await delete_closed_tickets()
     except Exception as exc:  # noqa: BLE001

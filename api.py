@@ -61,9 +61,10 @@ CHANNEL_NEEDS = {
     "board_channel_id": ("Known issues board channel", _BASE + ["read_message_history"]),
     "log_channel_id": ("Bot log channel", list(_BASE)),
     "invites_channel_id": ("Invite log channel", list(_BASE)),
+    "honeypot_channel_id": ("Honeypot channel", _BASE + ["manage_messages", "read_message_history"]),
 }
 OPTIONAL_CHANNELS = ("welcome_channel_id", "patchnotes_channel_id", "backup_channel_id", "digest_channel_id", "devlist_channel_id", "alerts_channel_id", "announce_channel_id",
-                     "giftcodes_channel_id", "board_channel_id", "log_channel_id", "invites_channel_id")
+                     "giftcodes_channel_id", "board_channel_id", "log_channel_id", "invites_channel_id", "honeypot_channel_id")
 # accepted suggestions are only posted here; moderators decide in the mod channel
 
 
@@ -250,6 +251,10 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         for key, spec in store.SCHEMA.items():
             v = store.cfg(key)
             out[key] = (str(v) if v else None) if spec["type"] == "channel" else v
+        try:
+            out["honeypot_count"] = int(json.loads(store.get_raw("honeypot_stats") or "{}").get("count", 0))
+        except (ValueError, TypeError):
+            out["honeypot_count"] = 0
         return {
             "settings": out,
             "panel": {"message_id": store.get_raw("panel_msg_id"),
@@ -351,6 +356,11 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             store.log_event("settings", "Dashboard: " + "; ".join(changes), who_id(request), who(request))
         if {"bot_status", "activity_type", "activity_text"} & set(clean):
             await hooks["apply_presence"]()
+        if any(k.startswith("honeypot_") for k in clean) and "honeypot_notice_refresh" in hooks:
+            try:
+                await hooks["honeypot_notice_refresh"]()
+            except discord.HTTPException as exc:
+                raise ApiError(502, f"Saved, but the warning could not be posted in the honeypot channel: {exc.text or exc}")
         return web.json_response(settings_payload())
 
     @routes.post("/api/panel")
