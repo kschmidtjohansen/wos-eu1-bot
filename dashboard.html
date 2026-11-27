@@ -379,7 +379,13 @@
 .w-hubtabs button{border:0;background:none;color:var(--w-muted);font:inherit;font-size:14px;font-weight:600;padding:10px 14px 11px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .w-hubtabs button:hover{color:var(--w-text)}
 .w-hubtabs button[aria-current="page"]{color:var(--w-text);border-bottom-color:#7de3f4}
-@media (max-width:700px){.w-hubtabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.w-hubtabs button{white-space:nowrap;padding:10px 12px}}
+@media (max-width:700px){
+  /* one row that only scrolls sideways (the tabs used to stick out a pixel, so the row also moved up and down) */
+  .w-hubtabs{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:none;margin-left:-12px;margin-right:-12px;padding:0 8px}
+  .w-hubtabs::-webkit-scrollbar{display:none}
+  .w-hubtabs button{white-space:nowrap;padding:10px 12px;flex:none;margin-bottom:0;border-bottom:0;box-shadow:inset 0 -2px 0 transparent}
+  .w-hubtabs button[aria-current="page"]{box-shadow:inset 0 -2px 0 #7de3f4}
+}
 .w-arearow{display:grid;grid-template-columns:1fr auto;gap:6px 10px;width:100%;padding:7px 0;border:0;border-top:1px solid var(--w-border);background:none;color:var(--w-text);font:inherit;text-align:left;cursor:pointer}
 .w-arearow:first-of-type{border-top:0}
 .w-arearow .w-stack{grid-column:1/3}
@@ -1203,6 +1209,36 @@ function accessCard() {
       ${A.can_fix ? '' : html`<span class="w-hint">The bot needs “Manage Roles” and “Manage Channels” to do it.</span>`}</div>` : ''}</section>`;
 }
 const REQUIRED_CH = ['report_channel_id', 'mod_channel_id', 'suggestions_channel_id', 'admin_channel_id'];
+/* Settings that only matter when another one is on stay hidden until it is (shown again the moment you switch it on).
+   Works on any settings row with data-k, so the pages themselves don't change. */
+const ON = k => () => !!S.draft[k];
+const DEPS = {
+  auto_block_rejects: ON('auto_block_web'), auto_block_days: ON('auto_block_web'),
+  game_site_url: ON('game_enabled'), game_check_host: ON('game_enabled'), game_status_alert: ON('game_enabled'),
+  known_auto_players: ON('known_issues_enabled'), attachment_keep_days: ON('keep_attachments'),
+  drive_every_days: ON('drive_enabled'), drive_keep: ON('drive_enabled'),
+  raid_joins: ON('raid_enabled'), raid_minutes: ON('raid_enabled'), raid_auto_lift_minutes: ON('raid_enabled'),
+  honeypot_channel_id: ON('honeypot_enabled'), honeypot_action: ON('honeypot_enabled'), honeypot_notice: ON('honeypot_enabled'),
+  honeypot_delete_hours: () => !!S.draft.honeypot_enabled && ['softban', 'ban'].includes(S.draft.honeypot_action),
+  honeypot_timeout_minutes: () => !!S.draft.honeypot_enabled && S.draft.honeypot_action === 'timeout',
+  guard_timeout_minutes: ON('guard_enabled'), guard_block_invites: ON('guard_enabled'), guard_allow_domains: ON('guard_enabled'),
+  automod_badwords: ON('automod_badwords_on'), automod_mentions_max: ON('automod_mentions_on'),
+  weekly_weekday: ON('weekly_enabled'), weekly_hour: ON('weekly_enabled'),
+  digest_weekday: ON('digest_enabled'), digest_hour: ON('digest_enabled'),
+  devlist_hour: ON('devlist_enabled'), devlist_files: ON('devlist_enabled'),
+  spike_count: ON('spike_enabled'), spike_minutes: ON('spike_enabled'),
+  msglog_days: ON('msglog_enabled'), invites_fake_days: ON('invites_enabled'),
+  reminder_mod_hours: ON('reminders_enabled'), reminder_admin_hours: ON('reminders_enabled'), reminder_critical_hours: ON('reminders_enabled'),
+  warn_timeout_minutes: () => !!S.draft.warn_timeout_at,
+};
+function applyDeps(scope) {
+  (scope || document).querySelectorAll('.wosd [data-k]').forEach(el => {
+    const f = DEPS[el.dataset.k]; if (!f) return;
+    const row = el.closest('.w-row') || el.closest('.w-field'); if (row) row.hidden = !f();
+  });
+}
+// A folded card: remembers whether the person opened or closed it, otherwise uses the default.
+function foldOpen(key, def) { return (S.trOpen && key in S.trOpen ? S.trOpen[key] : def) ? 'open' : ''; }
 function chanRow([k, label, desc]) {
   return html`<div class="w-row chan">
         <div><div class="w-row-label">${label}</div><div class="w-row-desc">${desc.replace(/^Optional[.,] ?/, '')}</div></div>
@@ -1540,23 +1576,23 @@ function viewBot() {
 function stickerCard() {
   const K = S.stickers; if (!K) return '';
   const missing = K.items.filter(x => !x.installed).length;
-  return html`<section class="w-card w-pad" id="stickers"><div class="w-sec-head"><h3 class="w-h3">Sticker pack: Frostbit</h3>
-      <span class="w-badge ${missing ? 'info' : 'ok'}">${K.items.length - missing} of ${K.items.length} on the server</span></div>
+  return html`<details id="stickers" class="w-card w-pad w-chanopt" data-fold="bot-stickers" ${foldOpen('bot-stickers', false)}><summary><h3 class="w-h3">Sticker pack: Frostbit</h3>
+      <span class="w-badge ${missing ? 'info' : 'ok'}">${K.items.length - missing} of ${K.items.length} on the server</span></summary>
     <p class="w-sub" style="margin-bottom:14px">Our own snow chief, made for the server in its frost-and-furnace colours. The bot adds the missing ones to Discord in one go
       (${K.used} of ${K.limit} sticker slots used). It needs the <b>Manage Expressions</b> permission.</p>
     <div class="w-stickers">${K.items.map(x => html`<figure class="w-stk${x.installed ? ' on' : ''}"><img data-stk="${x.id}" alt="${x.title} sticker" width="96" height="96"><figcaption>${x.emoji} ${x.title}</figcaption></figure>`)}</div>
     <div class="w-actions" style="margin-top:14px">${missing ? html`<button class="w-btn primary" data-act="stickersInstall">Add ${missing} sticker${missing === 1 ? '' : 's'} to Discord</button>` : html`<span class="w-hint">All stickers are on the server.</span>`}</div>
-  </section>`;
+  </details>`;
 }
 function emojiCard() {
   const K = S.emojis; if (!K) return '';
   const missing = K.items.filter(x => !x.installed).length;
-  return html`<section class="w-card w-pad" id="emojis"><div class="w-sec-head"><h3 class="w-h3">Animated emojis</h3>
-      <span class="w-badge ${missing ? 'info' : 'ok'}">${K.items.length - missing} of ${K.items.length} on the server</span></div>
+  return html`<details id="emojis" class="w-card w-pad w-chanopt" data-fold="bot-emojis" ${foldOpen('bot-emojis', false)}><summary><h3 class="w-h3">Animated emojis</h3>
+      <span class="w-badge ${missing ? 'info' : 'ok'}">${K.items.length - missing} of ${K.items.length} on the server</span></summary>
     <p class="w-sub" style="margin-bottom:14px">Frost stars, bear time, SvS, rally and more – animated, in the server’s colours (${K.used} of ${K.limit} animated slots used). Needs <b>Manage Expressions</b>.</p>
     <div class="w-stickers w-emojis">${K.items.map(x => html`<figure class="w-stk${x.installed ? ' on' : ''}"><img data-emj="${x.id}" alt=":${x.name}:" width="64" height="64"><figcaption>:${x.name}:</figcaption></figure>`)}</div>
     <div class="w-actions" style="margin-top:14px">${missing ? html`<button class="w-btn primary" data-act="emojisInstall">Add ${missing} emoji${missing === 1 ? '' : 's'} to Discord</button>` : html`<span class="w-hint">All emojis are on the server.</span>`}</div>
-  </section>`;
+  </details>`;
 }
 async function loadStickerImgs() {
   for (const img of $$('img[data-emj]')) {
@@ -1583,7 +1619,7 @@ function loginCard() {
   const cb = (S.base || location.origin).replace(/\/+$/, '') + '/api/auth/callback';
   const RN = A.role_names || { admin: ['Admin', 'Boss', 'Developer'], mod: ['Senior Moderator', 'Moderator'] }, M = A.matched || { admin: [], mod: [] };
   const found = list => list.length ? list.map(r => html`<span class="w-badge ok">@${r.name} · ${r.members}</span>`) : html`<span class="w-badge bad">No matching role in the server</span>`;
-  return html`<section class="w-card w-pad"><h3 class="w-h3">Staff login</h3>
+  return html`<details class="w-card w-pad w-chanopt" data-fold="bot-login" ${foldOpen('bot-login', !A.enabled)}><summary><h3 class="w-h3">Staff login</h3><span class="w-hint">${A.enabled ? 'Discord login on · ' + A.sessions.length + ' logged in' : 'Discord login is off'}</span></summary>
     <p class="w-sub" style="margin:4px 0 12px">Everyone logs in with their own Discord account – there is no shared password. Access is checked against their Discord roles on every click, so someone who loses the role loses access at once. Every action is logged with their name.</p>
     <div class="w-form2">
       <div class="w-field"><label class="w-label" for="au-admin">Full access <span class="w-hint">– sees and changes everything</span></label>
@@ -1603,7 +1639,7 @@ function loginCard() {
       <div class="w-check-detail">It’s the only way into this page. Locked out? On the server run <code>sudo wosbot-login</code> for a one-time admin link.</div></div></div>
       <div class="w-sect"><div class="w-sec-head"><span class="w-label">Logged in (${A.sessions.length})</span>${A.sessions.length ? html`<button class="w-btn small danger" data-act="authKick">Log everyone out</button>` : ''}</div>
       ${A.sessions.map(x => html`<div class="w-hint">${x.name} · active ${ago(x.last_seen)}</div>`)}</div>` : ''}</div>
-  </section>`;
+  </details>`;
 }
 
 /* ---- bugs ---- */
@@ -2503,7 +2539,7 @@ function viewAccess() {
     <div class="w-pagehead"><h2>Access & languages</h2><p>Language chats that players pick themselves, and a device question new members answer before they can see the server.</p></div>
     ${!perms.manage_roles || !perms.manage_channels ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>The bot needs more permissions</b><div class="w-sub">Give the bot’s role <b>Manage Roles</b> and <b>Manage Channels</b> in Server Settings → Roles, and drag it above the roles it hands out.</div></div></div>` : ''}
 
-    <section class="w-card w-pad"><h3 class="w-h3">Language chats</h3>
+    <details class="w-card w-pad w-chanopt" data-fold="acc-langs" ${foldOpen('acc-langs', !langsSet)}><summary><h3 class="w-h3">Language chats</h3><span class="w-hint">${langsSet ? langsSet + ' language chats set up' + (C.lang_menu_channel ? ' · menu posted' : '') : 'Not set up yet'}</span></summary>
       <p class="w-sub" style="margin:4px 0 12px">Tick the language chats. Each one gets its own role and is hidden for everyone else; a menu with one button per language (plus 🌍 All languages) lets players open the chats they want. Tapping again hides it.</p>
       <div class="w-acc-row w-acc-head"><span></span><span>Channel</span><span>Flag</span><span>Role name</span><span>Button text</span></div>
       ${A.detected.map(d => html`<label class="w-acc-row ${d.checked ? '' : 'off'}" data-cid="${d.channel_id}"><input type="checkbox" class="acc-on" ${d.checked ? 'checked' : ''} aria-label="Language chat #${d.name}">
@@ -2515,9 +2551,9 @@ function viewAccess() {
       <div class="w-actions"><span class="w-hint">${langsSet ? langsSet + ' language chats set up · running it again updates roles, channels and the menu' : 'Nothing is changed in Discord until you press the button.'}</span><div class="w-spacer"></div>
         <button class="w-btn primary" data-act="accLangs">${icon('globe')} ${langsSet ? 'Update language chats' : 'Set up language chats'}</button></div>
       <p class="w-hint" style="margin-top:8px">Moderators and the bot keep seeing every language chat. Players can still use Discord’s own “Browse channels” for the chats they have access to.</p>
-    </section>
+    </details>
 
-    <section class="w-card w-pad"><h3 class="w-h3">Device question for new members</h3>
+    <details class="w-card w-pad w-chanopt" data-fold="acc-gate" ${foldOpen('acc-gate', rolesDone && !locked)}><summary><h3 class="w-h3">Device question for new members</h3><span class="w-hint">${locked ? 'On – new members answer it first' : rolesDone ? 'Being set up – ' + [rolesDone, gateDone, bfDone].filter(Boolean).length + ' of 4 steps done' : 'Off'}</span>${locked ? html`<span class="w-badge ok">On</span>` : ''}</summary>
       <p class="w-sub" style="margin:4px 0 6px">New members only see one channel with the question <i>“Which device do you play on?”</i>. Tapping 🍎 iOS or 🤖 Android / Emulator gives them that role and the <b>Member</b> role – then the server opens up. People already here get Member straight away and are never asked.</p>
       ${locked ? html`<div class="w-banner ok" style="margin:10px 0">${icon('check')}<div><b>On – new members answer the question first</b><div class="w-sub">Switched on ${ago(C.locked_at)}.</div></div><button class="w-btn small danger" data-act="accUnlock">Undo</button></div>` : ''}
       ${step(1, rolesDone, 'Roles', html`<div class="w-form2"><div class="w-field"><label class="w-label" for="acc-member">Member role</label><select class="w-select" id="acc-member">${new Raw(String(roleOptions(C.member_role, true)).replace('— None —', '— Create “Member” —'))}</select></div>
@@ -2532,7 +2568,7 @@ function viewAccess() {
         <div class="w-actions"><button class="w-btn" data-act="accBackfill" ${rolesDone && bf.state !== 'running' ? '' : 'disabled'}>${bfDone ? 'Run again (catches anyone missed)' : 'Give Member to everyone (' + (A.members || 0) + ')'}</button></div>`)}
       ${step(4, locked, 'Switch it on', html`<p class="w-hint">Moves “View Channels” from @everyone to the Member role, and opens the question channel to everyone. Private staff channels are left alone. Everything is remembered, so <b>Undo</b> puts it back exactly.</p>
         <div class="w-actions"><button class="w-btn primary" data-act="accLock" ${rolesDone && gateDone && bfDone && !locked ? '' : 'disabled'}>${locked ? 'It’s on' : 'Hide channels until they answer'}</button></div>`)}
-    </section>`;
+    </details>`;
 }
 
 /* ---- invites ---- */
@@ -2545,7 +2581,7 @@ function viewInvites() {
     ${!V.can_read ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>The bot can’t read the invite links</b><div class="w-sub">Give the bot’s role the <b>Manage Server</b> permission in Discord – it needs it to see which link someone used.</div></div></div>` : ''}
     ${!V.enabled ? html`<div class="w-card w-banner warn">${icon('alert')}<div><b>Invite tracking is switched off</b><div class="w-sub">Turn it on with the Settings button on the Invites page.</div></div><button class="w-btn small" data-act="goto" data-tab="invites" data-sub="settings">Fix</button></div>` : ''}
     <div class="w-tiles w-tiles4">${tile(V.joins30, 'Joined, last 30 days')}${tile(V.known30, 'With a known inviter', 'ok')}${tile(V.inviters, 'People who invited someone')}${tile(V.top.length ? V.top[0].regular : 0, V.top.length ? 'Top: ' + V.top[0].name : 'No inviters yet')}</div>
-    <section class="w-card w-pad"><h3 class="w-h3">Carry over from Invite Tracker</h3>
+    <details class="w-card w-pad w-chanopt" data-fold="inv-carry" ${foldOpen('inv-carry', false)}><summary><h3 class="w-h3">Carry over from Invite Tracker</h3><span class="w-hint">${V.carried && V.carried.players ? V.carried.players + ' players carried over' : 'Not used'}</span></summary>
       ${V.carried && V.carried.players ? html`<div class="w-banner ok" style="margin:6px 0 12px">${icon('check')}<div><b>${V.carried.players} player${V.carried.players === 1 ? '' : 's'} carried over</b><div class="w-sub">Last import ${ago(V.carried.ts)}. New joins are added on top, so nobody starts from zero.</div></div></div>`
         : html`<p class="w-sub" style="margin:6px 0 10px">Nothing carried over yet – everyone’s count starts from the day this bot started tracking.</p>`}
       <ol class="w-steps" style="margin:0 0 10px 18px;line-height:1.7">
@@ -2554,7 +2590,7 @@ function viewInvites() {
         <li>Press ▶ on the leaderboard to go through the remaining pages – the bot picks up each page you open for 14 minutes.</li></ol>
       <p class="w-hint">Importing the same page twice is safe – it sets the numbers, it doesn’t add them twice. When everything matches, you can remove Invite Tracker from the server.</p>
       ${V.carried && V.carried.players && !isMod() ? html`<div class="w-actions"><button class="w-btn small danger" data-act="invBaseClear">Remove carried-over counts</button></div>` : ''}
-    </section>
+    </details>
     <section class="w-card w-pad"><h3 class="w-h3">Top inviters</h3><p class="w-sub" style="margin-bottom:8px">${V.carried && V.carried.players ? 'Includes the counts carried over from Invite Tracker.' : 'Counted from the day this bot started tracking.'}</p>
       ${V.top.length ? html`<div class="w-tablewrap"><table class="w-table"><thead><tr><th>Member</th><th>Invites</th><th>Joined</th><th>Left</th><th>New accounts</th><th>Bonus</th></tr></thead><tbody>
         ${V.top.map(r => html`<tr><td>${r.name}</td><td><b>${r.regular}</b></td><td>${r.total}</td><td>${r.left || '–'}</td><td>${r.fake || '–'}</td><td>${r.bonus || '–'}</td></tr>`)}</tbody></table></div>` : html`<div class="w-empty">Nobody has joined through an invite yet.</div>`}
@@ -2968,7 +3004,7 @@ function viewData() {
         <button class="w-btn small" data-act="dlBackup" data-n="${x.name}">${icon('upload')} Download</button></div>`) : html`<div class="w-empty">No backups yet.</div>`}
     </section>
     ${driveCard(D.drive)}
-    <section class="w-card w-pad w-danger"><h3 class="w-h3">Delete test data (end of testing)</h3>
+    <details class="w-card w-pad w-chanopt w-danger" data-fold="data-delete" ${foldOpen('data-delete', false)}><summary><h3 class="w-h3">Delete test data</h3><span class="w-hint">Removes every report of one kind – for the end of testing</span></summary>
       <p class="w-sub" style="margin-bottom:12px">Removes <b>every</b> report of the chosen kind, with screenshots and history. Settings and the log are kept.
         A backup is made first, so you can undo it. Use it once, when testing is over.</p>
       <div class="w-field" style="max-width:260px"><label class="w-label" for="da-what">Delete all</label>
@@ -2977,7 +3013,7 @@ function viewData() {
       <label class="w-inline w-hint" style="gap:6px;margin-bottom:12px"><input type="checkbox" id="da-reset" checked> Start numbering at #1 again</label>
       <div class="w-inline"><input class="w-input" id="da-confirm" placeholder="Type DELETE to confirm" autocomplete="off" style="max-width:240px">
         <button class="w-btn danger" data-act="bugDelAll">Delete all</button></div>
-    </section>${fsec('backups')}${saveBar()}`;
+    </details>${fsec('backups')}${saveBar()}`;
 }
 
 /* ---- patch notes ---- */
@@ -3162,7 +3198,9 @@ function setLive() {
 function paint(t) {
   const m = $('#wosd-main'); if (!m) return;
   m.innerHTML = String(liveBar()) + String(hubTabs()) + String(VIEWS[t || S.tab]());
-  tableLabels(m);
+  tableLabels(m); applyDeps(m);
+  const cur = m.querySelector('.w-hubtabs [aria-current="page"]');          // keep the open tab visible in the row
+  if (cur) { const row = cur.parentElement; row.scrollLeft += cur.getBoundingClientRect().left - row.getBoundingClientRect().left - 24; }
   if ($('#savebar')) updateSaveBar();
   if (S.tab === 'log') renderLogList();
   if (S.tab === 'bugs' && S.bugs.items) renderBugList();
@@ -4173,7 +4211,7 @@ function onInput(e) {
     if (el.type === 'checkbox') v = el.checked;
     else if (el.type === 'number') { const n = parseInt(el.value, 10); if (isNaN(n)) return; v = n; }
     else v = el.value || null;
-    S.draft[k] = v; updateSaveBar();
+    S.draft[k] = v; updateSaveBar(); applyDeps();
     if (k === 'welcome_message') {
       const pv = $('#wpv'), cnt = $('#w-cnt');
       if (pv) pv.innerHTML = String(welcomePreview());
