@@ -36,7 +36,7 @@ DEFAULT_RULES = (
 OLD_PANEL_TEXT = (
     "Found a bug or have an idea? React below:\n\n"
     "🐛 **Report a bug** – a private ticket opens where you answer a few questions.\n"
-    "💡 **Create a suggestion** – a private ticket opens where you write your idea freely.\n\n"
+    "💡 **Suggest an idea** – a private ticket opens where you write your idea freely.\n\n"
     "*Turn on DMs from server members to get updates on your reports.*"
 )
 DEFAULT_PANEL_TEXT = (

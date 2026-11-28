@@ -1371,7 +1371,7 @@ const FSEC = {
   staffq: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Reported messages & appeals</div>
       ${toggleRow('msg_reports_enabled', 'Players can report chat messages', 'Right-click (or long-press) a message → Apps → “Report to moderators”. It lands here and in the staff alerts channel with the messages before it and the writer’s warnings.')}
-      ${toggleRow('appeals_enabled', 'Players can appeal', 'A timed-out or banned player logs in with Discord on the website’s Appeal page and can send one appeal per timeout or ban. They get the link by DM when they are punished (needs the website address under Gift codes). Moderators decide on timeouts, admins on bans.')}
+      ${toggleRow('appeals_enabled', 'Players can appeal', 'A timed-out or banned player logs in with Discord on the website’s Appeal page and can send one appeal per timeout or ban. They get the link by DM when they are punished (needs the website address under Gift codes → Website address). Moderators decide on timeouts, admins on bans.')}
     </section>
     <section class="w-card w-pad"><div class="w-group-title">Raid mode</div>
       ${toggleRow('raid_enabled', 'Switch on by itself', 'When many accounts join within minutes, new members are held at the device question, nobody is welcomed and staff get a ping – until someone lifts it.')}
@@ -1464,7 +1464,7 @@ const FSEC = {
       ${numberRow('giftcodes_new_hours', 'New codes stay on their own for', 'New codes get their own announcement in Discord and the “New” section on the website for this long. Then they move into the list with the other codes.', 1, 168, 'hours')}
       ${numberRow('giftcodes_remind_hours', 'Post a “last chance” reminder', 'This many hours before a code expires, the bot posts a short reminder in the gift-codes channel. Codes that only last that long anyway get none. 0 = off.', 0, 72, 'hours before')}
       ${toggleRow('giftcodes_delete_expired', 'Delete expired codes here too', 'Expired codes always disappear from Discord and the website. On = they are also deleted from this dashboard. Off = they stay under “Expired” here as history.')}
-      ${textRow('giftcodes_site_url', 'Website gift-codes page', 'Optional. The address of the Gift codes page on your website – Discord gets an “All codes on the website” button.', 'http://…/codes.html', 300)}
+      ${textRow('giftcodes_site_url', 'Website address', 'The address of the players’ website (any page on it works). Used for gift codes, appeals, report follow-up pages and the developers’ page.', 'https://…', 300)}
     </section>`,
   backups: () => html`
     <section class="w-card w-pad"><div class="w-group-title">Screenshots & backups</div>

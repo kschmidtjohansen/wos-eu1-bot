@@ -30,6 +30,7 @@
     report: '<rect x="8" y="7" width="8" height="12" rx="4"/><path d="M12 7V4M8 11H4M16 11h4M8 16H5M16 16h3M9.5 4.5 8 3M14.5 4.5 16 3"/>',
     fixed: '<path d="M20 6 9 17l-5-5"/>',
     download: '<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>',
+    upload: '<path d="M12 20V8M7 13l5-5 5 5M4 4h16"/>',
     chat: '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
     status: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',

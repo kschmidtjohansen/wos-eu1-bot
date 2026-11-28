@@ -2128,6 +2128,9 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             if c["ok"]:
                 continue
             ch = g.get_channel(int(store.cfg(c["key"])))
+            if ch is None:                                  # deleted since the check
+                failed.append(f"{c['label']}: the channel no longer exists – pick it again under Channels")
+                continue
             try:
                 if c["kind"] == "view":
                     await ch.set_permissions(g.default_role, view_channel=False, reason="Bug data is for staff only")

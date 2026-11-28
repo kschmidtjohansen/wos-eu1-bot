@@ -5689,6 +5689,10 @@ async def lock_server(actor_id=None, actor="Dashboard") -> dict:
         return a
     _need(g, "manage_roles", "manage_channels")
     member = g.get_role(int(a["member_role"]))
+    if member is None:
+        raise ValueError("The Member role no longer exists – choose or create it again in step 1.")
+    if g.get_channel(int(a["gate_channel"])) is None:
+        raise ValueError("The question channel no longer exists – post the question again in step 2.")
     if g.me not in member.members:
         await g.me.add_roles(member, reason="The bot must keep seeing the channels")
     gate_ch = g.get_channel(int(a["gate_channel"]))

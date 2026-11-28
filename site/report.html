@@ -88,7 +88,7 @@ const say = (t, k) => { const m = $('msg'); m.replaceChildren(); if (t) m.append
 function fillAreas() { const s = $('area'), cur = s.value; s.replaceChildren(new Option(WOS.t('pick'), '')); (cfg.areas || []).forEach(a => s.add(new Option(a, a))); s.value = cur; $('go').textContent = WOS.t(mode === 'idea' ? 'sendIdea' : 'send'); }
 function drawFiles() { const b = $('flist'); b.replaceChildren(); chosen.forEach((x, i) => b.append(WOS.el('span', {}, x.name, WOS.el('button', { type: 'button', 'aria-label': 'Remove', onclick: () => { chosen.splice(i, 1); drawFiles(); } }, '×')))); }
 $('files').onchange = e => { chosen = chosen.concat(Array.from(e.target.files)); e.target.value = ''; drawFiles(); };
-const dz = $('drop'); dz.prepend(WOS.icon('download'));
+const dz = $('drop'); dz.prepend(WOS.icon('upload'));
 dz.onclick = () => $('files').click(); dz.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('files').click(); } };
 ['dragenter', 'dragover'].forEach(n => dz.addEventListener(n, e => { e.preventDefault(); dz.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(n => dz.addEventListener(n, e => { e.preventDefault(); dz.classList.remove('over'); }));

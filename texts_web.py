@@ -319,7 +319,7 @@ WEB_EN = [
     ('web.follow.evDup', 'Website – follow a report', '🔁 This bug was already reported (bug {dup}). You don’t need to do anything – it is being handled there.'),
     ('web.follow.h1Idea', 'Website – follow a report', 'Your idea'),
     ('web.follow.leadIdea', 'Website – follow a report', 'Messages between you and the WOS EU1 team about your idea.'),
-    ('web.follow.welcomeIdea', 'Website – follow a report', 'Thanks for your idea! 💡 We’ve received suggestion #{id} and the team will look at it soon.\n\nIf we have questions, we’ll write to you right here. Keep this tab open – or save the link to this page and come back later. You can add more details or pictures below at any time.'),
+    ('web.follow.welcomeIdea', 'Website – follow a report', 'Thanks for your idea! 💡 We’ve received idea #{id} and the team will look at it soon.\n\nIf we have questions, we’ll write to you right here. Keep this tab open – or save the link to this page and come back later. You can add more details or pictures below at any time.'),
     ('web.follow.s_accepted', 'Website – follow a report', 'Accepted'),
     ('web.follow.s_added', 'Website – follow a report', 'Added to the game'),
     ('web.follow.s_ideaNew', 'Website – follow a report', 'Waiting for the team'),
