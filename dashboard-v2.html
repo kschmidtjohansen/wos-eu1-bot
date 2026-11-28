@@ -871,7 +871,9 @@ async function demoApi(method, path, body) {
     if (sub === '/ticket/send') { (DEMO.chats[b.id] = DEMO.chats[b.id] || []).push({ id: String(Date.now()), ts: now(), kind: 'staff', author: 'You', text: body2.text || '', files: [] }); b.unread = 0; return { ok: true }; }
     if (sub === '/ticket/close') { b.status = 'new'; return { messages: 3, files: 0 }; }
     if (method === 'PUT') {
-      if (body2.dup_dismiss) { b.dup_suggest = null; } else if (body2.duplicate_of) { b.duplicate_of = +body2.duplicate_of; b.status = 'rejected'; }
+      if ('severity' in body2) b.severity = body2.severity || '';
+      if (body2.reopen) { b.duplicate_of = null; b.status = 'new'; }
+      if (body2.dup_dismiss) { b.dup_suggest = null; } else if (body2.duplicate_of) { if (!DEMO.bugs.some(x => x.id === +body2.duplicate_of)) { const e = new Error('Bug #' + body2.duplicate_of + ' not found.'); e.status = 404; throw e; } b.duplicate_of = +body2.duplicate_of; b.status = 'rejected'; }
       if (body2.status) { b.status = body2.status; if (body2.reason) b.reason = body2.reason; }
       return Object.assign({}, b);
     }
@@ -1165,6 +1167,11 @@ function bugPane(b, d) {
     ${b.duplicate_of ? html`<p class="note" style="margin-top:12px">Closed as a duplicate of <a href="#bug-${b.duplicate_of}">#${b.duplicate_of}</a>.</p>` : ''}
     ${b.reason && b.status.endsWith('rejected') ? html`<p class="note" style="margin-top:12px">Reason given: ${b.reason}</p>` : ''}
     ${it ? html`<section class="sec" style="margin-top:14px">${paneActions(it)}</section>` : ''}
+    <section class="sec" style="margin-top:14px"><div class="row" style="gap:16px;align-items:flex-end">
+      <div class="field" style="margin:0"><label for="bsev">Severity</label><select class="in" id="bsev" style="width:150px" data-act-change="bugSev" data-id="${b.id}">${[['', 'Not set'], ['minor', 'Minor'], ['major', 'Major'], ['critical', 'Critical']].map(([v, l]) => html`<option value="${v}" ${(b.severity || '') === v ? 'selected' : ''}>${l}</option>`)}</select></div>
+      ${b.duplicate_of ? html`<button class="btn" data-act="bugReopen" data-id="${b.id}">Not a duplicate – reopen</button>`
+        : html`<form class="row" data-act-submit="bugDup" data-id="${b.id}" style="gap:8px;align-items:flex-end"><div class="field" style="margin:0"><label for="bdup">Duplicate of bug #</label>
+          <input class="in num" id="bdup" inputmode="numeric" placeholder="e.g. 52" style="width:120px" autocomplete="off"></div><button class="btn" type="submit">Close as duplicate</button></form>`}</div></section>
     <section class="sec" style="margin-top:14px"><h3>Report</h3><div class="report" dir="auto">${reportText(b.text)}</div>
       ${d.tr ? html`<div class="tr">${d.tr.same ? 'Already in this language.' : d.tr.text}</div>` : ''}
       <div class="row" style="margin-top:8px"><button class="btn sm" data-act="translate" data-kind="bugs" data-id="${b.id}">${icon('globe')} Translate</button>
@@ -3284,6 +3291,11 @@ root.addEventListener('click', async e => {
   else if (act === 'file' || act === 'chatFile') {
     try { const u = await fileUrl(act === 'file' || el.dataset.kind === 'bug' ? 'bugs' : 'suggestions', el.dataset.id, el.dataset.fid); window.open(u, '_blank', 'noopener'); } catch (err) { toast(err.message, 'err'); }
   }
+  else if (act === 'bugReopen') {
+    busy(el, true, '…');
+    try { S.paneData.bug = await call('PUT', '/api/bugs/' + el.dataset.id, { reopen: true }); toast('Reopened – #' + el.dataset.id + ' is no longer a duplicate'); paintPane(); loadTodo(true); if (S.place === 'bugs') loadBugs(true); }
+    catch (err) { busy(el, false); toast(err.message, 'err'); }
+  }
   else if (act === 'merge') {
     if (!confirm('Close #' + el.dataset.id + ' as a duplicate of #' + el.dataset.into + '?')) return;
     try { await call('PUT', '/api/bugs/' + el.dataset.id, { duplicate_of: +el.dataset.into, reason: 'This bug was already reported.' }); toast('Merged into #' + el.dataset.into); S.paneData = null; render(); loadTodo(true); }
@@ -3455,6 +3467,14 @@ root.addEventListener('submit', async e => {
     const title = $('#pn-t').value.trim(); if (title.length < 3) return toast('Write a title first.', 'err');
     if (!confirm('Send “' + title + '” to ' + plural(S.set.push.total, 'device') + '?')) return;
     busy(btn, true, 'Sending…'); try { const r = await call('POST', '/api/push/send', { title, body: $('#pn-b').value.trim() }); toast('Sent to ' + plural(r.sent, 'device') + (r.failed ? ' · ' + r.failed + ' failed' : '')); $('#pn-t').value = ''; $('#pn-b').value = ''; } catch (err) { toast(err.message, 'err'); } busy(btn, false);
+  } else if (act === 'bugDup') {
+    const id = +f.dataset.id, into = parseInt(($('#bdup').value || '').replace('#', ''), 10);
+    if (!into) { $('#bdup').focus(); return toast('Type the number of the original bug.', 'err'); }
+    if (into === id) return toast('A bug can’t be a duplicate of itself.', 'err');
+    if (!confirm('Close #' + id + ' as a duplicate of #' + into + '? The reporter is told which bug it matches.')) return;
+    busy(btn, true, 'Closing…');
+    try { S.paneData.bug = await call('PUT', '/api/bugs/' + id, { duplicate_of: into, reason: 'This bug was already reported.' }); toast('#' + id + ' closed as a duplicate of #' + into); paintPane(); loadTodo(true); if (S.place === 'bugs') loadBugs(true); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
   } else if (act === 'logFind') { S.more.log.q = $('#lq').value.trim(); loadMore('log');
   } else if (act === 'caseFind') { S.comm.caseQ = $('#cq').value.trim(); loadComm('members');
   } else if (act === 'mlFind') { S.comm.mlQ = $('#mq').value.trim(); loadComm('moderation');
@@ -3492,6 +3512,11 @@ root.addEventListener('change', e => {
   if (setFromField(el)) { ED.afterField(el.dataset.k); return; }
   if (el.closest('.classic') && ED.input(e)) return;
   if (el.dataset.actChange === 'setGroupSel') { S.set.group = el.value; S.set.sub = ''; S.set.q = ''; renderMain(); syncHash(); return; }
+  if (el.dataset.actChange === 'bugSev') {
+    const id = +el.dataset.id; el.disabled = true;
+    call('PUT', '/api/bugs/' + id, { severity: el.value || null }).then(r => { S.paneData.bug = r; toast(el.value ? 'Severity: ' + el.value : 'Severity cleared'); paintPane(); loadTodo(true); if (S.place === 'bugs') loadBugs(true); },
+      err => { el.disabled = false; toast(err.message, 'err'); }); return;
+  }
   if (el.dataset.actChange === 'tmKind') { const E = timerCollect(); E.kind = el.value; if (E.kind === 'once') E.at = ''; else if (E.kind === 'daily' && !/^\d\d:\d\d$/.test(E.at || '')) E.at = '19:30'; $('#tm-when').innerHTML = String(timerWhenFields(E)); return; }
   if (el.dataset.actChange === 'timerToggle') {
     const t = Object.assign({}, (S.comm.data.posts.timers.items || []).find(x => x.id === +el.dataset.id), { enabled: el.checked });
