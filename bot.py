@@ -4148,6 +4148,8 @@ async def handle_known_button(interaction: discord.Interaction):
     if r["duplicate_of"] or r["status"] in ("rejected", "admin_rejected"):
         return await interaction.response.send_message(f"Bug #{r['id']} is closed – open the original bug instead.", ephemeral=True)
     on = not r["public"]
+    if on and not store.can_be_known(r):
+        return await interaction.response.send_message(f"Bug #{r['id']}: {store.NOT_KNOWN_YET}", ephemeral=True)
     set_bug(r["id"], public=1 if on else 0, known_off=0 if on else 1)
     who = interaction.user.display_name
     log_event("bug", f"Bug #{r['id']} {'marked as a known issue' if on else 'removed from the known issues'} by {who}", interaction.user.id, who)
@@ -6514,6 +6516,8 @@ async def handle_spike_button(interaction: discord.Interaction):
         r = get_bug(int(arg))
         if r is None or r["duplicate_of"] or r["status"] in ("rejected", "admin_rejected"):
             return await interaction.response.send_message("That bug is closed now.", ephemeral=True)
+        if not store.can_be_known(r):
+            return await interaction.response.send_message(f"Bug #{r['id']}: {store.NOT_KNOWN_YET}", ephemeral=True)
         await interaction.response.defer()
         await make_known(r, who, interaction.user.id)
         note = f"\n📌 Bug #{r['id']} posted as a known issue by {who}."

@@ -65,6 +65,7 @@ a.btn{text-decoration:none}
 .btn.sm{min-height:30px;padding:3px 10px;font-size:13px}
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .field label,.lbl{font-size:13px;font-weight:600;color:var(--muted)}
+.field label.check{font-size:14px;font-weight:500;color:var(--text);display:inline-flex;align-items:center;gap:8px}
 .in{width:100%;min-height:38px;padding:7px 11px;border-radius:var(--r);border:1px solid var(--line-2);background:var(--surface);color:var(--text)}
 textarea.in{min-height:84px;resize:vertical;line-height:1.45}
 .in:focus{outline:2px solid var(--ice);outline-offset:0;border-color:transparent}
@@ -767,7 +768,7 @@ function demoTodo() {
   });
   DEMO.reports.filter(r => r.status === 'open').forEach(r => add('report', r.id, r.ts, 'Reported message by ' + r.target, r.content, '', false, { user_id: r.target_id, channel: r.channel }));
   DEMO.appeals.filter(a => a.status === 'open' && (admin || a.kind !== 'ban')).forEach(a => add('appeal', a.id, a.ts, a.user + ' appeals a ' + a.kind, a.text, a.user, false, { kind: a.kind, user_id: a.user_id }));
-  if (DEMO.spike && !DEMO.spike.known) add('spike', DEMO.spike.key, DEMO.spike.ts, DEMO.spike.count + ' reports about “' + DEMO.spike.area + '” in a short time', '', '', true, { bug: DEMO.spike.bug, area: DEMO.spike.area });
+  if (DEMO.spike && !DEMO.spike.known) add('spike', DEMO.spike.key, DEMO.spike.ts, DEMO.spike.count + ' reports about “' + DEMO.spike.area + '” in a short time', '', '', true, { bug: DEMO.spike.bug, area: DEMO.spike.area, known_ok: ['passed', 'being_investigated'].includes((DEMO.bugs.find(b => b.id === DEMO.spike.bug) || {}).status) });
   if (admin) DEMO.codes.forEach(c => add('code_ending', c.id, c.expires_at, 'Gift code ' + c.code + ' ends soon', c.reward, '', false, { expires: c.expires_at }));
   if (Q.get('empty') !== null) items.length = 0;
   items.sort((a, b) => (b.urgent - a.urgent) || (a.ts - b.ts));
@@ -941,6 +942,8 @@ async function demoApi(method, path, body) {
     if (sub === '/ticket/close') { b.status = 'new'; return { messages: 3, files: 0 }; }
     if (method === 'PUT') {
       if ('severity' in body2) b.severity = body2.severity || '';
+      if (body2.public && !b.public && (b.duplicate_of || !['passed', 'being_investigated'].includes(b.status))) { const e = new Error('Only accepted bugs can be known issues – pass it to the admins first.'); e.status = 400; throw e; }
+      if ('public' in body2) b.public = !!body2.public;
       if (body2.reopen) { b.duplicate_of = null; b.status = 'new'; }
       if (body2.dup_dismiss) { b.dup_suggest = null; } else if (body2.duplicate_of) { if (!DEMO.bugs.some(x => x.id === +body2.duplicate_of)) { const e = new Error('Bug #' + body2.duplicate_of + ' not found.'); e.status = 404; throw e; } b.duplicate_of = +body2.duplicate_of; b.status = 'rejected'; }
       if (body2.status) { b.status = body2.status; if (body2.reason) b.reason = body2.reason; }
@@ -1086,7 +1089,8 @@ function actionsFor(i) {
     A.push(['Accept', 'check', 'main', (it, w) => call('POST', '/api/appeals/' + it.id, { accept: true, note: w || '' }).then(() => 'Accepted – the ' + it.ref.kind + ' is lifted'), { reason: 'Note to the member (optional)', optional: true }]);
     A.push(['Decline', 'x', 'bad', (it, w) => call('POST', '/api/appeals/' + it.id, { accept: false, note: w || '' }).then(() => 'Declined'), { reason: 'Why? The member sees this (optional).', optional: true }]);
   } else if (i.kind === 'spike') {
-    if (i.ref.bug) A.push(['Post #' + i.ref.bug + ' as known issue', 'pin', 'main', it => call('POST', '/api/spikes', { known: it.ref.bug }).then(() => 'On the known-issues list')]);
+    if (i.ref.bug && i.ref.known_ok) A.push(['Post #' + i.ref.bug + ' as known issue', 'pin', 'main', it => call('POST', '/api/spikes', { known: it.ref.bug }).then(() => 'On the known-issues list')]);
+    else if (i.ref.bug) A.push(['Open #' + i.ref.bug, 'bug', 'main', null]);   // accept it first; then it can become a known issue
     A.push(['Dismiss', 'x', '', it => call('POST', '/api/spikes', { dismiss: it.id }).then(() => 'Dismissed')]);
   } else if (i.kind === 'raid') {
     A.push(['Lift raid mode', 'check', 'main', () => call('POST', '/api/raid', { active: false }).then(() => 'Raid mode lifted')]);
@@ -1238,6 +1242,10 @@ function bugPane(b, d) {
     ${it ? html`<section class="sec" style="margin-top:14px">${paneActions(it)}</section>` : ''}
     <section class="sec" style="margin-top:14px"><div class="row" style="gap:16px;align-items:flex-end">
       <div class="field" style="margin:0"><label for="bsev">Severity</label><select class="in" id="bsev" style="width:150px" data-act-change="bugSev" data-id="${b.id}">${[['', 'Not set'], ['minor', 'Minor'], ['major', 'Major'], ['critical', 'Critical']].map(([v, l]) => html`<option value="${v}" ${(b.severity || '') === v ? 'selected' : ''}>${l}</option>`)}</select></div>
+      ${['passed', 'being_investigated'].includes(b.status) && !b.duplicate_of ? html`<div class="field" style="margin:0"><span class="lbl">Known issue</span>
+        <label class="check" style="min-height:40px"><span class="switch"><input type="checkbox" role="switch" data-act-change="bugKnown" data-id="${b.id}" ${b.public ? 'checked' : ''}><span aria-hidden="true"></span></span> Show on the website</label></div>`
+        : b.public ? html`<div class="field" style="margin:0"><span class="lbl">Known issue</span><button class="btn" data-act="bugUnknown" data-id="${b.id}">Remove from the known issues</button></div>`
+        : html`<div class="field" style="margin:0"><span class="lbl">Known issue</span><p class="hint" style="margin:8px 0 0;max-width:200px">Pass it to the admins first.</p></div>`}
       ${b.duplicate_of ? html`<button class="btn" data-act="bugReopen" data-id="${b.id}">Not a duplicate – reopen</button>`
         : html`<form class="row" data-act-submit="bugDup" data-id="${b.id}" style="gap:8px;align-items:flex-end"><div class="field" style="margin:0"><label for="bdup">Duplicate of bug #</label>
           <input class="in num" id="bdup" inputmode="numeric" placeholder="e.g. 52" style="width:120px" autocomplete="off"></div><button class="btn" type="submit">Close as duplicate</button></form>`}</div></section>
@@ -3361,6 +3369,11 @@ root.addEventListener('click', async e => {
   else if (act === 'file' || act === 'chatFile') {
     try { const u = await fileUrl(act === 'file' || el.dataset.kind === 'bug' ? 'bugs' : 'suggestions', el.dataset.id, el.dataset.fid); window.open(u, '_blank', 'noopener'); } catch (err) { toast(err.message, 'err'); }
   }
+  else if (act === 'bugUnknown') {
+    busy(el, true, '…');
+    try { S.paneData.bug = await call('PUT', '/api/bugs/' + el.dataset.id, { public: false }); toast('#' + el.dataset.id + ' removed from the known issues.'); paintPane(); if (S.place === 'bugs') loadBugs(true); }
+    catch (err) { busy(el, false); toast(err.message, 'err'); }
+  }
   else if (act === 'bugReopen') {
     busy(el, true, '…');
     try { S.paneData.bug = await call('PUT', '/api/bugs/' + el.dataset.id, { reopen: true }); toast('Reopened – #' + el.dataset.id + ' is no longer a duplicate'); paintPane(); loadTodo(true); if (S.place === 'bugs') loadBugs(true); }
@@ -3582,6 +3595,11 @@ root.addEventListener('change', e => {
   if (setFromField(el)) { ED.afterField(el.dataset.k); return; }
   if (el.closest('.classic') && ED.input(e)) return;
   if (el.dataset.actChange === 'setGroupSel') { S.set.group = el.value; S.set.sub = ''; S.set.q = ''; renderMain(); syncHash(); return; }
+  if (el.dataset.actChange === 'bugKnown') {
+    const id = +el.dataset.id, on = el.checked; el.disabled = true;
+    call('PUT', '/api/bugs/' + id, { public: on }).then(r => { S.paneData.bug = r; toast(on ? '📌 #' + id + ' is now a known issue – players see it on the website.' : '#' + id + ' removed from the known issues.'); paintPane(); if (S.place === 'bugs') loadBugs(true); },
+      err => { el.checked = !on; el.disabled = false; toast(err.message, 'err'); }); return;
+  }
   if (el.dataset.actChange === 'bugSev') {
     const id = +el.dataset.id; el.disabled = true;
     call('PUT', '/api/bugs/' + id, { severity: el.value || null }).then(r => { S.paneData.bug = r; toast(el.value ? 'Severity: ' + el.value : 'Severity cleared'); paintPane(); loadTodo(true); if (S.place === 'bugs') loadBugs(true); },

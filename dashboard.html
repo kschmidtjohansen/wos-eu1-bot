@@ -1678,7 +1678,7 @@ const QUICK = {           // [status, icon, label, tone]
 };
 function quickBtns(b) {
   const set = ['new', 'investigating'].includes(b.status) ? QUICK.mod : ['passed', 'being_investigated'].includes(b.status) && !isMod() ? QUICK.admin : [];
-  const canKnow = !b.duplicate_of && !['rejected', 'admin_rejected'].includes(b.status);
+  const canKnow = !b.duplicate_of && (['passed', 'being_investigated'].includes(b.status) || b.public);   // only accepted bugs can become known issues
   return html`<span class="w-quick">${canKnow ? html`<button class="w-qbtn w-known" data-act="bugKnown" data-id="${b.id}" aria-pressed="${String(!!b.public)}" title="${b.public ? 'Known issue – tap to remove from the list' : 'Mark as known issue'}" aria-label="#${b.id}: ${b.public ? 'remove from known issues' : 'mark as known issue'}">${icon('pin')}</button>` : ''}${set.filter(q => q[0] !== b.status).map(q => html`<button class="w-qbtn ${q[3]}" data-act="bugQuick" data-id="${b.id}" data-s="${q[0]}" title="${q[2]}" aria-label="#${b.id}: ${q[2]}">${icon(q[1])}</button>`)}</span>`;
 }
 function viewBugs() {

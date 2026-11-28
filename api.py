@@ -530,6 +530,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 raise ApiError(400, "Pick one of the areas from the Features tab.")
             store.set_bug(r["id"], area=area or None)
         if "public" in data:
+            if data["public"] and not r["public"] and not store.can_be_known(r):
+                raise ApiError(400, store.NOT_KNOWN_YET)
             store.set_bug(r["id"], public=1 if data["public"] else 0, known_off=0 if data["public"] else 1)
         if "fixed_version" in data:
             store.set_bug(r["id"], fixed_version=str(data["fixed_version"] or "").strip()[:30] or None)
@@ -1992,7 +1994,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
         for sp in (hooks["active_spikes"]() if "active_spikes" in hooks else []):
             if not sp.get("known"):
                 add("spike", sp["key"], sp["ts"], f"{sp['count']} reports about “{sp['area'] or 'one thing'}” in a short time", "", "", True,
-                    bug=sp.get("bug"), area=sp.get("area") or "")
+                    bug=sp.get("bug"), area=sp.get("area") or "", known_ok=bool(sp.get("bug")) and store.can_be_known(store.get_bug(int(sp["bug"]))))
         rd = raid_dict()
         if rd["active"]:
             add("raid", "raid", rd["since"], "Raid mode is on", f"{rd['joined']} joined while it was on", rd["by"], True, lockdown=rd["lockdown"]["active"])
@@ -2071,6 +2073,8 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             r = bug_or_404(int(d["known"]))
             if r["duplicate_of"] or r["status"] in ("rejected", "admin_rejected"):
                 raise ApiError(400, "That bug is closed.")
+            if not store.can_be_known(r):
+                raise ApiError(400, store.NOT_KNOWN_YET)
             await hooks["make_known"](r, who(request), who_id(request))
         if d.get("dismiss"):
             hooks["spike_dismiss"](str(d["dismiss"]))

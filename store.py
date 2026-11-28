@@ -1676,6 +1676,17 @@ def affected_players(bug_id: int) -> int:
     return 1 + vote_count(bug_id) + len(duplicates_of(bug_id))
 
 
+KNOWN_STATUSES = ("passed", "being_investigated")   # accepted bugs – the only ones that can be put on the known issues list
+
+
+def can_be_known(r) -> bool:
+    """Only bugs the moderators accepted (passed to the admins, or being investigated) can become known issues."""
+    return r is not None and not r["duplicate_of"] and r["status"] in KNOWN_STATUSES
+
+
+NOT_KNOWN_YET = "Only accepted bugs can be known issues – pass it to the admins first."
+
+
 def auto_known_candidates() -> list:
     """Open bugs that are not on the known issues list yet, weren't taken off it by staff, and have enough players affected."""
     need = int(cfg("known_auto_players") or 0)
