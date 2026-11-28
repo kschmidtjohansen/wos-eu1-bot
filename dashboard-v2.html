@@ -153,6 +153,22 @@ details.fold>summary::-webkit-details-marker{display:none}
 .blank{display:grid;place-items:center;height:100%;padding:24px;text-align:center;color:var(--muted)}
 
 /* ---------- cards (Community / More) ---------- */
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;margin-bottom:6px}
+.fig{background:var(--surface);padding:14px 16px}.fig b{display:block;font-size:22px;font-weight:750;letter-spacing:-.01em}.fig span{font-size:13px;color:var(--muted)}
+.fig.ok b{color:var(--ok)}.fig.bad b{color:var(--bad)}.fig.warn b{color:var(--warn)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 16px}
+.tblwrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}.tbl td:first-child{width:40%}.tbl th,.tbl td{padding:9px 14px;border-top:1px solid var(--line);text-align:left;white-space:nowrap}
+.tbl thead th{border-top:0;font-size:12.5px;color:var(--muted);font-weight:650}.tbl .n{text-align:right}
+.chart{width:100%;max-width:820px;height:auto;display:block;margin:0 auto}.chart text{font-size:11px;fill:var(--muted)}.chart .gl{stroke:var(--line)}
+.b-rep{fill:var(--ice);background:var(--ice)}.b-fix{fill:var(--ok);background:var(--ok)}.chart .line{fill:none;stroke:var(--ice);stroke-width:2.5;stroke-linejoin:round}.chart .area{fill:var(--ice-soft);stroke:none}
+.legend{display:inline-flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--muted);align-items:center}.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.stack{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--surface-2)}.stack i,.sw{background:var(--line-2)}
+.stack .muted,.sw.muted{background:var(--line-2)}.stack .ice,.sw.ice{background:var(--ice)}.stack .warn,.sw.warn{background:var(--warn)}.stack .ok,.sw.ok{background:var(--ok)}.stack .bad,.sw.bad{background:var(--bad)}
+.sw.b-rep{background:var(--ice)}.sw.b-fix{background:var(--ok)}
+.meter{margin:4px 0 14px}.meter:last-child{margin-bottom:2px}.bar{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;background:var(--ok)}.bar.warn i{background:var(--warn)}.bar.bad i{background:var(--bad)}
+.logrow{display:grid;grid-template-columns:74px auto minmax(0,1fr);gap:10px;align-items:baseline;padding:10px 16px;border-top:1px solid var(--line)}.logrow:first-child{border-top:0}.logrow p{margin:0;overflow-wrap:anywhere}.logrow .tag{justify-self:start}
+@media (max-width:700px){.logrow{grid-template-columns:auto minmax(0,1fr)}.logrow p{grid-column:1/-1}}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
 .card{display:flex;gap:12px;align-items:flex-start;padding:16px;border-radius:var(--r-lg);border:1px solid var(--line);background:var(--surface);color:var(--text);text-decoration:none}
 .card:hover{border-color:var(--line-2);background:var(--surface-2)}
@@ -230,9 +246,10 @@ const S = {
   base: CFG.apiBase === 'same-origin' ? location.origin : (CFG.apiBase || location.origin),
   demo: Q.has('demo'), user: null, overview: null, settings: null,
   place: 'todo', todo: null, todoFilter: 'all', done: [], open: null, sel: null,
-  bugs: { items: [], total: 0, counts: {}, status: '', q: '', offset: 0, loading: false },
+  bugs: { items: [], total: 0, counts: {}, status: '', q: '', area: '', offset: 0, loading: false },
   ideas: { items: [], total: 0, counts: {}, status: 'new', q: '', loading: false },
   comm: { tab: 'codes', data: {}, pq: '', caseQ: '', mlKind: 'deleted', mlQ: '' }, roles: null,
+  more: { tab: 'insights', data: {}, days: 30, log: { kind: '', q: '' } },
   replies: null, channels: null, trLang: (() => { try { return localStorage.getItem('wos2.tr') || 'en'; } catch (e) { return 'en'; } })()
 };
 const inApp = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone || Q.has('app');
@@ -441,6 +458,39 @@ function demoPlayer(id) {
   return DC.players[id] || (DC.players[id] = { id: String(id), name: ({ 902: 'Kai', 903: 'Nova', 904: 'Astrid', 905: 'Bjørn', 906: 'Lars', 907: 'Ida' })[id] || 'Player ' + id, on_server: id !== '903', banned: id === '903' ? { reason: 'Honeypot', until: null } : null,
     joined: now() - 20 * 86400, created: now() - 200 * 86400, staff: false, timeout_until: null, warnings: 0, link: null, invited_by: null, notes: [], cases: [], bugs: [], record: null, reported: [] });
 }
+function demoStats(p, q) {
+  const t = now(), H = 3600, D = 86400;
+  if (p === '/api/insights') {
+    const items = []; let m = 212; for (let i = 59; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5), j = (i * 7 % 5) + (i % 9 === 0 ? 4 : 1), l = i % 4 === 0 ? 2 : i % 3 === 0 ? 1 : 0; if (i < 59) m += j - l; items.push({ day: d.toISOString().slice(0, 10), members: m }); }
+    return { members: { current: m, items, joined: 96, left: 31, estimated: true },
+      weeks: Array.from({ length: 8 }, (_, i) => ({ start: t - (8 - i) * 604800, reported: [14, 22, 31, 27, 38, 44, 35, 38][i], fixed: [6, 10, 17, 21, 24, 29, 26, 31][i] })),
+      fix_hours: 61.4, fix_count: 31, duplicates: 9,
+      areas: [['City', 17, 6, 8], ['Alliance', 14, 5, 7], ['Pets', 11, 3, 6], ['Shop', 9, 2, 6], ['Events', 7, 3, 3]].map(a => ({ name: a[0], total: a[1], open: a[2], fixed: a[3] })),
+      versions: [{ name: 'V5 · 1.33.9', total: 38, fixed: 17 }, { name: 'V5 · 1.33.5', total: 26, fixed: 14 }],
+      reporters: [['Mira', 12, 9, 6, 2], ['Jonas', 9, 6, 4, 2], ['Anders', 8, 3, 1, 4]].map((r, i) => ({ id: '30' + i, name: r[0], total: r[1], accepted: r[2], fixed: r[3], rejected: r[4] })),
+      staff: [{ id: '1', name: 'Sofie', total: 88, counts: { passed: 41, rejected: 17, investigating: 12, suggestion_accepted: 11, suggestion_rejected: 5, replied: 2 } },
+        { id: '2', name: 'Kasper', total: 61, counts: { being_investigated: 18, fixed: 31, admin_rejected: 5, passed: 4, replied: 3 } }] };
+  }
+  if (p === '/api/modstats') return { days: +(q.get('days') || 30), wait_hours: 24, mod_hours: 3.4, mod_count: 41, admin_hours: 26.5, admin_count: 22, sug_hours: 51, sug_count: 9, within_day: q.get('days') === '7' ? 72 : 86,
+    staff: [{ id: '1', name: 'Sofie', handled: 74, bugs: 58, suggestions: 12, replies: 4, first_count: 33, first_hours: 2.1, admin_count: 0, admin_hours: null, last: t - 1800 },
+      { id: '2', name: 'Kasper', handled: 39, bugs: 30, suggestions: 6, replies: 3, first_count: 8, first_hours: 5.5, admin_count: 22, admin_hours: 26.5, last: t - 300 }],
+    waiting: [{ kind: 'bug', id: 60, title: 'Guild bank deposit loses items (older)', who: 'Admins', since: t - 26 * H, severity: 'major', votes: 3 },
+      { kind: 'suggestion', id: 22, title: 'Let us rename pets', who: 'Moderators', since: t - 2 * D, severity: null, votes: 0 }], waiting_total: 2 };
+  if (p === '/api/status') return { checked_at: t, bot: { online: true, latency_ms: 41, uptime_s: 3 * H + 1240, version: 'ad39c4f (2026-11-28)' },
+    system: { uptime_s: 6 * D + 5400, load: [0.18, 0.09, 0.08], cpus: 2, memory: { total: 1004 * 1048576, available: 412 * 1048576, swap_total: 1024 * 1048576, swap_free: 980 * 1048576 }, disk: { total: 29 * 1073741824, free: 21.4 * 1073741824 } },
+    services: [{ name: 'wosbot', label: 'Discord bot', state: 'active' }, { name: 'nginx', label: 'Web server (nginx)', state: 'active' }, { name: 'wos-update.timer', label: 'Update checker', state: 'active' }],
+    website_ok: true, data: { db_bytes: 482304, last_backup: t - 5 * H, backups: 7 },
+    game: { game: 'online', items: [{ name: 'Login', state: 'up' }], version: 'V5 · 1.33.9', checked: t - 300 },
+    jobs: [{ name: 'gift codes', ok: t - 40, fails: 0 }, { name: 'promoter servers check', ok: t - 5400, err: t - 600, fails: 2, error: '503 Service Unavailable' }],
+    updates: ['2026-11-27 20:55 ✔ Updated to 4cd1836'], errors: [] };
+  if (p === '/api/game/check') return { game: { game: 'online' } };
+  if (p === '/api/logs') {
+    const all = Array.from({ length: 73 }, (_, i) => ({ ts: t - i * 1700, kind: ['bug', 'mod', 'admin', 'suggestion', 'guard', 'backup'][i % 6], text: ['Bug #' + (64 - i % 9) + ' passed to admins', 'Grimnir warned: insulting players', 'Gift code FROST2026 added', 'Idea #22 opened', 'Scam link removed in #general', 'Daily backup made'][i % 6], actor: ['Sofie', 'Freya', 'Kasper', '', 'WOS EU1', ''][i % 6] }));
+    const f = all.filter(l => (!q.get('kind') || l.kind === q.get('kind')) && (!q.get('q') || (l.text + l.actor).toLowerCase().includes(q.get('q').toLowerCase()))), off = +(q.get('offset') || 0);
+    return { items: f.slice(off, off + +(q.get('limit') || 50)), total: f.length };
+  }
+  return undefined;
+}
 function demoComm(method, p, q, b) {
   let m;
   if (p === '/api/giftcodes' && method === 'GET') return { items: DC.codes, durations: [] };
@@ -490,6 +540,7 @@ function demoComm(method, p, q, b) {
   if (p === '/api/appeals' && q.get('status') === 'done') return { items: DC.appealsDone };
   if (p === '/api/msglog') { const k = q.get('kind') || 'deleted', s = (q.get('q') || '').toLowerCase(); return { kind: k, enabled: true, days: 7, items: DC.msglog[k].filter(x => !s || (x.author + x.content).toLowerCase().includes(s)) }; }
   if (p === '/api/queue') return { raid: DC.raid };
+  const st = demoStats(p, q); if (st !== undefined) return st;
   if (p === '/api/raid') { DC.raid.active = !!b.active; DC.raid.by = b.active ? 'You' : ''; return DC.raid; }
   if (p === '/api/lockdown') { DC.raid.lockdown = { active: !!b.active }; return DC.raid.lockdown; }
   return undefined;
@@ -501,7 +552,7 @@ async function demoApi(method, path, body) {
   let m;
   const cm = demoComm(method, p, q, body2); if (cm !== undefined) return cm;
   if (p === '/api/auth/me') return Q.get('demo') === 'mod' ? { id: '2', name: 'Sofie', avatar: '', role: 'mod' } : { id: '1', name: 'Kasper', avatar: '', role: 'admin' };
-  if (p === '/api/overview') return { bot: { name: 'WOS EU1', avatar_url: 'staff/icons/icon-192.png' }, guild: { name: 'WOS EU1' } };
+  if (p === '/api/overview') return { bot: { name: 'WOS EU1', avatar_url: 'staff/icons/icon-192.png' }, guild: { name: 'WOS EU1' }, stats: { bugs: { total: 64, awaiting: 8, with_admins: 5, investigating: 4, fixed: 31, rejected: 16 } } };
   if (p === '/api/todo') return demoTodo();
   if (p === '/api/settings') { if (method === 'PUT') Object.assign(DEMO.settings, body2); return { settings: DEMO.settings }; }
   if (p === '/api/channels') return { channels: [{ id: '1', name: 'general', category: 'Community' }, { id: '2', name: 'announcements', category: 'Info' }] };
@@ -512,7 +563,7 @@ async function demoApi(method, path, body) {
   if (p === '/api/players/find') return { items: [{ id: '901', name: 'Grimnir', chief: 'Chief Grim', uid: '41000000', on_server: true }].filter(x => (x.name + x.chief).toLowerCase().includes((q.get('q') || '').toLowerCase())) };
   if (p === '/api/bugs' && method === 'GET') {
     const st = q.get('status') || '', s = (q.get('q') || '').toLowerCase().replace(/^#/, '');
-    const f = DEMO.bugs.filter(b => (!st || b.status === st || (st === 'closed' && b.status.endsWith('rejected'))) && (!s || String(b.id) === s || b.summary.toLowerCase().includes(s)));
+    const f = DEMO.bugs.filter(b => (!st || b.status === st || (st === 'closed' && b.status.endsWith('rejected'))) && (!s || String(b.id) === s || b.summary.toLowerCase().includes(s)) && (!q.get('area') || b.area === q.get('area')));
     const counts = {}; DEMO.bugs.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
     const off = +(q.get('offset') || 0), lim = +(q.get('limit') || 25);
     return { items: f.slice(off, off + lim).map(brief), total: f.length, counts };
@@ -559,7 +610,7 @@ async function demoApi(method, path, body) {
 const PLACES = [['todo', 'To do', 'todo'], ['bugs', 'Bugs', 'bug'], ['ideas', 'Ideas', 'bulb'], ['community', 'Community', 'users'], ['more', 'More', 'grid']];
 const places = () => PLACES.filter(p => !(isMod() && p[0] === 'ideas'));
 let navReady = false, pushedPane = false, fromPop = false;
-function hashFor() { return '#' + (S.open ? S.open.kind + '-' + S.open.id : S.place === 'community' ? 'community/' + S.comm.tab : S.place); }
+function hashFor() { return '#' + (S.open ? S.open.kind + '-' + S.open.id : S.place === 'community' ? 'community/' + S.comm.tab : S.place === 'more' ? 'more/' + S.more.tab : S.place); }
 function syncHash() {
   if (fromPop) return;
   const h = hashFor(), first = !navReady; navReady = true;
@@ -571,6 +622,8 @@ function readHash() {
   if (m) return { pane: { kind: m[1], id: m[1] === 'player' ? m[2] : /^\d+$/.test(m[2]) ? +m[2] : m[2] } };
   const cm = h.match(/^community\/(\w+)$/);
   if (cm) return { place: 'community', tab: commTabs().some(t => t[0] === cm[1]) ? cm[1] : commTabs()[0][0] };
+  const mm = h.match(/^more\/(\w+)$/);
+  if (mm) return { place: 'more', mtab: moreTabs().some(t => t[0] === mm[1]) ? mm[1] : moreTabs()[0][0] };
   if (places().some(p => p[0] === h)) return { place: h };
   return {};
 }
@@ -578,7 +631,7 @@ window.addEventListener('popstate', () => {
   const r = readHash(); fromPop = true;
   try {
     if (r.pane) openPane(r.pane.kind, r.pane.id);
-    else { if (S.open) closePane(); if (r.tab && r.tab !== S.comm.tab) { S.comm.tab = r.tab; if (S.place === 'community') { render(); loadComm(r.tab); } } if (r.place && r.place !== S.place) go(r.place); }
+    else { if (S.open) closePane(); if (r.tab && r.tab !== S.comm.tab) { S.comm.tab = r.tab; if (S.place === 'community') { render(); loadComm(r.tab); } } if (r.mtab && r.mtab !== S.more.tab) { S.more.tab = r.mtab; if (S.place === 'more') { render(); loadMore(r.mtab); } } if (r.place && r.place !== S.place) go(r.place); }
   } finally { fromPop = false; }
 });
 function go(place) { S.place = place; S.open = null; S.sel = null; render(); load(place); }
@@ -665,7 +718,7 @@ function actionsFor(i) {
     A.push(['End it now', 'x', '', it => call('PUT', '/api/giftcodes/' + it.id, { action: 'end' }).then(() => 'Gift code ended')]);
     A.push(['Open gift codes', 'gift', '', null, { tab: 'codes' }]);
   } else if (i.kind === 'setup') A.push(['Fix', 'wrench', 'main', null, { link: 'channels' }]);
-  else if (i.kind === 'job') A.push(['Open status', 'pulse', 'main', null, { link: 'status' }]);
+  else if (i.kind === 'job') A.push(['Open status', 'pulse', 'main', null, { more: 'status' }]);
   return A;
 }
 const FILTERS = [['all', 'All'], ['Bugs', 'Bugs'], ['Ideas', 'Ideas'], ['Moderation', 'Moderation']];
@@ -704,6 +757,7 @@ async function runAction(item, n, why, el) {
   const a = actionsFor(item)[n]; if (!a) return;
   if (a[4] && a[4].link) { location.href = CFG.classic + '#' + a[4].link; return; }
   if (a[4] && a[4].tab) { goComm(a[4].tab); return; }
+  if (a[4] && a[4].more) { goMore(a[4].more); return; }
   if (!a[3]) { const p = paneOf(item); if (p) openPane(p[0], p[1]); return; }
   if (a[4] && a[4].reason && why === undefined) { S.reasonFor = { key: keyOf(item), n, label: a[4].reason, name: a[0], tone: a[2], optional: a[4].optional }; renderMain(); const f = $('#why'); if (f) f.focus(); return; }
   if (el) busy(el, true, '…');
@@ -896,6 +950,7 @@ function viewBugs() {
     <div class="chips" role="group" aria-label="Status">${BUG_CHIPS.map(([k, l]) => html`<button class="chip" data-act="bugStatus" data-s="${k}" aria-pressed="${String(B.status === k)}">${l}<span class="num">${n(k)}</span></button>`)}</div>
     <div class="row" style="margin-bottom:12px"><label class="sr" for="bq">Search bugs</label><input class="in grow" id="bq" type="search" placeholder="Search text, reporter or #number" value="${B.q}">
       ${isMod() ? '' : html`<a class="btn" href="${S.demo ? '#' : S.base.replace(/\/+$/, '') + '/api/export/bugs.csv'}" download>${icon('upload')} Export</a>`}</div>
+    ${B.area ? html`<div class="chips"><button class="chip" data-act="bugArea" aria-pressed="true" aria-label="Remove the area filter ${B.area}">Area: ${B.area} ${icon('x')}</button></div>` : ''}
     <div class="list" id="buglist">${B.items.length ? B.items.map(bugRow) : html`<div class="empty">${B.loading ? 'Loading…' : 'No bugs match.'}</div>`}</div>
     ${B.items.length < B.total ? html`<div class="more"><button class="btn" data-act="bugsMore">Load more</button></div>` : ''}`;
 }
@@ -910,7 +965,7 @@ async function loadBugs(reset) {
   const B = S.bugs; if (B.loading) return; B.loading = true;
   if (reset) { B.offset = 0; }
   try {
-    const qs = new URLSearchParams({ limit: 25, offset: B.offset }); if (B.status) qs.set('status', B.status); if (B.q) qs.set('q', B.q);
+    const qs = new URLSearchParams({ limit: 25, offset: B.offset }); if (B.status) qs.set('status', B.status); if (B.q) qs.set('q', B.q); if (B.area) qs.set('area', B.area);
     const r = await call('GET', '/api/bugs?' + qs);
     B.items = reset ? r.items : B.items.concat(r.items); B.total = r.total; B.counts = r.counts || B.counts; B.offset = B.items.length;
   } catch (e) { toast(e.message, 'err'); }
@@ -942,7 +997,7 @@ const COMMUNITY = [
   ['Moderation', [['queue', 'Reports & appeals', 'History and raid mode', 'shield', 'moderation'], ['msglog', 'Deleted messages', 'What was deleted or edited', 'list', 'moderation']]]
 ];
 const MORE = [
-  ['Stats', [['insights', 'Insights', 'Bugs by area, version and time', 'chart'], ['moderators', 'Moderators', 'Who handled what, and how fast', 'timer'], ['status', 'Server status', 'Bot, website, backups, jobs', 'pulse'], ['log', 'Activity log', 'Everything the bot and staff did', 'list']]],
+  ['Stats', [['insights', 'Insights', 'Bugs by area, version and time', 'chart', 'insights'], ['moderators', 'Moderators', 'Who handled what, and how fast', 'timer', 'team'], ['status', 'Server status', 'Bot, website, backups, jobs', 'pulse', 'status'], ['log', 'Activity log', 'Everything the bot and staff did', 'list', 'log']]],
   ['Settings', [['panel', 'Bug panel', 'The report message in Discord', 'bug'], ['channels', 'Channels', 'Where the bot reads and posts', 'hash'], ['website', 'Website', 'Reports, ideas, status, notifications', 'globe'], ['translations', 'Translations', 'Texts in every language', 'globe'], ['bot', 'Bot profile', 'Name, picture, staff login', 'bot'], ['data', 'Data & backups', 'Backups and clean-up', 'db'], ['mod', 'Auto-mod & safety', 'Honeypot, scam guard, auto-mod', 'shield'], ['devs', 'Developers', 'The developers’ bug list', 'users']]]
 ];
 const MOD_OK = ['queue', 'msglog', 'insights', 'moderators', 'status', 'players', 'warnings'];
@@ -953,7 +1008,146 @@ function cardGrid(groups) {
     return html`<h2 class="section-title">${title}</h2><div class="cards">${list.map(([k, t, d, ic]) => html`<a class="card" href="${CFG.classic}#${k}">${icon(ic)}<div><b>${t}</b><span>${d}</span></div></a>`)}</div>`;
   })}`;
 }
-const viewMore = () => cardGrid(MORE);
+/* ============================================================ More: Stats (Insights · Team · Status · Log) and Settings */
+const MORE_TABS = [['insights', 'Insights'], ['team', 'Team'], ['status', 'Status'], ['log', 'Activity log'], ['settings', 'Settings']];
+const moreTabs = () => MORE_TABS.filter(t => !isMod() || ['insights', 'team', 'status'].includes(t[0]));
+const M_ = () => S.more;
+const fmtHours = h => h == null ? '–' : h >= 48 ? (h / 24).toFixed(1) + ' days' : h >= 1 ? (Math.round(h * 10) / 10) + ' h' : Math.round(h * 60) + ' min';
+const fmtDur = s => { if (s == null) return '–'; const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? d + ' d ' + h + ' h' : h ? h + ' h ' + m + ' min' : m + ' min'; };
+const fmtSize = n => n >= 1073741824 ? (n / 1073741824).toFixed(1) + ' GB' : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+const LOG_KINDS = { bug: 'Bugs', ticket: 'Tickets', suggestion: 'Ideas', mod: 'Moderation', admin: 'Admin', guard: 'Scam guard', invite: 'Invites', welcome: 'Welcome',
+  link: 'Links', panel: 'Panel', patch: 'Patch notes', settings: 'Settings', profile: 'Bot', backup: 'Backups', block: 'Blocked', system: 'System' };
+
+function goMore(tab) { S.more.tab = tab; if (S.place === 'more') { S.open = null; render(); syncHash(); loadMore(tab); } else { go('more'); syncHash(); } }
+function viewMore() {
+  const tab = M_().tab, d = M_().data[tab];
+  return html`<div class="chips" role="tablist" aria-label="More">${moreTabs().map(([k, l]) => html`<button class="chip" role="tab" data-act="moreTab" data-t="${k}" aria-selected="${String(tab === k)}" aria-pressed="${String(tab === k)}">${l}</button>`)}</div>
+    ${tab === 'settings' ? viewSettings() : !d ? html`<div class="empty">Loading…</div>` : d.error ? html`<div class="list"><div class="empty"><b>Couldn’t load this</b>${d.error}<div style="margin-top:12px"><button class="btn" data-act="moreReload">Try again</button></div></div></div>`
+      : ({ insights: statsInsights, team: statsTeam, status: statsStatus, log: statsLog }[tab])(d)}`;
+}
+async function loadMore(tab, quiet) {
+  tab = tab || M_().tab;
+  if (tab === 'settings') return loadSettings(quiet);
+  try {
+    let d;
+    if (tab === 'insights') { const [i, o] = await Promise.all([call('GET', '/api/insights'), call('GET', '/api/overview').catch(() => S.overview)]); d = Object.assign({}, i, { bugs: o && o.stats && o.stats.bugs }); }
+    else if (tab === 'team') d = await call('GET', '/api/modstats?days=' + (M_().days || 30));
+    else if (tab === 'status') d = await call('GET', '/api/status');
+    else if (tab === 'log') { const L = M_().log, qs = new URLSearchParams({ limit: '50', offset: '0' }); if (L.kind) qs.set('kind', L.kind); if (L.q) qs.set('q', L.q); d = await call('GET', '/api/logs?' + qs); }
+    M_().data[tab] = d;
+  } catch (e) { if (!quiet || !M_().data[tab]) M_().data[tab] = { error: e.message }; }
+  if (S.place !== 'more' || M_().tab !== tab || (quiet && editingNow())) return;
+  const a = document.activeElement, id = a && a.id; renderMain(); const b = id && document.getElementById(id); if (b && b !== document.activeElement) b.focus();
+}
+const figs = list => html`<div class="figs">${list.filter(Boolean).map(([n, l, tone]) => html`<div class="fig ${tone || ''}"><b class="num">${n}</b><span>${l}</span></div>`)}</div>`;
+const table = (cols, rows, empty) => rows.length ? html`<div class="tblwrap"><table class="tbl"><thead><tr>${cols.map((c, i) => html`<th class="${i ? 'n' : ''}">${c}</th>`)}</tr></thead>
+  <tbody>${rows.map(r => html`<tr>${r.map((c, i) => html`<td class="${i ? 'n num' : ''}">${c}</td>`)}</tr>`)}</tbody></table></div>` : html`<div class="empty">${empty}</div>`;
+
+/* ---- insights */
+function weeksChart(weeks) {
+  const W = 640, H = 210, L = 30, R = 6, T = 14, Bt = 26, pw = W - L - R, ph = H - T - Bt;
+  const max = Math.ceil(Math.max(4, ...weeks.map(w => Math.max(w.reported, w.fixed))) / 4) * 4, slot = pw / weeks.length, bw = Math.min(22, slot * 0.32), y = v => T + ph - v / max * ph;
+  const grid = [0, 0.5, 1].map(f => { const v = Math.round(max * f); return `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="gl"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`; }).join('');
+  const bars = weeks.map((w, i) => { const cx = L + slot * i + slot / 2, d = new Date(w.start * 1000);
+    const bar = (v, dx, cls) => `<rect x="${cx + dx}" y="${y(v)}" width="${bw}" height="${Math.max(0, T + ph - y(v))}" rx="3" class="${cls}"><title>${v}</title></rect>`;
+    return bar(w.reported, -bw - 1, 'b-rep') + bar(w.fixed, 1, 'b-fix') + `<text x="${cx}" y="${H - 8}" text-anchor="middle">${d.getDate()}/${d.getMonth() + 1}</text>`; }).join('');
+  return raw(`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Bug reports and fixes per week">${grid}${bars}</svg>`);
+}
+function membersChart(items) {
+  const W = 640, H = 190, L = 40, R = 6, T = 12, Bt = 24, pw = W - L - R, ph = H - T - Bt, v = items.map(i => i.members);
+  const pad = Math.max(2, Math.ceil((Math.max(...v) - Math.min(...v)) * 0.15)), lo = Math.max(0, Math.min(...v) - pad), hi = Math.max(...v) + pad;
+  const x = i => L + pw * i / Math.max(1, items.length - 1), y = n => T + ph - (n - lo) / (hi - lo || 1) * ph;
+  const pts = items.map((it, i) => x(i).toFixed(1) + ',' + y(it.members).toFixed(1)).join(' ');
+  const grid = [0, 0.5, 1].map(f => { const n = Math.round(lo + (hi - lo) * f); return `<line x1="${L}" x2="${W - R}" y1="${y(n)}" y2="${y(n)}" class="gl"/><text x="${L - 6}" y="${y(n) + 4}" text-anchor="end">${n}</text>`; }).join('');
+  const labs = [0, Math.floor((items.length - 1) / 2), items.length - 1].map((i, k) => `<text x="${x(i)}" y="${H - 6}" text-anchor="${['start', 'middle', 'end'][k]}">${items[i].day.slice(5).replace('-', '/')}</text>`).join('');
+  return raw(`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Server members over the last ${items.length} days">${grid}<polyline points="${x(0)},${T + ph} ${pts} ${x(items.length - 1)},${T + ph}" class="area"/><polyline points="${pts}" class="line"/>${labs}</svg>`);
+}
+function statsInsights(I) {
+  const sum = k => I.weeks.reduce((a, w) => a + w[k], 0), B = I.bugs, Mm = I.members;
+  const seg = B ? [['Waiting for moderators', B.awaiting, 'muted'], ['With admins', B.with_admins, 'ice'], ['Investigating', B.investigating, 'warn'], ['Fixed', B.fixed, 'ok'], ['Rejected', B.rejected, 'bad']] : [];
+  const net = Mm && Mm.items.length > 1 ? Mm.items[Mm.items.length - 1].members - Mm.items[Math.max(0, Mm.items.length - 30)].members : null;
+  const staffCols = [['passed', 'Passed'], ['rejected', 'Rejected'], ['investigating', 'Asked player'], ['being_investigated', 'Investigating'], ['fixed', 'Fixed'], ['admin_rejected', 'Rejected (admin)'], ['suggestion_accepted', 'Ideas accepted'], ['suggestion_rejected', 'Ideas rejected'], ['replied', 'Replies']]
+    .filter(c => !isMod() || !c[0].startsWith('suggestion'));
+  return html`
+    ${figs([[fmtHours(I.fix_hours), 'Average time to fix' + (I.fix_count ? ' (' + I.fix_count + ' bugs)' : '')], [sum('reported'), 'Reported, last ' + I.weeks.length + ' weeks'], [sum('fixed'), 'Fixed, last ' + I.weeks.length + ' weeks', 'ok'], [I.duplicates, 'Closed as duplicates']])}
+    ${sectionHead('Reports per week', html`<span class="legend"><i class="sw b-rep"></i>Reported <i class="sw b-fix"></i>Fixed</span>`)}<div class="panel">${weeksChart(I.weeks)}</div>
+    ${B ? html`${sectionHead('Where the bugs are now', html`<span class="hint num">${B.total} in total</span>`)}<div class="panel">
+      <div class="stack" role="img" aria-label="Bugs by status">${seg.map(s => html`<i class="${s[2]}" style="width:${B.total ? s[1] / B.total * 100 : 0}%" title="${s[0]}: ${s[1]}"></i>`)}</div>
+      <div class="legend" style="margin-top:10px">${seg.map(s => html`<span><i class="sw ${s[2]}"></i>${s[0]} <b class="num">${s[1]}</b></span>`)}</div></div>` : ''}
+    ${!isMod() && Mm ? html`${sectionHead('Members', html`<span class="hint num">${Mm.current} now · +${Mm.joined} / −${Mm.left} in 30 days${net != null ? ' · net ' + (net >= 0 ? '+' : '−') + Math.abs(net) : ''}</span>`)}
+      <div class="panel">${Mm.items.length > 1 ? membersChart(Mm.items) : html`<p class="hint">Tracking has started. The chart fills in as the days pass.</p>`}
+      ${Mm.estimated ? html`<p class="hint" style="margin:6px 0 0">Days before tracking started are estimated from join dates.</p>` : ''}</div>` : ''}
+    ${sectionHead('Bugs by area')}${table(['Area', 'Reports', 'Open', 'Fixed'], (I.areas || []).map(a => [html`<a href="#bugs" data-act="areaGo" data-v="${a.name}">${a.name}</a>`, a.total, a.open, a.fixed]), 'No areas yet.')}
+    ${sectionHead('Bugs by game version')}${table(['Version', 'Reports', 'Fixed'], (I.versions || []).map(v => [v.name, v.total, v.fixed]), 'No versions recorded yet – set the game version with + New.')}
+    ${sectionHead('Top reporters', html`<span class="hint">“Accepted” = passed on to the admins</span>`)}${table(['Player', 'Reports', 'Accepted', 'Fixed', 'Rejected', 'Quality'], I.reporters.map(r => [r.name, r.total, r.accepted, r.fixed, r.rejected, r.total ? Math.round(r.accepted / r.total * 100) + '%' : '–']), 'No reports yet.')}
+    ${sectionHead('Staff activity')}${table(['Name'].concat(staffCols.map(c => c[1]), ['Total']), I.staff.map(s => [s.name].concat(staffCols.map(c => s.counts[c[0]] || '–'), [html`<b>${s.total}</b>`])), 'Nothing recorded yet.')}`;
+}
+
+/* ---- team (moderator stats) */
+function statsTeam(T) {
+  const days = M_().days || 30;
+  return html`
+    <div class="seg" style="max-width:420px">${[[7, '7 days'], [30, '30 days'], [90, '90 days'], [0, 'All time']].map(([d, l]) => html`<button type="button" data-act="teamDays" data-d="${d}" aria-pressed="${String(days === d)}">${l}</button>`)}</div>
+    ${figs([[fmtHours(T.mod_hours), 'First answer by a moderator (median, ' + T.mod_count + ' bugs)'], [fmtHours(T.admin_hours), 'Admin answer after passing (median, ' + T.admin_count + ')'],
+      [T.within_day == null ? '–' : T.within_day + '%', 'Bugs answered within 24 h', T.within_day == null ? '' : T.within_day >= 80 ? 'ok' : 'bad'], [fmtHours(T.sug_hours), 'Idea decided (median, ' + T.sug_count + ')']])}
+    ${sectionHead('Waiting over ' + T.wait_hours + ' h · ' + T.waiting_total)}
+    <div class="list">${T.waiting.length ? T.waiting.map(w => html`<div class="item" data-open="${w.kind === 'bug' ? 'bug' : 'idea'}" data-id="${w.id}" tabindex="0" role="button"><div>
+        <div class="what"><span class="tag ${w.who === 'Admins' ? 'ice' : w.who === 'Moderators' ? 'warn' : ''}">${w.who === 'Info ticket' ? 'Waiting for the player' : 'Waiting for ' + w.who.toLowerCase()}</span>
+          ${w.severity ? html`<span class="tag ${w.severity === 'critical' ? 'bad' : ''}">${w.severity}</span>` : ''}<span>${w.kind === 'bug' ? '#' + w.id : 'Idea #' + w.id}</span><time class="num">since ${ago(w.since)}</time>${w.votes ? html`<span>${plural(w.votes, 'player')} affected</span>` : ''}</div>
+        <p class="title">${w.title}</p></div></div>`) : html`<div class="empty"><b>Nothing waits too long</b>Everything was answered within ${T.wait_hours} h.</div>`}</div>
+    ${sectionHead('Who did the work', html`<span class="hint">first answer = median wait before they answered</span>`)}
+    ${table(['Name', 'Handled', 'Bugs', 'Ideas', 'Replies', 'First answer', 'Admin answer', 'Last active'], T.staff.map(p => [p.name, html`<b>${p.handled}</b>`, p.bugs || '–', p.suggestions || '–', p.replies || '–',
+      p.first_count ? fmtHours(p.first_hours) + ' (' + p.first_count + ')' : '–', p.admin_count ? fmtHours(p.admin_hours) + ' (' + p.admin_count + ')' : '–', p.last ? ago(p.last) : '–']), 'Nothing recorded in this period.')}`;
+}
+
+/* ---- server status */
+function meterRow(label, used, total, detail) {
+  const pct = total ? Math.round(used / total * 100) : 0, tone = pct >= 90 ? 'bad' : pct >= 75 ? 'warn' : 'ok';
+  return html`<div class="meter"><div class="row"><b>${label}</b><div class="grow"></div><span class="hint num">${detail} · ${pct}%</span></div><div class="bar ${tone}" role="meter" aria-label="${label}" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.min(100, pct)}%"></i></div></div>`;
+}
+const checkRow = (ok, label, detail) => html`<div class="sim"><span class="tag ${ok === true ? 'ok' : ok === false ? 'bad' : 'warn'}">${ok === true ? 'OK' : ok === false ? 'Problem' : 'Check'}</span><div class="grow"><p style="margin:0;font-weight:600">${label}</p><p class="hint" style="margin:2px 0 0">${detail}</p></div></div>`;
+function statsStatus(T) {
+  const B = T.bot, Y = T.system, Mm = Y.memory, svcBad = T.services.filter(x => x.state !== 'active'), jobsBad = (T.jobs || []).filter(j => j.fails > 0);
+  const problems = svcBad.length + (T.website_ok === false ? 1 : 0) + (B.online ? 0 : 1) + jobsBad.length, load = Y.load ? Math.round(Y.load[0] / (Y.cpus || 1) * 100) : null;
+  const backupOk = T.data.last_backup && now() - T.data.last_backup < 2 * 86400;
+  return html`
+    <div class="note" style="color:var(--text);display:flex;gap:10px;align-items:center;border-left:4px solid var(--${problems ? 'warn' : 'ok'})">${icon(problems ? 'alert' : 'check')}<div><b>${problems ? plural(problems, 'thing needs', 'things need') + ' attention' : 'Everything is running'}</b>
+      <div class="hint">Checked ${ago(T.checked_at)}${B.version ? ' · version ' + B.version : ''} · updates every 10 seconds</div></div></div>
+    ${figs([[B.online ? 'Online' : 'Offline', 'Discord bot' + (B.latency_ms != null ? ' · ' + B.latency_ms + ' ms' : ''), B.online ? 'ok' : 'bad'], [fmtDur(B.uptime_s), 'Bot running since restart'], [fmtDur(Y.uptime_s), 'Server running since reboot'],
+      [T.website_ok == null ? '–' : T.website_ok ? 'OK' : 'Down', 'Website ↔ bot', T.website_ok === false ? 'bad' : T.website_ok ? 'ok' : '']])}
+    ${T.game ? html`${sectionHead('Game server', isMod() ? '' : html`<button class="btn sm" data-act="gameCheck">${icon('refresh')} Check now</button>`)}<div class="panel">
+      <div class="meta"><span class="tag ${{ online: 'ok', offline: 'bad' }[T.game.game] || 'warn'}">${T.game.game || 'unknown'}</span>${(T.game.items || []).map(i => html`<span>${i.name}: ${i.state}</span>`)}
+        <span>version ${T.game.version || '–'}</span><span>checked ${T.game.checked ? ago(T.game.checked) : 'never'}</span></div>
+      <p class="hint" style="margin:6px 0 0">Players see this on the website’s Status page.</p></div>` : ''}
+    ${sectionHead('Server load')}<div class="panel">
+      ${load != null ? meterRow('CPU', Math.min(load, 100), 100, 'load ' + Number(Y.load[0]).toFixed(2) + ' on ' + plural(Y.cpus, 'CPU')) : ''}
+      ${Mm ? meterRow('Memory', Mm.total - Mm.available, Mm.total, fmtSize(Mm.total - Mm.available) + ' of ' + fmtSize(Mm.total)) : ''}
+      ${Mm && Mm.swap_total ? meterRow('Swap', Mm.swap_total - Mm.swap_free, Mm.swap_total, fmtSize(Mm.swap_total - Mm.swap_free) + ' of ' + fmtSize(Mm.swap_total)) : ''}
+      ${meterRow('Disk', Y.disk.total - Y.disk.free, Y.disk.total, fmtSize(Y.disk.free) + ' free of ' + fmtSize(Y.disk.total))}</div>
+    ${sectionHead('Services and backups')}<div class="panel">
+      ${T.services.map(x => checkRow(x.state === 'active' ? true : x.state === 'failed' ? false : null, x.label, x.state === 'active' ? 'Running' : x.state || 'unknown'))}
+      ${checkRow(backupOk ? true : null, 'Backups', (T.data.last_backup ? 'Last one ' + ago(T.data.last_backup) + ' · ' + T.data.backups + ' kept' : 'No backup yet') + ' · database ' + fmtSize(T.data.db_bytes))}</div>
+    ${sectionHead('Background jobs', html`<span class="hint">a failing job is retried; the others keep running</span>`)}<div class="panel">
+      ${jobsBad.length ? jobsBad.map(j => checkRow(false, j.name, 'Failed ' + j.fails + '× in a row, last ' + ago(j.err) + (j.ok ? ' · last worked ' + ago(j.ok) : '') + ' – ' + j.error))
+        : checkRow(true, 'All ' + ((T.jobs || []).length || '') + ' jobs are working', (T.jobs || []).length ? 'Since the bot started ' + fmtDur(B.uptime_s) + ' ago.' : 'They report here after their first run.')}</div>
+    ${sectionHead('Updates')}<div class="panel">${T.updates.length ? T.updates.slice().reverse().map(l => html`<p class="hint num" style="margin:3px 0">${l}</p>`) : html`<p class="hint">No updates installed yet.</p>`}</div>
+    ${sectionHead('Problems in the last 24 hours')}<div class="panel">${T.errors.length ? T.errors.map(x => html`<p style="margin:4px 0"><time class="hint num">${ago(x.ts)}</time> ${x.text}</p>`) : html`<p class="hint">No problems recorded.</p>`}</div>`;
+}
+
+/* ---- activity log */
+function statsLog(D) {
+  const L = M_().log;
+  return html`
+    <div class="chips" role="group" aria-label="Filter by type"><button class="chip" data-act="logKind" data-k="" aria-pressed="${String(!L.kind)}">All</button>${Object.entries(LOG_KINDS).map(([k, l]) => html`<button class="chip" data-act="logKind" data-k="${k}" aria-pressed="${String(L.kind === k)}">${l}</button>`)}</div>
+    <form class="row" data-act-submit="logFind" style="margin-bottom:10px"><label class="sr" for="lq">Search the log</label><input class="in grow" id="lq" type="search" placeholder="Search the log" value="${L.q}"><button class="btn" type="submit">${icon('search')} Search</button></form>
+    <div class="list">${D.items.length ? D.items.map(it => html`<div class="logrow"><time class="num hint" title="${new Date(it.ts * 1000).toLocaleString()}">${ago(it.ts)}</time><span class="tag">${LOG_KINDS[it.kind] || it.kind}</span><p dir="auto">${it.text}${it.actor ? html` <span class="hint">· ${it.actor}</span>` : ''}</p></div>`)
+      : html`<div class="empty">No log entries match.</div>`}</div>
+    ${D.items.length < D.total ? html`<div style="text-align:center;margin-top:12px"><button class="btn" data-act="logMore">Show more <span class="hint num">(${D.items.length} of ${D.total})</span></button></div>` : ''}`;
+}
+
+/* Settings: phase 3 task 2 replaces this with the native screen */
+const viewSettings = () => cardGrid([MORE[1]]);
+const loadSettings = () => {};
 
 /* ============================================================ Community: Gift codes · Posts · Members · Moderation */
 const COMM_TABS = [['codes', 'Gift codes', 'gift'], ['posts', 'Posts', 'send'], ['members', 'Members', 'users'], ['moderation', 'Moderation', 'shield']];
@@ -1204,7 +1398,7 @@ function closeSheet() { const s = $('#sheet'); if (s) s.remove(); }
 /* ============================================================ search (Ctrl K) */
 function allPages() {
   return [['todo', 'To do'], ['bugs', 'Bugs'], ...(isMod() ? [] : [['ideas', 'Ideas']])].map(([k, l]) => ({ label: l, hint: 'Page', go: () => go(k) }))
-    .concat(COMMUNITY.concat(MORE).flatMap(([g, cards]) => cards.filter(c => !isMod() || MOD_OK.includes(c[0])).map(c => c[4] ? { label: c[1], hint: 'Community · ' + g, words: c[2], go: () => goComm(c[4]) } : { label: c[1], hint: g, href: CFG.classic + '#' + c[0], words: c[2] })));
+    .concat(COMMUNITY.concat(MORE).flatMap(([g, cards]) => cards.filter(c => !isMod() || MOD_OK.includes(c[0])).map(c => c[4] ? { label: c[1], hint: (g === 'Stats' ? 'Stats' : 'Community · ' + g), words: c[2], go: () => (g === 'Stats' ? goMore : goComm)(c[4]) } : { label: c[1], hint: g, href: CFG.classic + '#' + c[0], words: c[2] })));
 }
 function openSearch() {
   closeSearch();
@@ -1293,6 +1487,18 @@ root.addEventListener('click', async e => {
   else if (act === 'copyLink') { const i = $('#pt-link'); i.select(); try { await navigator.clipboard.writeText(i.value); toast('Copied'); } catch (err) { document.execCommand('copy'); toast('Copied'); } }
   else if (act === 'search') openSearch();
   else if (act === 'palBg' && e.target === el) closeSearch();
+  /* ---- More */
+  else if (act === 'moreTab') { S.more.tab = el.dataset.t; renderMain(); syncHash(); loadMore(el.dataset.t); }
+  else if (act === 'moreReload') { delete S.more.data[S.more.tab]; renderMain(); loadMore(); }
+  else if (act === 'teamDays') { S.more.days = +el.dataset.d; loadMore('team'); }
+  else if (act === 'logKind') { S.more.log.kind = el.dataset.k; loadMore('log'); }
+  else if (act === 'logMore') {
+    const L = S.more.log, D = S.more.data.log, qs = new URLSearchParams({ limit: '50', offset: String(D.items.length) }); if (L.kind) qs.set('kind', L.kind); if (L.q) qs.set('q', L.q);
+    busy(el, true, 'Loading…'); try { const r = await call('GET', '/api/logs?' + qs); D.items = D.items.concat(r.items); D.total = r.total; renderMain(); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+  }
+  else if (act === 'areaGo') { e.preventDefault(); S.bugs.area = el.dataset.v; S.bugs.q = ''; S.bugs.status = ''; go('bugs'); syncHash(); }
+  else if (act === 'bugArea') { S.bugs.area = ''; loadBugs(true); }
+  else if (act === 'gameCheck') { busy(el, true, 'Checking…'); try { const r = await call('POST', '/api/game/check'); toast(r.game && r.game.game ? 'Game server: ' + r.game.game : 'Checked'); loadMore('status'); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
   /* ---- Community */
   else if (act === 'commTab') { S.comm.tab = el.dataset.t; renderMain(); syncHash(); loadComm(el.dataset.t); }
   else if (act === 'commReload') { delete S.comm.data[S.comm.tab]; renderMain(); loadComm(); }
@@ -1406,6 +1612,7 @@ root.addEventListener('submit', async e => {
     busy(btn, true, '…');
     try { const r = await call('GET', '/api/players/find?q=' + encodeURIComponent(q)); S.comm.data.members.found = r.items; renderMain(); if (r.items.length === 1) openPane('player', r.items[0].id); } catch (err) { toast(err.message, 'err'); }
     busy(btn, false);
+  } else if (act === 'logFind') { S.more.log.q = $('#lq').value.trim(); loadMore('log');
   } else if (act === 'caseFind') { S.comm.caseQ = $('#cq').value.trim(); loadComm('members');
   } else if (act === 'mlFind') { S.comm.mlQ = $('#mq').value.trim(); loadComm('moderation');
   } else if (act === 'pAction') {
@@ -1480,6 +1687,7 @@ function load(place) {
   if (place === 'bugs') loadBugs(true);
   if (place === 'ideas') loadIdeas();
   if (place === 'community') loadComm();
+  if (place === 'more') loadMore();
 }
 function renderLogin(msg) {
   root.innerHTML = String(html`<div class="login"><div class="box"><img src="../icons/icon-192.png" alt="">
@@ -1494,6 +1702,8 @@ async function boot() {
   const h = readHash();
   if (h.place) S.place = h.place;
   if (h.tab) S.comm.tab = h.tab;
+  if (h.mtab) S.more.tab = h.mtab;
+  if (!moreTabs().some(t => t[0] === S.more.tab)) S.more.tab = moreTabs()[0][0];
   if (!commTabs().some(t => t[0] === S.comm.tab)) S.comm.tab = commTabs()[0][0];
   if (h.pane) { S.open = h.pane; if (h.pane.kind === 'player' && !h.place) S.place = 'community'; }
   try { S.overview = await call('GET', '/api/overview'); } catch (e) { /* the frame works without it */ }
@@ -1501,6 +1711,7 @@ async function boot() {
   call('GET', '/api/settings').then(r => { S.settings = r.settings; }).catch(() => {});
   call('GET', '/api/replies').then(r => { S.replies = r.items; }).catch(() => { S.replies = []; });
   setInterval(() => { if (!document.hidden && !$('#sheet')) loadTodo(true); }, 20000);
+  setInterval(() => { if (!document.hidden && S.place === 'more' && S.more.tab === 'status' && !S.open) loadMore('status', true); }, 10000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadTodo(true); });
 }
 boot();
