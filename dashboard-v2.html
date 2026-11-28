@@ -232,6 +232,7 @@ const S = {
   place: 'todo', todo: null, todoFilter: 'all', done: [], open: null, sel: null,
   bugs: { items: [], total: 0, counts: {}, status: '', q: '', offset: 0, loading: false },
   ideas: { items: [], total: 0, counts: {}, status: 'new', q: '', loading: false },
+  comm: { tab: 'codes', data: {}, pq: '', caseQ: '', mlKind: 'deleted', mlQ: '' }, roles: null,
   replies: null, channels: null, trLang: (() => { try { return localStorage.getItem('wos2.tr') || 'en'; } catch (e) { return 'en'; } })()
 };
 const inApp = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone || Q.has('app');
@@ -401,23 +402,113 @@ function demoTodo() {
   const counts = {}; items.forEach(i => { counts[i.kind] = (counts[i.kind] || 0) + 1; });
   return { generated: now(), counts, items };
 }
+/* ---- Community demo data */
+const DC = (() => {
+  const t = now(), H = 3600, D = 86400;
+  return {
+    codes: [{ id: 5, code: 'FROST2026', reward: '500 gems', state: 'active', expires_at: t + 2 * H, created_at: t - D, by: 'Kasper', url: '#' },
+      { id: 6, code: 'BEARHUNT', reward: '2 speed-ups', state: 'new', expires_at: t + 3 * D, created_at: t - H, by: 'Freya', url: '#' },
+      { id: 4, code: 'WELCOME1', reward: '100 gems', state: 'expired', expires_at: t - 2 * D, created_at: t - 9 * D, by: 'Kasper', url: '' }],
+    redeem: { settings: { redeem_enabled: true }, header_set: true, linked: 42, codes: [{ code: 'FROST2026', ok: 37, already: 3, failed: 2 }],
+      failures: [{ code: 'FROST2026', uid: '41000001', chief: 'Chief Bo', message: 'Player not found', ts: t - H }, { code: 'FROST2026', uid: '41000002', chief: 'Chief Ulla', message: 'Server busy', ts: t - H }] },
+    patch: { unreleased: [{ id: 58, summary: 'Chat freezes after teleporting' }, { id: 55, summary: 'Quest log issue 55' }], history: [{ id: 3, ts: t - 6 * D, title: 'Patch notes – week 47', by: 'Kasper', count: 7 }], default_title: 'Patch notes – week 48' },
+    timers: { timezone: 'Europe/Copenhagen', items: [
+      { id: 1, name: 'Bear Hunt reminder', channel_id: '2', content: 'Bear Hunt starts in 30 minutes!', kind: 'daily', at: '19:30', days: ['mon', 'wed', 'fri'], every_minutes: 0, role_id: '50', delete_previous: true, enabled: true, next_run: t + 5 * H, last_run: t - 2 * D },
+      { id: 2, name: 'Server maintenance', channel_id: '2', content: 'Maintenance tonight at 23:00.', kind: 'once', at: '2026-12-01T22:00', days: [], every_minutes: 0, role_id: '', delete_previous: false, enabled: false, next_run: null, last_run: null }] },
+    giveaways: [{ id: 3, prize: '1,000 gems', winners: 2, ends_at: t + 20 * H, ended: false, channel_id: '2', role_id: '', host: 'Kasper', entries: 31, winner_names: [], url: '#' },
+      { id: 2, prize: 'Rare pet egg', winners: 1, ends_at: t - 3 * D, ended: true, channel_id: '2', role_id: '', host: 'Freya', entries: 54, winner_names: ['Mira'], url: '#' }],
+    partners: { ready: true, summary: { servers: 2, members: 1840, posts_30d: 23, attention: 1 }, invites: [{ id: 'ab12', promoter: 'Hugo', expires_ts: t + 2 * D }], left: [],
+      items: [{ id: '7001', name: 'Frost Legion', status: 'ok', members: 1200, posts_30d: 15, promoter: 'Hugo', paused: false, issues: [] },
+        { id: '7002', name: 'Nordic Alliance', status: 'problem', members: 640, posts_30d: 8, promoter: 'Elin', paused: false, issues: ['The bot can’t write in #news'] }] },
+    cases: [{ id: 41, user_id: '901', user: 'Grimnir', kind: 'warn', reason: 'Insulting players', moderator: 'Freya', ts: t - 2 * D, minutes: 0, active: true, auto: false, warnings: 1 },
+      { id: 40, user_id: '902', user: 'Kai', kind: 'timeout', reason: 'Spam', moderator: '', ts: t - 3 * D, minutes: 60, active: true, auto: true, warnings: 2 },
+      { id: 39, user_id: '903', user: 'Nova', kind: 'ban', reason: 'Honeypot', moderator: '', ts: t - 5 * D, minutes: 0, active: true, auto: true, warnings: 0 }],
+    invites: { enabled: true, can_read: true, joins30: 58, known30: 51, inviters: 14, carried: 0,
+      top: [{ inviter_id: '904', name: 'Astrid', regular: 12, total: 14, left: 2, fake: 0 }, { inviter_id: '905', name: 'Bjørn', regular: 7, total: 10, left: 1, fake: 2 }], recent: [] },
+    reportsDone: [{ id: 6, ts: t - 2 * D, status: 'actioned', action: 'warned', handled_by: 'Freya', handled_ts: t - 2 * D, content: 'Stop crying noob', channel: 'general', target_id: '901', target: 'Grimnir' }],
+    appealsDone: [{ id: 2, ts: t - 4 * D, status: 'declined', kind: 'timeout', text: 'It wasn’t me', user_id: '902', user: 'Kai', note: '', handled_by: 'Kasper', handled_ts: t - 4 * D }],
+    msglog: { deleted: [{ id: 1, channel: 'general', author_id: '901', author: 'Grimnir', content: 'free gems at sketchy-link.example', attachments: 0, ts: t - 3 * H, deleted_ts: t - 3 * H, deleted_by: 'bot', edits: [], url: '' },
+        { id: 2, channel: 'trade', author_id: '906', author: 'Lars', content: 'selling account', attachments: 1, ts: t - 6 * H, deleted_ts: t - 5 * H, deleted_by: 'author', edits: [], url: '' }],
+      edited: [{ id: 3, channel: 'general', author_id: '907', author: 'Ida', content: 'see you at 20:00', attachments: 0, ts: t - 2 * H, edits: [{ ts: t - 2 * H, text: 'see you at 19:00' }], url: '' }] },
+    raid: { active: false, joined: 0, by: '', lockdown: { active: false } },
+    players: { 901: { id: '901', name: 'Grimnir', on_server: true, joined: t - 40 * D, created: t - 400 * D, staff: false, timeout_until: null, banned: false, warnings: 1,
+        link: { chief: 'Chief Grim', uid: '41000000' }, invited_by: { id: '904', name: 'Astrid' }, notes: [{ id: 1, text: 'Second warning means timeout.', author: 'Freya', ts: t - D }],
+        cases: [{ id: 41, kind: 'warn', reason: 'Insulting players', moderator: 'Freya', ts: t - 2 * D, active: true }], bugs: [{ id: 58, summary: 'Chat freezes after teleporting', status: 'fixed' }],
+        record: { total: 3, accepted_pct: 67 }, reported: [{ ts: t - 1800, channel: 'general', content: 'You are all idiots, quit the game' }] } }
+  };
+})();
+function demoPlayer(id) {
+  return DC.players[id] || (DC.players[id] = { id: String(id), name: ({ 902: 'Kai', 903: 'Nova', 904: 'Astrid', 905: 'Bjørn', 906: 'Lars', 907: 'Ida' })[id] || 'Player ' + id, on_server: id !== '903', banned: id === '903' ? { reason: 'Honeypot', until: null } : null,
+    joined: now() - 20 * 86400, created: now() - 200 * 86400, staff: false, timeout_until: null, warnings: 0, link: null, invited_by: null, notes: [], cases: [], bugs: [], record: null, reported: [] });
+}
+function demoComm(method, p, q, b) {
+  let m;
+  if (p === '/api/giftcodes' && method === 'GET') return { items: DC.codes, durations: [] };
+  if (p === '/api/giftcodes/import') { const c = String(b.codes || '').split(/\s+/).filter(Boolean); c.forEach((x, i) => DC.codes.unshift({ id: 100 + DC.codes.length + i, code: x.toUpperCase(), reward: '', state: 'new', expires_at: null, created_at: now(), by: 'You', url: '' })); return { added: c, skipped: [] }; }
+  if ((m = p.match(/^\/api\/giftcodes\/(\d+)$/))) {
+    if (method === 'PUT') DC.codes.forEach(c => { if (c.id === +m[1]) { c.state = 'expired'; c.expires_at = now(); } });
+    else DC.codes = DC.codes.filter(c => c.id !== +m[1]);
+    DEMO.codes = DEMO.codes.filter(c => c.id !== +m[1]); return { ok: true };
+  }
+  if (p === '/api/redeem') return DC.redeem;
+  if (p === '/api/redeem/retry') { DC.redeem.failures = []; return { retrying: 2 }; }
+  if (p === '/api/patchnotes') return DC.patch;
+  if (p === '/api/patchnotes/publish') { const n = DC.patch.unreleased.length; DC.patch.history.unshift({ id: 9, ts: now(), title: b.title, by: 'You', count: n }); DC.patch.unreleased = []; return { count: n }; }
+  if (p === '/api/timers' && method === 'GET') return DC.timers;
+  if (p === '/api/timers' && method === 'POST') {
+    const t = Object.assign({}, b, { next_run: b.enabled ? now() + 3600 : null });
+    if (t.id) DC.timers.items = DC.timers.items.map(x => x.id === t.id ? t : x); else { t.id = Date.now() % 100000; DC.timers.items.push(t); }
+    return t;
+  }
+  if ((m = p.match(/^\/api\/timers\/(\d+)(\/send)?$/))) { if (!m[2]) DC.timers.items = DC.timers.items.filter(x => x.id !== +m[1]); return { ok: true }; }
+  if (p === '/api/giveaways' && method === 'GET') return { items: DC.giveaways };
+  if (p === '/api/giveaways') { DC.giveaways.unshift({ id: Date.now() % 1000, prize: b.prize, winners: b.winners, ends_at: now() + b.minutes * 60, ended: false, entries: 0, winner_names: [], url: '' }); return { ok: true }; }
+  if ((m = p.match(/^\/api\/giveaways\/(\d+)\/(end|reroll)$/))) { const g = DC.giveaways.find(x => x.id === +m[1]); g.ended = true; g.ends_at = Math.min(g.ends_at, now()); g.winner_names = [m[2] === 'reroll' ? 'Lars' : 'Astrid']; return g; }
+  if (p === '/api/partners') return DC.partners;
+  if (p === '/api/partners/invite') { DC.partners.invites.push({ id: 'cd34', promoter: b.promoter, expires_ts: now() + 3 * 86400 }); return { url: 'https://discord.com/oauth2/authorize?demo=' + encodeURIComponent(b.promoter) }; }
+  if ((m = p.match(/^\/api\/partners\/invites\/(\w+)$/))) { DC.partners.invites = DC.partners.invites.filter(i => i.id !== m[1]); return { ok: true }; }
+  if ((m = p.match(/^\/api\/partners\/(\d+)(\/test|\/dm)?$/))) {
+    const x = DC.partners.items.find(y => y.id === m[1]);
+    if (m[2] === '/test') return { where: ['#news'] }; if (m[2] === '/dm') return { ok: true };
+    if (method === 'PUT') { x.paused = !!b.paused; x.status = x.paused ? 'paused' : 'ok'; return x; }
+    DC.partners.items = DC.partners.items.filter(y => y.id !== m[1]); return { ok: true };
+  }
+  if (p === '/api/roles') return { roles: [{ id: '50', name: 'Bear Hunters', assignable: true }, { id: '51', name: 'Events', assignable: true }] };
+  if (p === '/api/cases') { const s = (q.get('q') || '').toLowerCase(); return { items: DC.cases.filter(c => !s || (c.user + c.reason).toLowerCase().includes(s)), rules: { warn_timeout_at: 2, warn_ban_at: 4 } }; }
+  if ((m = p.match(/^\/api\/cases\/(\d+)\/pardon$/))) { DC.cases.forEach(c => { if (c.id === +m[1]) c.active = false; }); return { ok: true }; }
+  if (p === '/api/invites') return DC.invites;
+  if ((m = p.match(/^\/api\/players\/(\d+)(\/notes(?:\/(\d+))?|\/action)?$/))) {
+    const P = demoPlayer(m[1]);
+    if (m[2] === '/action') { if (b.action === 'ban') { P.banned = { reason: b.reason, until: b.days ? now() + b.days * 86400 : null }; P.on_server = false; } if (b.action === 'unban') P.banned = false; if (b.action === 'timeout') P.timeout_until = now() + (b.minutes || 60) * 60; if (b.action === 'untimeout') P.timeout_until = null;
+      if (b.action === 'warn') { P.warnings++; P.cases.unshift({ id: Date.now() % 1000, kind: 'warn', reason: b.reason, moderator: 'You', ts: now(), active: true }); } return P; }
+    if (m[2] && m[3]) { P.notes = P.notes.filter(n => n.id !== +m[3]); return P; }
+    if (m[2]) { P.notes.push({ id: Date.now() % 10000, text: b.text, author: 'You', ts: now() }); return P; }
+    return P;
+  }
+  if (p === '/api/reports' && q.get('status') === 'done') return { items: DC.reportsDone };
+  if (p === '/api/appeals' && q.get('status') === 'done') return { items: DC.appealsDone };
+  if (p === '/api/msglog') { const k = q.get('kind') || 'deleted', s = (q.get('q') || '').toLowerCase(); return { kind: k, enabled: true, days: 7, items: DC.msglog[k].filter(x => !s || (x.author + x.content).toLowerCase().includes(s)) }; }
+  if (p === '/api/queue') return { raid: DC.raid };
+  if (p === '/api/raid') { DC.raid.active = !!b.active; DC.raid.by = b.active ? 'You' : ''; return DC.raid; }
+  if (p === '/api/lockdown') { DC.raid.lockdown = { active: !!b.active }; return DC.raid.lockdown; }
+  return undefined;
+}
 async function demoApi(method, path, body) {
   await new Promise(r => setTimeout(r, 60));
   const fail = Q.get('fail'); if (fail && method !== 'GET' && path.includes(fail)) { const e = new Error('That was already handled by someone else.'); e.status = 400; throw e; }
   const [p, qs] = path.split('?'), q = new URLSearchParams(qs || ''), body2 = body instanceof FormData ? Object.fromEntries(body.entries()) : (body || {});
   let m;
+  const cm = demoComm(method, p, q, body2); if (cm !== undefined) return cm;
   if (p === '/api/auth/me') return Q.get('demo') === 'mod' ? { id: '2', name: 'Sofie', avatar: '', role: 'mod' } : { id: '1', name: 'Kasper', avatar: '', role: 'admin' };
   if (p === '/api/overview') return { bot: { name: 'WOS EU1', avatar_url: 'staff/icons/icon-192.png' }, guild: { name: 'WOS EU1' } };
   if (p === '/api/todo') return demoTodo();
   if (p === '/api/settings') { if (method === 'PUT') Object.assign(DEMO.settings, body2); return { settings: DEMO.settings }; }
   if (p === '/api/channels') return { channels: [{ id: '1', name: 'general', category: 'Community' }, { id: '2', name: 'announcements', category: 'Info' }] };
   if (p === '/api/replies') return { items: DEMO.replies };
-  if (p === '/api/giftcodes' && method === 'POST') return { item: { id: 9, code: body2.code } };
-  if ((m = p.match(/^\/api\/giftcodes\/(\d+)$/))) { DEMO.codes = DEMO.codes.filter(c => c.id !== +m[1]); return { ok: true }; }
+  if (p === '/api/giftcodes' && method === 'POST') { DC.codes.unshift({ id: 9, code: body2.code, reward: body2.reward || '', state: 'new', expires_at: body2.hours ? now() + body2.hours * 3600 : null, created_at: now(), by: 'You', url: '' }); return { item: { id: 9, code: body2.code } }; }
   if (p === '/api/announce') return { channel: 'announcements', partners: 0 };
   if (p === '/api/spikes') { DEMO.spike = null; return { ok: true }; }
-  if (p === '/api/raid' || p === '/api/lockdown') return { active: false, lockdown: { active: !!body2.active } };
-  if (p === '/api/players/find') return { items: [{ id: '901', name: 'Grimnir', chief: 'Chief Grim', uid: '41000000' }].filter(x => (x.name + x.chief).toLowerCase().includes((q.get('q') || '').toLowerCase())) };
+  if (p === '/api/players/find') return { items: [{ id: '901', name: 'Grimnir', chief: 'Chief Grim', uid: '41000000', on_server: true }].filter(x => (x.name + x.chief).toLowerCase().includes((q.get('q') || '').toLowerCase())) };
   if (p === '/api/bugs' && method === 'GET') {
     const st = q.get('status') || '', s = (q.get('q') || '').toLowerCase().replace(/^#/, '');
     const f = DEMO.bugs.filter(b => (!st || b.status === st || (st === 'closed' && b.status.endsWith('rejected'))) && (!s || String(b.id) === s || b.summary.toLowerCase().includes(s)));
@@ -467,7 +558,7 @@ async function demoApi(method, path, body) {
 const PLACES = [['todo', 'To do', 'todo'], ['bugs', 'Bugs', 'bug'], ['ideas', 'Ideas', 'bulb'], ['community', 'Community', 'users'], ['more', 'More', 'grid']];
 const places = () => PLACES.filter(p => !(isMod() && p[0] === 'ideas'));
 let navReady = false, pushedPane = false, fromPop = false;
-function hashFor() { return '#' + (S.open ? S.open.kind + '-' + S.open.id : S.place); }
+function hashFor() { return '#' + (S.open ? S.open.kind + '-' + S.open.id : S.place === 'community' ? 'community/' + S.comm.tab : S.place); }
 function syncHash() {
   if (fromPop) return;
   const h = hashFor(), first = !navReady; navReady = true;
@@ -475,8 +566,10 @@ function syncHash() {
   try { if (first) history.replaceState(null, '', h); else { history.pushState(null, '', h); pushedPane = !!S.open; } } catch (e) { /* sandbox */ }
 }
 function readHash() {
-  const h = decodeURIComponent(location.hash.slice(1)), m = h.match(/^(bug|idea|report|appeal)-(\w+)$/);
-  if (m) return { pane: { kind: m[1], id: /^\d+$/.test(m[2]) ? +m[2] : m[2] } };
+  const h = decodeURIComponent(location.hash.slice(1)), m = h.match(/^(bug|idea|report|appeal|player)-(\w+)$/);
+  if (m) return { pane: { kind: m[1], id: m[1] === 'player' ? m[2] : /^\d+$/.test(m[2]) ? +m[2] : m[2] } };
+  const cm = h.match(/^community\/(\w+)$/);
+  if (cm) return { place: 'community', tab: commTabs().some(t => t[0] === cm[1]) ? cm[1] : commTabs()[0][0] };
   if (places().some(p => p[0] === h)) return { place: h };
   return {};
 }
@@ -484,7 +577,7 @@ window.addEventListener('popstate', () => {
   const r = readHash(); fromPop = true;
   try {
     if (r.pane) openPane(r.pane.kind, r.pane.id);
-    else { if (S.open) closePane(); if (r.place && r.place !== S.place) go(r.place); }
+    else { if (S.open) closePane(); if (r.tab && r.tab !== S.comm.tab) { S.comm.tab = r.tab; if (S.place === 'community') { render(); loadComm(r.tab); } } if (r.place && r.place !== S.place) go(r.place); }
   } finally { fromPop = false; }
 });
 function go(place) { S.place = place; S.open = null; S.sel = null; render(); load(place); }
@@ -569,7 +662,7 @@ function actionsFor(i) {
     if (!i.ref.lockdown) A.push(['Lock the chat', 'shield', 'bad', () => call('POST', '/api/lockdown', { active: true, reason: 'Raid' }).then(() => 'Chat channels locked')]);
   } else if (i.kind === 'code_ending') {
     A.push(['End it now', 'x', '', it => call('PUT', '/api/giftcodes/' + it.id, { action: 'end' }).then(() => 'Gift code ended')]);
-    A.push(['Open gift codes', 'ext', '', null, { link: 'codes' }]);
+    A.push(['Open gift codes', 'gift', '', null, { tab: 'codes' }]);
   } else if (i.kind === 'setup') A.push(['Fix', 'wrench', 'main', null, { link: 'channels' }]);
   else if (i.kind === 'job') A.push(['Open status', 'pulse', 'main', null, { link: 'status' }]);
   return A;
@@ -609,6 +702,7 @@ function findItem(key) { return S.todo && S.todo.items.find(i => keyOf(i) === ke
 async function runAction(item, n, why, el) {
   const a = actionsFor(item)[n]; if (!a) return;
   if (a[4] && a[4].link) { location.href = CFG.classic + '#' + a[4].link; return; }
+  if (a[4] && a[4].tab) { goComm(a[4].tab); return; }
   if (!a[3]) { const p = paneOf(item); if (p) openPane(p[0], p[1]); return; }
   if (a[4] && a[4].reason && why === undefined) { S.reasonFor = { key: keyOf(item), n, label: a[4].reason, name: a[0], tone: a[2], optional: a[4].optional }; renderMain(); const f = $('#why'); if (f) f.focus(); return; }
   if (el) busy(el, true, '…');
@@ -644,8 +738,8 @@ const editingNow = () => !!(S.reasonFor || (document.activeElement && document.a
 
 /* ============================================================ the detail pane */
 function openPane(kind, id) {
-  if (S.open && S.open.kind === kind && S.open.id === id) return;
-  stopChat(); S.open = { kind, id }; S.paneData = null; S.sel = null; render(); syncHash();
+  if (S.open && S.open.kind === kind && String(S.open.id) === String(id)) return;
+  stopChat(); S.open = { kind, id }; S.paneData = null; S.sel = null; S.pAct = null; render(); syncHash();
 }
 function closePane() {
   stopChat(); const had = !!S.open; S.open = null; S.paneData = null; render();
@@ -658,6 +752,7 @@ async function loadPane() {
     if (o.kind === 'bug') d = { bug: await call('GET', '/api/bugs/' + o.id) };
     else if (o.kind === 'idea') { const r = await call('GET', '/api/suggestions?q=%23' + o.id); d = { idea: r.items.find(x => x.id === o.id) }; if (!d.idea) throw Object.assign(new Error('Idea not found.'), { status: 404 }); }
     else if (o.kind === 'report') { const r = await call('GET', '/api/reports'); d = { report: r.items.find(x => x.id === o.id) }; if (!d.report) throw Object.assign(new Error('This report was already handled.'), { status: 404 }); }
+    else if (o.kind === 'player') d = { player: await call('GET', '/api/players/' + o.id) };
     else if (o.kind === 'appeal') { const r = await call('GET', '/api/appeals'); d = { appeal: r.items.find(x => x.id === o.id) }; if (!d.appeal) throw Object.assign(new Error('This appeal was already decided.'), { status: 404 }); }
     if (S.open !== o) return;
     S.paneData = d; paintPane();
@@ -680,6 +775,7 @@ function paneView() {
   if (d.idea) return html`${head('Idea #' + d.idea.id)}<div class="pane-body">${ideaPane(d.idea)}</div>`;
   if (d.report) return html`${head('Reported message')}<div class="pane-body">${reportPane(d.report)}</div>`;
   if (d.appeal) return html`${head(d.appeal.user + ' – ' + d.appeal.kind + ' appeal')}<div class="pane-body">${appealPane(d.appeal)}</div>`;
+  if (d.player) return html`${head(d.player.name)}<div class="pane-body">${playerPane(d.player)}</div>`;
   return head(o.kind);
 }
 function reportText(t) {             // the form's questions small and grey, the player's answers right under them
@@ -777,7 +873,7 @@ function ideaPane(x) {
 }
 function reportPane(r) {
   return html`
-    <div class="meta"><span>${r.target}</span><span>#${r.channel}</span><span>${ago(r.ts)}</span>${r.warnings ? html`<span class="tag warn">${plural(r.warnings, 'active warning')}</span>` : ''}</div>
+    <div class="meta"><a href="#player-${r.target_id}">${r.target}</a><span>#${r.channel}</span><span>${ago(r.ts)}</span>${r.warnings ? html`<span class="tag warn">${plural(r.warnings, 'active warning')}</span>` : ''}</div>
     <section class="sec" style="margin-top:14px">${paneActions(pseudoItem('report', r.id))}</section>
     <section class="sec"><h3>Message</h3><div class="report">${r.content || '(no text)'}</div>
       ${r.url ? html`<a class="btn sm ghost" style="margin-top:8px" href="${r.url}" target="_blank" rel="noopener">${icon('ext')} Show in Discord</a>` : ''}</section>
@@ -786,7 +882,7 @@ function reportPane(r) {
 }
 function appealPane(a) {
   return html`
-    <div class="meta"><span class="tag ${a.kind === 'ban' ? 'bad' : 'warn'}">${a.kind}</span><span>${ago(a.ts)}</span>${a.case_reason ? html`<span>For: ${a.case_reason}</span>` : ''}${a.warnings ? html`<span class="tag warn">${plural(a.warnings, 'active warning')}</span>` : ''}</div>
+    <div class="meta"><span class="tag ${a.kind === 'ban' ? 'bad' : 'warn'}">${a.kind}</span><a href="#player-${a.user_id}">${a.user}</a><span>${ago(a.ts)}</span>${a.case_reason ? html`<span>For: ${a.case_reason}</span>` : ''}${a.warnings ? html`<span class="tag warn">${plural(a.warnings, 'active warning')}</span>` : ''}</div>
     <section class="sec" style="margin-top:14px">${paneActions(pseudoItem('appeal', a.id, { kind: a.kind }))}</section>
     <section class="sec"><h3>What they wrote</h3><div class="report">${a.text}</div></section>`;
 }
@@ -837,25 +933,244 @@ async function loadIdeas() {
 }
 
 /* ============================================================ Community and More (phase 1: open the current dashboard) */
+// [classic page, title, description, icon, v2 Community tab or null when it is a set-up page (moves to Settings in phase 3)]
 const COMMUNITY = [
-  ['Gift codes', [['codes', 'Gift codes', 'Add, end and list codes', 'gift'], ['redeem', 'Auto-redeem', 'Codes redeemed for linked players', 'gift']]],
-  ['Posts', [['patch', 'Patch notes', 'Announce fixed bugs', 'wrench'], ['timers', 'Timed messages', 'Scheduled and repeating posts', 'clock'], ['giveaways', 'Giveaways', 'Start, end and reroll', 'party'], ['info', 'Info channel', 'Rules and how to report', 'list'], ['partners', 'Promoter servers', 'Servers that get our posts', 'globe']]],
-  ['Members', [['players', 'Players', 'Linked game accounts, notes, actions', 'users'], ['warnings', 'Warnings', 'Cases, timeouts and bans', 'alert'], ['invites', 'Invites', 'Who invited whom', 'userplus'], ['welcome', 'Welcome', 'Greeting for new members', 'userplus'], ['access', 'Access & languages', 'Language chats, device question', 'globe'], ['rolemenus', 'Role menus', 'Self-assign roles', 'tag']]],
-  ['Moderation', [['queue', 'Reports & appeals', 'History and raid mode', 'shield'], ['msglog', 'Deleted messages', 'What was deleted or edited', 'list']]]
+  ['Gift codes', [['codes', 'Gift codes', 'Add, end and list codes', 'gift', 'codes'], ['redeem', 'Auto-redeem', 'Codes redeemed for linked players', 'gift', 'codes']]],
+  ['Posts', [['patch', 'Patch notes', 'Announce fixed bugs', 'wrench', 'posts'], ['timers', 'Timed messages', 'Scheduled and repeating posts', 'clock', 'posts'], ['giveaways', 'Giveaways', 'Start, end and reroll', 'party', 'posts'], ['info', 'Info channel', 'Rules and how to report', 'list', null], ['partners', 'Promoter servers', 'Servers that get our posts', 'globe', 'posts']]],
+  ['Members', [['players', 'Players', 'Profiles, notes, actions', 'users', 'members'], ['warnings', 'Warnings', 'Cases, timeouts and bans', 'alert', 'members'], ['invites', 'Invites', 'Who invited whom', 'userplus', 'members'], ['welcome', 'Welcome', 'Greeting for new members', 'userplus', null], ['access', 'Access & languages', 'Language chats, device question', 'globe', null], ['rolemenus', 'Role menus', 'Self-assign roles', 'tag', null]]],
+  ['Moderation', [['queue', 'Reports & appeals', 'History and raid mode', 'shield', 'moderation'], ['msglog', 'Deleted messages', 'What was deleted or edited', 'list', 'moderation']]]
 ];
 const MORE = [
   ['Stats', [['insights', 'Insights', 'Bugs by area, version and time', 'chart'], ['moderators', 'Moderators', 'Who handled what, and how fast', 'timer'], ['status', 'Server status', 'Bot, website, backups, jobs', 'pulse'], ['log', 'Activity log', 'Everything the bot and staff did', 'list']]],
   ['Settings', [['panel', 'Bug panel', 'The report message in Discord', 'bug'], ['channels', 'Channels', 'Where the bot reads and posts', 'hash'], ['website', 'Website', 'Reports, ideas, status, notifications', 'globe'], ['translations', 'Translations', 'Texts in every language', 'globe'], ['bot', 'Bot profile', 'Name, picture, staff login', 'bot'], ['data', 'Data & backups', 'Backups and clean-up', 'db'], ['mod', 'Auto-mod & safety', 'Honeypot, scam guard, auto-mod', 'shield'], ['devs', 'Developers', 'The developers’ bug list', 'users']]]
 ];
 const MOD_OK = ['queue', 'msglog', 'insights', 'moderators', 'status', 'players', 'warnings'];
+function goComm(tab) { S.comm.tab = tab; if (S.place === 'community') { S.open = null; render(); syncHash(); loadComm(tab); } else { go('community'); syncHash(); } }
 function cardGrid(groups) {
   return html`<p class="note">These pages open in the current dashboard while the new one is being built.</p>${groups.map(([title, cards]) => {
     const list = cards.filter(c => !isMod() || MOD_OK.includes(c[0])); if (!list.length) return '';
     return html`<h2 class="section-title">${title}</h2><div class="cards">${list.map(([k, t, d, ic]) => html`<a class="card" href="${CFG.classic}#${k}">${icon(ic)}<div><b>${t}</b><span>${d}</span></div></a>`)}</div>`;
   })}`;
 }
-const viewCommunity = () => cardGrid(COMMUNITY);
 const viewMore = () => cardGrid(MORE);
+
+/* ============================================================ Community: Gift codes · Posts · Members · Moderation */
+const COMM_TABS = [['codes', 'Gift codes', 'gift'], ['posts', 'Posts', 'send'], ['members', 'Members', 'users'], ['moderation', 'Moderation', 'shield']];
+const commTabs = () => COMM_TABS.filter(t => !isMod() || ['members', 'moderation'].includes(t[0]));
+const SETUP_LINKS = { codes: [['redeem', 'Auto-redeem connection']], posts: [['info', 'Info channel']], members: [['welcome', 'Welcome message'], ['access', 'Access & languages'], ['rolemenus', 'Role menus']], moderation: [] };
+const DAYS = [['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'], ['fri', 'Fri'], ['sat', 'Sat'], ['sun', 'Sun']];
+const C = () => S.comm;
+function viewCommunity() {
+  const tab = C().tab, d = C().data[tab];
+  const tabs = commTabs();
+  return html`<div class="chips" role="tablist" aria-label="Community">${tabs.map(([k, l, ic]) => html`<button class="chip" role="tab" data-act="commTab" data-t="${k}" aria-selected="${String(tab === k)}" aria-pressed="${String(tab === k)}">${l}</button>`)}</div>
+    ${!d ? html`<div class="empty">Loading…</div>` : d.error ? html`<div class="list"><div class="empty"><b>Couldn’t load this</b>${d.error}<div style="margin-top:12px"><button class="btn" data-act="commReload">Try again</button></div></div></div>` : ({ codes: commCodes, posts: commPosts, members: commMembers, moderation: commModeration }[tab])(d)}
+    ${!isMod() && (SETUP_LINKS[tab] || []).length ? html`<p class="hint" style="margin-top:28px">${icon('wrench')} Set up once: ${SETUP_LINKS[tab].map(([k, l], i) => html`${i ? ' · ' : ''}<a href="${CFG.classic}#${k}">${l}</a>`)} <span>(opens the current dashboard until Settings moves here)</span></p>` : ''}`;
+}
+async function loadComm(tab, quiet) {
+  tab = tab || C().tab; const get = p => call('GET', p), soft = p => call('GET', p).catch(() => null);
+  try {
+    let d;
+    if (tab === 'codes') { const [g, r] = await Promise.all([get('/api/giftcodes'), soft('/api/redeem')]); d = { codes: g.items, durations: g.durations || [], redeem: r }; }
+    else if (tab === 'posts') { const [pn, tm, gw, pt] = await Promise.all([get('/api/patchnotes'), get('/api/timers'), get('/api/giveaways'), soft('/api/partners'), ensureLists()]); d = { patch: pn, timers: tm, giveaways: gw.items, partners: pt }; }
+    else if (tab === 'members') { // the warnings list and invites are admin-only on the server
+      const [cs, inv] = isMod() ? [null, null] : await Promise.all([get('/api/cases' + (C().caseQ ? '?q=' + encodeURIComponent(C().caseQ) : '')), soft('/api/invites')]);
+      d = { cases: cs && cs.items, rules: (cs && cs.rules) || {}, invites: inv, found: (C().data.members || {}).found || null }; }
+    else if (tab === 'moderation') { const [rp, ap, ml, q] = await Promise.all([get('/api/reports?status=done'), get('/api/appeals?status=done'), get('/api/msglog?kind=' + (C().mlKind || 'deleted') + (C().mlQ ? '&q=' + encodeURIComponent(C().mlQ) : '')), soft('/api/queue')]);
+      d = { reports: rp.items, appeals: ap.items, msglog: ml, raid: q && q.raid }; }
+    C().data[tab] = d;
+  } catch (e) { if (!quiet || !C().data[tab]) C().data[tab] = { error: e.message }; }
+  if (S.place !== 'community' || C().tab !== tab || (quiet && editingNow())) return;
+  const a = document.activeElement, id = a && a.id, pos = a && a.selectionStart;
+  renderMain();
+  const b = id && document.getElementById(id); if (b && b !== document.activeElement) { b.focus(); try { if (pos != null) b.setSelectionRange(pos, pos); } catch (e) { /* not a text field */ } }
+}
+function ensureLists() {
+  return Promise.all([S.channels || call('GET', '/api/channels').then(r => { S.channels = r.channels; }).catch(() => { S.channels = []; }),
+    S.roles || call('GET', '/api/roles').then(r => { S.roles = r.roles; }).catch(() => { S.roles = []; })]);
+}
+const chanName = id => { const c = (S.channels || []).find(x => String(x.id) === String(id)); return c ? '#' + c.name : 'a channel'; };
+const roleName = id => { const r = (S.roles || []).find(x => String(x.id) === String(id)); return r ? '@' + r.name : ''; };
+const when = ts => new Date(ts * 1000).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const sectionHead = (title, extra) => html`<div class="row" style="margin:22px 0 8px"><h2 class="section-title" style="margin:0">${title}</h2><div class="grow"></div>${extra || ''}</div>`;
+
+/* ---- gift codes */
+function commCodes(d) {
+  const act = d.codes.filter(c => c.state !== 'expired'), old = d.codes.filter(c => c.state === 'expired').slice(0, 15), R = d.redeem;
+  const row = c => html`<div class="item" style="cursor:default"><div><div class="what"><span class="tag ${c.state === 'new' ? 'hot' : c.state === 'active' ? 'ok' : ''}">${{ new: 'New', active: 'Active', expired: 'Ended' }[c.state] || c.state}</span>
+      <span>${c.expires_at ? (c.state === 'expired' ? 'ended ' + ago(c.expires_at) : 'ends ' + when(c.expires_at)) : 'no end date'}</span>${c.by ? html`<span>added by ${c.by}</span>` : ''}</div>
+      <p class="title num" style="letter-spacing:.02em">${c.code}</p>${c.reward ? html`<p class="text">${c.reward}</p>` : ''}</div>
+    <div class="acts">${c.url ? html`<a class="btn sm ghost" href="${c.url}" target="_blank" rel="noopener">${icon('ext')} Discord</a>` : ''}
+      ${c.state !== 'expired' ? html`<button class="btn sm" data-act="codeEnd" data-id="${c.id}" data-code="${c.code}">${icon('clock')} End now</button>` : ''}
+      <button class="btn sm bad" data-act="codeDel" data-id="${c.id}" data-code="${c.code}" aria-label="Delete ${c.code}">${icon('x')}</button></div></div>`;
+  return html`
+    ${sectionHead('Active codes', html`<button class="btn sm" data-act="codeImport">${icon('upload')} Import several</button><button class="btn sm go" data-act="new">${icon('plus')} Add a code</button>`)}
+    <div class="list">${act.length ? act.map(row) : html`<div class="empty"><b>No active codes</b>Add one and the bot announces it and keeps the list up to date.</div>`}</div>
+    ${R ? html`${sectionHead('Auto-redeem', html`<span class="tag ${R.settings && R.settings.redeem_enabled ? 'ok' : ''}">${R.settings && R.settings.redeem_enabled ? 'On' : 'Off'}</span>`)}
+      <div class="list"><div class="item" style="cursor:default"><div><p class="title">${plural(R.linked || 0, 'player')} linked their game account</p>
+        <p class="text">${R.settings && R.settings.redeem_enabled ? 'New codes are redeemed for them automatically.' : 'Turn it on under “Auto-redeem connection” below.'}</p></div></div>
+        ${(R.codes || []).map(c => html`<div class="item" style="cursor:default"><div><div class="what"><span class="num">${c.code}</span></div>
+          <p class="text" style="-webkit-line-clamp:unset"><span class="tag ok">${c.ok} redeemed</span> <span class="tag">${c.already} already had it</span> ${c.failed ? html`<span class="tag bad">${c.failed} failed</span>` : ''}</p></div></div>`)}
+        ${(R.failures || []).length ? html`<div class="item" style="cursor:default"><div><p class="title">${plural(R.failures.length, 'failure')}</p>
+          ${R.failures.slice(0, 5).map(f => html`<p class="text" style="-webkit-line-clamp:unset">${f.code} · ${f.chief || f.uid}: ${f.message}</p>`)}</div>
+          <div class="acts"><button class="btn sm go" data-act="redeemRetry">${icon('refresh')} Try again</button></div></div>` : ''}</div>` : ''}
+    ${old.length ? html`<details class="group fold" style="margin-top:22px"><summary><h2 class="section-title" style="margin:0">Ended codes · ${old.length}</h2></summary><div class="list" style="margin-top:8px">${old.map(row)}</div></details>` : ''}`;
+}
+
+/* ---- posts */
+function commPosts(d) {
+  const P = d.patch || { unreleased: [], history: [] }, T = d.timers || { items: [] }, G = d.giveaways || [], PT = d.partners;
+  const running = G.filter(g => !g.ended), ended = G.filter(g => g.ended).slice(0, 5);
+  return html`
+    ${sectionHead('Patch notes', html`<span class="hint">${plural(P.unreleased.length, 'fixed bug')} not announced yet</span>`)}
+    <div class="list"><div class="item" style="cursor:default"><div>${P.unreleased.length ? html`<p class="title">Ready to announce</p>
+        ${P.unreleased.slice(0, 8).map(b => html`<p class="text" style="-webkit-line-clamp:1"><a href="#bug-${b.id}">#${b.id}</a> ${b.summary}</p>`)}${P.unreleased.length > 8 ? html`<p class="hint">and ${P.unreleased.length - 8} more</p>` : ''}
+        <form class="reason" data-act-submit="patchPublish" style="margin-top:10px"><label class="sr" for="pn-title">Title</label><input class="in" id="pn-title" maxlength="120" value="${P.default_title || ''}">
+          <button class="btn sm go" type="submit">${icon('send')} Publish patch notes</button></form>`
+      : html`<p class="title">Nothing to announce</p><p class="text">Bugs you mark as fixed show up here, ready for the next patch notes.</p>`}</div></div>
+      ${(P.history || []).slice(0, 3).map(h => html`<div class="item" style="cursor:default"><div><div class="what"><span>${ago(h.ts)}</span><span>${h.by}</span></div><p class="text">${h.title} · ${plural(h.count, 'bug')}</p></div></div>`)}</div>
+
+    ${sectionHead('Timed messages', html`<span class="hint">${T.timezone || ''}</span><button class="btn sm go" data-act="timerEdit">${icon('plus')} New timed message</button>`)}
+    <div class="list">${T.items.length ? T.items.map(t => html`<div class="item" style="cursor:default"><div>
+        <div class="what"><span class="tag ${t.enabled ? (t.next_run ? 'ok' : '') : ''}">${t.enabled ? (t.next_run ? 'On' : 'Done') : 'Paused'}</span><span>${timerWhen(t)}</span><span>${chanName(t.channel_id)}</span>${t.role_id ? html`<span>${roleName(t.role_id)}</span>` : ''}</div>
+        <p class="title">${t.name}</p><p class="text">${t.next_run && t.enabled ? 'Next: ' + when(t.next_run) : t.last_run ? 'Last posted ' + ago(t.last_run) : ''}</p></div>
+      <div class="acts"><label class="check"><input type="checkbox" data-act-change="timerToggle" data-id="${t.id}" ${t.enabled ? 'checked' : ''}> On</label>
+        <button class="btn sm" data-act="timerSend" data-id="${t.id}">${icon('send')} Post now</button><button class="btn sm" data-act="timerEdit" data-id="${t.id}">Edit</button>
+        <button class="btn sm bad" data-act="timerDel" data-id="${t.id}" data-name="${t.name}" aria-label="Delete ${t.name}">${icon('x')}</button></div></div>`)
+      : html`<div class="empty"><b>No timed messages</b>Post reminders like “Bear Hunt in 30 minutes” on a schedule.</div>`}</div>
+
+    ${sectionHead('Giveaways', html`<button class="btn sm go" data-act="gwNew">${icon('plus')} Start a giveaway</button>`)}
+    <div class="list">${running.length || ended.length ? running.concat(ended).map(g => html`<div class="item" style="cursor:default"><div>
+        <div class="what"><span class="tag ${g.ended ? '' : 'ok'}">${g.ended ? 'Ended' : 'Running'}</span><span>${g.ended ? ago(g.ends_at) : 'ends ' + when(g.ends_at)}</span><span>${plural(g.winners, 'winner')}</span>${g.ended ? html`<span>${plural(g.entries, 'entry', 'entries')}</span>` : ''}</div>
+        <p class="title">${g.prize}</p>${g.winner_names && g.winner_names.length ? html`<p class="text">Won by ${g.winner_names.join(', ')}</p>` : ''}</div>
+      <div class="acts">${g.url ? html`<a class="btn sm ghost" href="${g.url}" target="_blank" rel="noopener">${icon('ext')} Discord</a>` : ''}
+        ${g.ended ? html`<button class="btn sm" data-act="gwDo" data-a="reroll" data-id="${g.id}">${icon('refresh')} New winner</button>` : html`<button class="btn sm" data-act="gwDo" data-a="end" data-id="${g.id}">End now</button>`}</div></div>`)
+      : html`<div class="empty"><b>No giveaways</b>Players react 🎉 to enter; the bot picks the winners.</div>`}</div>
+
+    ${PT ? html`${sectionHead('Promoter servers', html`<span class="hint">${plural(PT.summary.servers, 'server')} · ${PT.summary.members} members</span><button class="btn sm go" data-act="ptInvite">${icon('plus')} Invite link</button>`)}
+      ${(PT.invites || []).length ? html`<div class="note">${PT.invites.map(i => html`<div class="row">Open invite for <b>${i.promoter}</b><span class="hint">link works until ${when(i.expires_ts)}</span><div class="grow"></div><button class="btn sm ghost" data-act="ptRevoke" data-id="${i.id}">Revoke</button></div>`)}</div>` : ''}
+      <div class="list">${PT.items.length ? PT.items.slice().sort((a, b) => ((b.issues || []).length - (a.issues || []).length)).map(x => html`<div class="item ${x.issues && x.issues.length ? 'warm' : ''}" style="cursor:default"><div>
+          <div class="what"><span class="tag ${x.status === 'ok' ? 'ok' : x.status === 'paused' ? '' : 'warn'}">${{ ok: 'Working', paused: 'Paused', problem: 'Needs a fix', setup: 'Not set up' }[x.status] || x.status}</span>
+            <span>${x.members || 0} members</span><span>${plural(x.posts_30d || 0, 'post')} in 30 days</span>${x.promoter ? html`<span>${x.promoter}</span>` : ''}</div>
+          <p class="title">${x.name}</p>${(x.issues || []).length ? html`<p class="text" style="-webkit-line-clamp:3;color:var(--warn)">${x.issues.join(' · ')}</p>` : ''}</div>
+        <div class="acts"><button class="btn sm" data-act="ptTest" data-id="${x.id}">${icon('send')} Test post</button><button class="btn sm" data-act="ptDm" data-id="${x.id}">${icon('message')} Send setup steps</button>
+          <button class="btn sm" data-act="ptPause" data-id="${x.id}" data-on="${x.paused ? 0 : 1}">${x.paused ? 'Resume' : 'Pause'}</button>
+          <button class="btn sm bad" data-act="ptRemove" data-id="${x.id}" data-name="${x.name}">${icon('x')} Remove</button></div></div>`)
+        : html`<div class="empty"><b>No promoter servers yet</b>Make an invite link and send it to a promoter.</div>`}</div>` : ''}`;
+}
+function timerWhen(t) {
+  if (t.kind === 'once') { const d = new Date(t.at); return isNaN(d) ? t.at : d.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  if (t.kind === 'interval') return 'every ' + Math.round((t.every_minutes || 0) / 60) + ' h';
+  return t.at + ' · ' + ((t.days || []).length === 7 ? 'every day' : (t.days || []).map(x => x[0].toUpperCase() + x.slice(1)).join(', '));
+}
+
+/* ---- members */
+function commMembers(d) {
+  const M = C().data.members, found = M.found, V = d.invites;
+  return html`
+    ${sectionHead('Players')}
+    <form class="row" data-act-submit="playerFind"><label class="sr" for="pf">Find a player</label><input class="in grow" id="pf" type="search" placeholder="Discord name, chief name, game UID or Discord ID" value="${C().pq || ''}"><button class="btn" type="submit">${icon('search')} Find</button></form>
+    ${found ? html`<div class="list" style="margin-top:10px">${found.length ? found.map(p => html`<div class="item" data-open="player" data-id="${p.id}" tabindex="0" role="button"><div><div class="what">${p.on_server ? html`<span class="tag ok">On the server</span>` : html`<span class="tag">Left</span>`}</div><p class="title">${p.name}</p></div></div>`)
+      : html`<div class="empty">No player found.</div>`}</div>` : ''}
+
+    ${!d.cases ? html`<p class="hint" style="margin-top:14px">Find a player to see their record, warn or time them out, and add notes.</p>` : html`${sectionHead('Warnings & cases', html`<span class="hint">${d.rules.warn_timeout_at ? d.rules.warn_timeout_at + ' warnings → timeout' : ''}${d.rules.warn_ban_at ? ' · ' + d.rules.warn_ban_at + ' → ban' : ''}</span>`)}
+    <form class="row" data-act-submit="caseFind" style="margin-bottom:10px"><label class="sr" for="cq">Search cases</label><input class="in grow" id="cq" type="search" placeholder="Search by name or reason" value="${C().caseQ || ''}"></form>
+    <div class="list">${d.cases.length ? d.cases.slice(0, 40).map(c => html`<div class="item" data-open="player" data-id="${c.user_id}" tabindex="0" role="button"><div>
+        <div class="what"><span class="tag ${c.kind === 'ban' ? 'bad' : c.kind === 'warn' ? 'warn' : 'ice'}">${c.kind}${c.minutes ? ' ' + c.minutes + ' min' : ''}</span>${c.active ? '' : html`<span class="tag">pardoned/expired</span>`}<span>by ${c.moderator || 'the bot'}</span><time class="num">${ago(c.ts)}</time></div>
+        <p class="title">${c.user}</p><p class="text">${c.reason}</p></div>
+      ${c.kind === 'warn' && c.active ? html`<div class="acts"><button class="btn sm" data-act="pardon" data-id="${c.id}">${icon('check')} Pardon</button></div>` : ''}</div>`)
+      : html`<div class="empty">No cases${C().caseQ ? ' match' : ' yet'}.</div>`}</div>`}
+
+    ${V ? html`${sectionHead('Invites', html`<span class="hint">last 30 days</span>`)}
+      <div class="list"><div class="item" style="cursor:default"><div><p class="title num">${V.joins30} joined · ${V.known30} with a known inviter · ${plural(V.inviters, 'inviter')}</p></div></div>
+        ${(V.top || []).slice(0, 8).map((a, i) => html`<div class="item" data-open="player" data-id="${a.inviter_id}" tabindex="0" role="button"><div><div class="what"><span class="num">${i + 1}.</span>${a.fake ? html`<span class="tag warn">${a.fake} suspicious</span>` : ''}${a.left ? html`<span>${a.left} left again</span>` : ''}</div>
+          <p class="title">${a.name}</p><p class="text">${plural(a.regular, 'invite')} still on the server (${a.total} in total)</p></div></div>`)}</div>` : ''}`;
+}
+function playerPane(P) {
+  const act = (a, label, tone, extra) => html`<button class="btn ${tone || ''}" data-act="pAction" data-a="${a}" ${extra || ''}>${label}</button>`;
+  return html`
+    <div class="meta">${P.on_server ? html`<span class="tag ok">On the server</span>` : html`<span class="tag">Not on the server</span>`}${P.banned ? html`<span class="tag bad">Banned${P.banned.until ? ' until ' + when(P.banned.until) : ''}</span>` : ''}
+      ${P.timeout_until && P.timeout_until > now() ? html`<span class="tag warn">Timed out until ${when(P.timeout_until)}</span>` : ''}${P.warnings ? html`<span class="tag warn">${plural(P.warnings, 'active warning')}</span>` : ''}
+      ${P.joined ? html`<span>joined ${ago(P.joined)}</span>` : ''}${P.created ? html`<span>account ${ago(P.created).replace(' ago', ' old')}</span>` : ''}</div>
+    ${P.link ? html`<p class="hint" style="margin:8px 0 0">Game: ${P.link.chief} · UID <span class="num">${P.link.uid}</span></p>` : ''}
+    ${P.invited_by ? html`<p class="hint" style="margin:4px 0 0">Invited by ${P.invited_by.name}</p>` : ''}
+    ${P.staff ? html`<p class="note" style="margin-top:12px">This is a staff member.</p>` : html`<section class="sec" style="margin-top:14px"><div class="actbar">
+      ${P.on_server ? html`${act('warn', 'Warn…', '')}${P.timeout_until && P.timeout_until > now() ? act('untimeout', 'Lift timeout', '') : act('timeout', 'Timeout…', '')}` : ''}
+      ${isMod() ? '' : P.banned ? act('unban', 'Unban', '') : act('ban', 'Ban…', 'bad')}</div>
+      ${S.pAct ? html`<form class="reason" data-act-submit="pAction" style="margin-top:10px">
+        ${S.pAct === 'timeout' ? html`<select class="in" id="pa-min" style="max-width:150px" aria-label="How long">${[[10, '10 min'], [60, '1 hour'], [360, '6 hours'], [1440, '1 day'], [10080, '1 week']].map(([v, l]) => html`<option value="${v}" ${v === 60 ? 'selected' : ''}>${l}</option>`)}</select>` : ''}
+        ${S.pAct === 'ban' ? html`<select class="in" id="pa-days" style="max-width:170px" aria-label="How long"><option value="0">For good</option><option value="1">1 day</option><option value="7">7 days</option><option value="30">30 days</option></select>` : ''}
+        <input class="in" id="pa-why" maxlength="400" placeholder="Reason – they see it" autocomplete="off">
+        <button class="btn ${S.pAct === 'ban' ? 'bad' : 'main'}" type="submit">${{ warn: 'Warn', timeout: 'Time out', ban: 'Ban' }[S.pAct]}</button><button class="btn ghost" type="button" data-act="pActCancel">Cancel</button></form>` : ''}</section>`}
+    <section class="sec"><h3>Notes from the team</h3>${(P.notes || []).map(n => html`<div class="sim"><div class="grow"><p style="margin:0">${n.text}</p><p class="hint" style="margin:2px 0 0">${n.author} · ${ago(n.ts)}</p></div>${isMod() ? '' : html`<button class="btn sm ghost" data-act="noteDel" data-id="${n.id}" aria-label="Delete note">${icon('x')}</button>`}</div>`)}
+      <form class="composer" data-act-submit="noteAdd"><textarea class="in" id="note" maxlength="1000" placeholder="Add a note only staff can see" style="min-height:60px"></textarea><div class="row"><div class="grow"></div><button class="btn" type="submit">Add note</button></div></form></section>
+    ${(P.cases || []).length ? html`<section class="sec"><h3>Record</h3>${P.cases.map(c => html`<div class="sim"><span class="tag ${c.kind === 'ban' ? 'bad' : c.kind === 'warn' ? 'warn' : 'ice'}">${c.kind}</span><div class="grow"><p style="margin:0">${c.reason}</p><p class="hint" style="margin:2px 0 0">${c.moderator || 'the bot'} · ${ago(c.ts)}${c.active ? '' : ' · no longer counts'}</p></div></div>`)}</section>` : ''}
+    ${(P.bugs || []).length ? html`<section class="sec"><h3>Bug reports${P.record && P.record.accepted_pct != null ? ' · ' + P.record.accepted_pct + '% confirmed' : ''}</h3>${P.bugs.map(b => html`<p style="margin:4px 0"><a href="#bug-${b.id}">#${b.id} ${b.summary}</a> <span class="tag ${(BUG_ST[b.status] || ['', ''])[1]}">${(BUG_ST[b.status] || [b.status])[0]}</span></p>`)}</section>` : ''}
+    ${(P.reported || []).length ? html`<section class="sec"><h3>Reported messages</h3>${P.reported.map(r => html`<p class="hint" style="margin:4px 0">${ago(r.ts)} in #${r.channel}: ${r.content}</p>`)}</section>` : ''}`;
+}
+
+/* ---- moderation */
+function commModeration(d) {
+  const R = d.raid, ML = d.msglog || { items: [] };
+  return html`
+    ${R ? html`${sectionHead('Raid mode', html`<span class="tag ${R.active ? 'bad' : 'ok'}">${R.active ? 'On' : 'Off'}</span>`)}
+      <div class="list"><div class="item ${R.active ? 'urgent' : ''}" style="cursor:default"><div><p class="title">${R.active ? 'Raid mode is on' : 'Raid mode is off'}</p>
+        <p class="text">${R.active ? (R.joined || 0) + ' joined while it was on' + (R.by ? ' · switched on by ' + R.by : '') : 'Switch it on if many accounts join to spam; new members wait until it is lifted.'}${R.lockdown && R.lockdown.active ? ' · chat is locked' : ''}</p></div>
+        <div class="acts"><button class="btn sm ${R.active ? 'go' : 'bad'}" data-act="raidSet" data-on="${R.active ? 0 : 1}">${R.active ? 'Lift raid mode' : 'Switch on'}</button>
+          <button class="btn sm" data-act="lockSet" data-on="${R.lockdown && R.lockdown.active ? 0 : 1}">${icon('shield')} ${R.lockdown && R.lockdown.active ? 'Unlock the chat' : 'Lock the chat'}</button></div></div></div>` : ''}
+    ${sectionHead('Messages that were removed', html`<div class="seg" style="margin:0;width:auto">${[['deleted', 'Deleted'], ['edited', 'Edited']].map(([k, l]) => html`<button type="button" data-act="mlKind" data-k="${k}" aria-pressed="${String((C().mlKind || 'deleted') === k)}" style="padding:0 12px">${l}</button>`)}</div>`)}
+    <form class="row" data-act-submit="mlFind" style="margin-bottom:10px"><label class="sr" for="mq">Search messages</label><input class="in grow" id="mq" type="search" placeholder="Search name or text" value="${C().mlQ || ''}"></form>
+    <div class="list">${ML.items.length ? ML.items.slice(0, 40).map(m => html`<div class="item" data-open="player" data-id="${m.author_id}" tabindex="0" role="button"><div>
+        <div class="what"><span>#${m.channel}</span><time class="num">${ago(m.deleted_ts || m.ts)}</time>${m.deleted_by === 'bot' ? html`<span class="tag ice">removed by the bot</span>` : ''}${m.attachments ? html`<span>${plural(m.attachments, 'file')}</span>` : ''}</div>
+        <p class="title">${m.author}</p><p class="text" dir="auto">${(m.edits || []).length ? 'Before: ' + m.edits[0].text + ' → now: ' : ''}${m.content}</p></div></div>`)
+      : html`<div class="empty">${ML.enabled === false ? 'The message log is off (Settings).' : 'Nothing here' + (C().mlQ ? ' matches.' : ' in the last ' + (ML.days || 7) + ' days.')}</div>`}</div>
+    ${sectionHead('Handled reports')}
+    <div class="list">${d.reports.length ? d.reports.slice(0, 20).map(r => html`<div class="item" data-open="player" data-id="${r.target_id}" tabindex="0" role="button"><div>
+        <div class="what"><span class="tag ${r.status === 'dismissed' ? '' : 'warn'}">${r.action || r.status}</span><span>${r.handled_by || ''}</span><time class="num">${ago(r.handled_ts || r.ts)}</time></div>
+        <p class="title">${r.target}</p><p class="text" dir="auto">${r.content}</p></div></div>`) : html`<div class="empty">No handled reports yet.</div>`}</div>
+    ${sectionHead('Decided appeals')}
+    <div class="list">${d.appeals.length ? d.appeals.slice(0, 20).map(a => html`<div class="item" data-open="player" data-id="${a.user_id}" tabindex="0" role="button"><div>
+        <div class="what"><span class="tag ${a.status === 'accepted' ? 'ok' : 'bad'}">${a.status}</span><span>${a.kind}</span><span>${a.handled_by || ''}</span><time class="num">${ago(a.handled_ts || a.ts)}</time></div>
+        <p class="title">${a.user}</p><p class="text">${a.text}</p></div></div>`) : html`<div class="empty">No decided appeals yet.</div>`}</div>`;
+}
+
+/* ---- sheets used by Community */
+function openSheet(title, body) {
+  closeSheet();
+  root.insertAdjacentHTML('beforeend', String(html`<div class="scrim" id="sheet" data-act="sheetBg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h"><h2 id="sheet-h">${title}</h2>${body}</div></div>`));
+  const f = $('#sheet input:not([type=checkbox]), #sheet textarea, #sheet select'); if (f) f.focus();
+}
+const chanOptions = sel => (S.channels || []).map(c => html`<option value="${c.id}" ${String(c.id) === String(sel || '') ? 'selected' : ''}>#${c.name}</option>`);
+const roleOptions = sel => html`<option value="">No tag</option>${(S.roles || []).filter(r => r.assignable !== false || String(r.id) === String(sel)).map(r => html`<option value="${r.id}" ${String(r.id) === String(sel || '') ? 'selected' : ''}>@${r.name}</option>`)}`;
+function timerSheet(t) {
+  const E = S.tmEdit = Object.assign({ id: null, name: '', channel_id: (S.channels && S.channels[0] && S.channels[0].id) || '', content: '', kind: 'daily', at: '19:30', days: DAYS.map(x => x[0]), every_minutes: 360, role_id: '', delete_previous: false, enabled: true }, t || {});
+  openSheet(E.id ? 'Edit timed message' : 'New timed message', html`<form data-act-submit="timerSave">
+    <div class="field"><label for="tm-name">Name (only staff see it)</label><input class="in" id="tm-name" maxlength="80" value="${E.name}" required></div>
+    <div class="field"><label for="tm-msg">Message</label><textarea class="in" id="tm-msg" maxlength="1900" required>${E.content}</textarea></div>
+    <div class="row"><div class="field grow"><label for="tm-chan">Channel</label><select class="in" id="tm-chan">${chanOptions(E.channel_id)}</select></div>
+      <div class="field grow"><label for="tm-role">Tag</label><select class="in" id="tm-role">${roleOptions(E.role_id)}</select></div></div>
+    <div class="field"><label for="tm-kind">When</label><select class="in" id="tm-kind" data-act-change="tmKind"><option value="once" ${E.kind === 'once' ? 'selected' : ''}>Once – on a date and time</option><option value="daily" ${E.kind === 'daily' ? 'selected' : ''}>Every day (or chosen days)</option><option value="interval" ${E.kind === 'interval' ? 'selected' : ''}>Again and again – every few hours</option></select></div>
+    <div id="tm-when">${timerWhenFields(E)}</div>
+    <label class="check" style="margin-bottom:14px"><input type="checkbox" id="tm-del" ${E.delete_previous ? 'checked' : ''}> Delete the previous post when posting a new one</label>
+    <p class="hint" id="tm-err" role="alert" style="color:var(--bad)"></p>
+    <div class="row"><div class="grow"></div><button class="btn ghost" type="button" data-act="closeSheet">Cancel</button><button class="btn main" type="submit">Save</button></div></form>`);
+}
+function timerWhenFields(E) {
+  if (E.kind === 'once') return html`<div class="field"><label for="tm-at">Date and time</label><input class="in" id="tm-at" type="datetime-local" value="${/T/.test(E.at) ? E.at : ''}" required></div>`;
+  if (E.kind === 'interval') return html`<div class="field"><label for="tm-every">Every … hours</label><input class="in" id="tm-every" type="number" min="1" max="168" value="${Math.round((E.every_minutes || 360) / 60)}" required></div>`;
+  return html`<div class="field"><label for="tm-at">Time</label><input class="in" id="tm-at" type="time" value="${/^\d\d:\d\d$/.test(E.at) ? E.at : '19:30'}" required></div>
+    <div class="chips" role="group" aria-label="Days">${DAYS.map(([k, l]) => html`<label class="chip" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" class="tm-day" value="${k}" ${(E.days || []).includes(k) ? 'checked' : ''}>${l}</label>`)}</div>`;
+}
+function timerCollect() {
+  const E = S.tmEdit;
+  E.name = $('#tm-name').value.trim(); E.content = $('#tm-msg').value; E.channel_id = $('#tm-chan').value; E.role_id = $('#tm-role').value; E.kind = $('#tm-kind').value;
+  E.delete_previous = $('#tm-del').checked;
+  // read the fields that are on screen (they belong to the kind shown before a switch)
+  if ($('#tm-every')) E.every_minutes = (parseInt($('#tm-every').value || '0', 10) || 0) * 60;
+  if ($('#tm-at')) E.at = $('#tm-at').value;
+  if ($$('.tm-day').length) E.days = $$('.tm-day').filter(x => x.checked).map(x => x.value);
+  return E;
+}
 
 /* ============================================================ + New (gift code, announcement, game version) */
 function openNew(tab) {
@@ -887,7 +1202,7 @@ function closeSheet() { const s = $('#sheet'); if (s) s.remove(); }
 /* ============================================================ search (Ctrl K) */
 function allPages() {
   return [['todo', 'To do'], ['bugs', 'Bugs'], ...(isMod() ? [] : [['ideas', 'Ideas']])].map(([k, l]) => ({ label: l, hint: 'Page', go: () => go(k) }))
-    .concat(COMMUNITY.concat(MORE).flatMap(([g, cards]) => cards.filter(c => !isMod() || MOD_OK.includes(c[0])).map(c => ({ label: c[1], hint: g, href: CFG.classic + '#' + c[0], words: c[2] }))));
+    .concat(COMMUNITY.concat(MORE).flatMap(([g, cards]) => cards.filter(c => !isMod() || MOD_OK.includes(c[0])).map(c => c[4] ? { label: c[1], hint: 'Community · ' + g, words: c[2], go: () => goComm(c[4]) } : { label: c[1], hint: g, href: CFG.classic + '#' + c[0], words: c[2] })));
 }
 function openSearch() {
   closeSearch();
@@ -908,7 +1223,7 @@ async function palFill(qv) {
       if (!S.pal || seq !== S.pal.seq) return;
       items = items.concat(b.items.map(x => ({ label: '#' + x.id + ' ' + x.summary, hint: 'Bug', pane: ['bug', x.id] })),
         ideas.items.map(x => ({ label: x.text.slice(0, 70), hint: 'Idea #' + x.id, pane: ['idea', x.id] })),
-        pl.items.slice(0, 5).map(x => ({ label: x.name, hint: 'Player', href: CFG.classic + '#players' })));
+        pl.items.slice(0, 5).map(x => ({ label: x.name, hint: 'Player', pane: ['player', x.id] })));
       palPaint(items);
     } catch (e) { /* offline */ }
   }
@@ -919,7 +1234,7 @@ function palPaint(items) {
 }
 function palPick(i) {
   const x = S.pal && S.pal.items[i]; if (!x) return; closeSearch();
-  if (x.pane) { if (!['todo', 'bugs', 'ideas'].includes(S.place)) { S.place = 'bugs'; load('bugs'); } openPane(x.pane[0], x.pane[1]); }
+  if (x.pane) { if (!['todo', 'bugs', 'ideas', 'community'].includes(S.place)) { S.place = x.pane[0] === 'player' ? 'community' : 'bugs'; load(S.place); } openPane(x.pane[0], x.pane[1]); }
   else if (x.href) location.href = x.href; else if (x.go) x.go();
 }
 
@@ -928,7 +1243,7 @@ root.addEventListener('click', async e => {
   const el = e.target.closest('[data-act], [data-go], [data-open], .item[data-key]'); if (!el) return;
   if (el.dataset.go) { e.preventDefault(); if (S.open) { S.open = null; stopChat(); } go(el.dataset.go); syncHash(); return; }
   const act = el.dataset.act;
-  if (!act && el.dataset.open) { openPane(el.dataset.open, +el.dataset.id); return; }
+  if (!act && el.dataset.open) { openPane(el.dataset.open, el.dataset.open === 'player' ? el.dataset.id : +el.dataset.id); return; }
   if (!act && el.classList.contains('item')) { if (e.target.closest('button, a, input, select, textarea, form')) return; const it = findItem(el.dataset.key); const p = it && paneOf(it); if (p) openPane(p[0], p[1]); else if (it) { S.sel = el.dataset.key; renderMain(); } return; }
   if (act === 'do') { const it = findItem(el.dataset.key); if (it) runAction(it, +el.dataset.n, undefined, el); }
   else if (act === 'reasonCancel') { S.reasonFor = null; renderMain(); }
@@ -973,8 +1288,64 @@ root.addEventListener('click', async e => {
   else if (act === 'new') openNew();
   else if (act === 'newTab') openNew(el.dataset.t);
   else if (act === 'closeSheet' || (act === 'sheetBg' && e.target === el)) closeSheet();
+  else if (act === 'copyLink') { const i = $('#pt-link'); i.select(); try { await navigator.clipboard.writeText(i.value); toast('Copied'); } catch (err) { document.execCommand('copy'); toast('Copied'); } }
   else if (act === 'search') openSearch();
   else if (act === 'palBg' && e.target === el) closeSearch();
+  /* ---- Community */
+  else if (act === 'commTab') { S.comm.tab = el.dataset.t; renderMain(); syncHash(); loadComm(el.dataset.t); }
+  else if (act === 'commReload') { delete S.comm.data[S.comm.tab]; renderMain(); loadComm(); }
+  else if (act === 'codeEnd' || act === 'codeDel') {
+    const del = act === 'codeDel';
+    if (!confirm((del ? 'Delete gift code ' : 'End gift code ') + el.dataset.code + (del ? '? It disappears from the list and the website.' : ' now? Players can no longer use it.'))) return;
+    busy(el, true, '…');
+    try { await call(del ? 'DELETE' : 'PUT', '/api/giftcodes/' + el.dataset.id, del ? undefined : { action: 'end' }); toast((del ? 'Deleted ' : 'Ended ') + el.dataset.code); loadComm('codes'); loadTodo(true); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+  }
+  else if (act === 'codeImport') openSheet('Import gift codes', html`<form data-act-submit="importSave"><div class="field"><label for="im-codes">One code per line</label><textarea class="in" id="im-codes" style="min-height:140px" required></textarea></div>
+      <label class="check" style="margin-bottom:14px"><input type="checkbox" id="im-ann"> Announce them as new codes</label><div class="row"><div class="grow"></div><button class="btn ghost" type="button" data-act="closeSheet">Cancel</button><button class="btn main" type="submit">Import</button></div></form>`);
+  else if (act === 'redeemRetry') { busy(el, true, '…'); try { const r = await call('POST', '/api/redeem/retry'); toast('Trying again for ' + plural(r.retrying || 0, 'player')); loadComm('codes'); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+  else if (act === 'timerEdit') { ensureLists(); const t = el.dataset.id ? (S.comm.data.posts.timers.items || []).find(x => x.id === +el.dataset.id) : null; timerSheet(t ? JSON.parse(JSON.stringify(t)) : null); }
+  else if (act === 'timerSend') { busy(el, true, 'Posting…'); try { await call('POST', '/api/timers/' + el.dataset.id + '/send'); toast('Posted now'); } catch (err) { toast(err.message, 'err'); } busy(el, false); }
+  else if (act === 'timerDel') {
+    if (!confirm('Delete the timed message “' + el.dataset.name + '”?')) return;
+    try { await call('DELETE', '/api/timers/' + el.dataset.id); toast('Deleted'); loadComm('posts'); } catch (err) { toast(err.message, 'err'); }
+  }
+  else if (act === 'gwNew') { ensureLists(); openSheet('Start a giveaway', html`<form data-act-submit="gwSave">
+      <div class="field"><label for="gw-prize">Prize</label><input class="in" id="gw-prize" maxlength="200" required></div>
+      <div class="row"><div class="field grow"><label for="gw-chan">Channel</label><select class="in" id="gw-chan">${chanOptions((S.settings || {}).announce_channel_id)}</select></div>
+        <div class="field grow"><label for="gw-dur">Runs for</label><select class="in" id="gw-dur">${[[60, '1 hour'], [360, '6 hours'], [1440, '1 day'], [4320, '3 days'], [10080, '1 week']].map(([v, l]) => html`<option value="${v}" ${v === 1440 ? 'selected' : ''}>${l}</option>`)}</select></div></div>
+      <div class="row"><div class="field grow"><label for="gw-win">Winners</label><input class="in" id="gw-win" type="number" min="1" max="20" value="1"></div>
+        <div class="field grow"><label for="gw-role">Tag</label><select class="in" id="gw-role">${roleOptions('')}</select></div></div>
+      <div class="row"><div class="grow"></div><button class="btn ghost" type="button" data-act="closeSheet">Cancel</button><button class="btn main" type="submit">Start giveaway</button></div></form>`); }
+  else if (act === 'gwDo') {
+    if (el.dataset.a === 'end' && !confirm('End the giveaway now and pick the winners?')) return;
+    busy(el, true, '…'); try { const g = await call('POST', '/api/giveaways/' + el.dataset.id + '/' + el.dataset.a); toast((g.winner_names || []).length ? 'Winner: ' + g.winner_names.join(', ') : 'Done'); loadComm('posts'); } catch (err) { busy(el, false); toast(err.message, 'err'); }
+  }
+  else if (act === 'ptInvite') openSheet('Invite a promoter server', html`<form data-act-submit="ptInviteSave"><div class="field"><label for="pt-name">Promoter’s name</label><input class="in" id="pt-name" maxlength="80" required placeholder="Who will add the bot to their server?"></div>
+      <p class="hint">You get a link to send them. It works once and expires after a few days.</p><div class="row"><div class="grow"></div><button class="btn ghost" type="button" data-act="closeSheet">Cancel</button><button class="btn main" type="submit">Make the link</button></div></form>`);
+  else if (act === 'ptRevoke') { try { await call('DELETE', '/api/partners/invites/' + el.dataset.id); toast('Invite revoked'); loadComm('posts'); } catch (err) { toast(err.message, 'err'); } }
+  else if (act === 'ptTest') { busy(el, true, 'Posting…'); try { const r = await call('POST', '/api/partners/' + el.dataset.id + '/test'); toast('Test post sent' + (r.where ? ' to ' + r.where.join(', ') : '')); } catch (err) { toast(err.message, 'err'); } busy(el, false); }
+  else if (act === 'ptDm') { busy(el, true, 'Sending…'); try { await call('POST', '/api/partners/' + el.dataset.id + '/dm'); toast('Setup steps sent to the server owner'); } catch (err) { toast(err.message, 'err'); } busy(el, false); }
+  else if (act === 'ptPause') { busy(el, true, '…'); try { await call('PUT', '/api/partners/' + el.dataset.id, { paused: el.dataset.on === '1' }); toast(el.dataset.on === '1' ? 'Paused – no posts go there' : 'Resumed'); loadComm('posts'); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+  else if (act === 'ptRemove') {
+    if (!confirm('Remove “' + el.dataset.name + '”? The bot leaves that server.')) return;
+    try { await call('DELETE', '/api/partners/' + el.dataset.id); toast('The bot left ' + el.dataset.name); loadComm('posts'); } catch (err) { toast(err.message, 'err'); }
+  }
+  else if (act === 'pardon') { busy(el, true, '…'); try { await call('POST', '/api/cases/' + el.dataset.id + '/pardon'); toast('Pardoned – the warning no longer counts'); loadComm('members'); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
+  else if (act === 'pAction') {
+    const a = el.dataset.a;
+    if (a === 'unban' || a === 'untimeout') { busy(el, true, '…'); try { const P = await call('POST', '/api/players/' + S.open.id + '/action', { action: a, reason: '' }); toast(a === 'unban' ? 'Unbanned' : 'Timeout lifted'); if (P && P.id) { S.paneData.player = P; paintPane(); } else { S.paneData = null; render(); } } catch (err) { busy(el, false); toast(err.message, 'err'); } return; }
+    S.pAct = a; paintPane(); const f = $('#pa-why'); if (f) f.focus();
+  }
+  else if (act === 'pActCancel') { S.pAct = null; paintPane(); }
+  else if (act === 'noteDel') { if (!confirm('Delete this note?')) return; try { S.paneData.player = await call('DELETE', '/api/players/' + S.open.id + '/notes/' + el.dataset.id); paintPane(); } catch (err) { toast(err.message, 'err'); } }
+  else if (act === 'raidSet' || act === 'lockSet') {
+    const on = el.dataset.on === '1';
+    if (on && !confirm(act === 'raidSet' ? 'Switch raid mode on? New members wait until it is lifted.' : 'Stop everyone from writing in every chat channel?')) return;
+    busy(el, true, '…');
+    try { await call('POST', act === 'raidSet' ? '/api/raid' : '/api/lockdown', act === 'raidSet' ? { active: on } : { active: on, reason: '' }); toast(act === 'raidSet' ? (on ? 'Raid mode is on' : 'Raid mode lifted') : (on ? 'Chat locked' : 'Chat unlocked')); loadComm('moderation'); loadTodo(true); }
+    catch (err) { busy(el, false); toast(err.message, 'err'); }
+  }
+  else if (act === 'mlKind') { S.comm.mlKind = el.dataset.k; loadComm('moderation'); }
   else if (act === 'logout') { try { await call('POST', '/api/auth/logout'); } catch (err) { /* already out */ } location.reload(); }
 });
 async function paneRun(it, a, why, el) {
@@ -1004,10 +1375,52 @@ root.addEventListener('submit', async e => {
     busy(btn, true, 'Sending…');
     try { await call('POST', f.dataset.kind === 'bug' ? '/api/bugs/' + f.dataset.id + '/ticket/send' : '/api/suggestions/' + f.dataset.id + '/chat', fd); ta.value = ''; if (fi) fi.value = ''; busy(btn, false); startChat(f.dataset.kind, +f.dataset.id); loadTodo(true); }
     catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  } else if (act === 'importSave') {
+    busy(btn, true, 'Importing…');
+    try { const r = await call('POST', '/api/giftcodes/import', { codes: $('#im-codes').value, announce: $('#im-ann').checked }); closeSheet(); toast(plural(r.added.length, 'code') + ' added' + (r.skipped.length ? ', ' + r.skipped.length + ' skipped (already there or not valid)' : '')); loadComm('codes'); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  } else if (act === 'patchPublish') {
+    if (!confirm('Publish the patch notes now?')) return;
+    busy(btn, true, 'Publishing…');
+    try { const r = await call('POST', '/api/patchnotes/publish', { title: $('#pn-title').value.trim() }); toast('Patch notes published with ' + plural(r.count, 'bug')); loadComm('posts'); } catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  } else if (act === 'timerSave') {
+    const E = timerCollect(), err = $('#tm-err'); err.textContent = '';
+    if (E.kind === 'daily' && !E.days.length) { err.textContent = 'Pick at least one day.'; return; }
+    busy(btn, true, 'Saving…');
+    try { const t = await call('POST', '/api/timers', E); closeSheet(); S.tmEdit = null; toast('Saved – ' + (t.next_run ? 'next post ' + when(t.next_run) : 'not planned')); loadComm('posts'); }
+    catch (e2) { busy(btn, false); err.textContent = e2.message; }
+  } else if (act === 'gwSave') {
+    busy(btn, true, 'Starting…');
+    try { await call('POST', '/api/giveaways', { prize: $('#gw-prize').value.trim(), channel_id: $('#gw-chan').value, minutes: +$('#gw-dur').value, winners: +$('#gw-win').value || 1, role_id: $('#gw-role').value || null }); closeSheet(); toast('Giveaway started – players react 🎉 to enter'); loadComm('posts'); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  } else if (act === 'ptInviteSave') {
+    busy(btn, true, 'Making…');
+    try { const r = await call('POST', '/api/partners/invite', { promoter: $('#pt-name').value.trim() }); closeSheet();
+      openSheet('Send this link to the promoter', html`<div class="field"><label for="pt-link">Invite link</label><input class="in" id="pt-link" readonly value="${r.url}"></div><p class="hint">It works once. They pick their server and the channels for our posts.</p>
+        <div class="row"><div class="grow"></div><button class="btn" type="button" data-act="copyLink">Copy</button><button class="btn main" type="button" data-act="closeSheet">Done</button></div>`); loadComm('posts'); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  } else if (act === 'playerFind') {
+    const q = $('#pf').value.trim(); S.comm.pq = q; if (!q) return;
+    busy(btn, true, '…');
+    try { const r = await call('GET', '/api/players/find?q=' + encodeURIComponent(q)); S.comm.data.members.found = r.items; renderMain(); if (r.items.length === 1) openPane('player', r.items[0].id); } catch (err) { toast(err.message, 'err'); }
+    busy(btn, false);
+  } else if (act === 'caseFind') { S.comm.caseQ = $('#cq').value.trim(); loadComm('members');
+  } else if (act === 'mlFind') { S.comm.mlQ = $('#mq').value.trim(); loadComm('moderation');
+  } else if (act === 'pAction') {
+    const a = S.pAct, why = $('#pa-why').value.trim();
+    if (why.length < 3) { $('#pa-why').focus(); return toast('Write a short reason first – they see it.', 'err'); }
+    if (a === 'ban' && !confirm('Ban ' + S.paneData.player.name + ($('#pa-days').value === '0' ? ' for good?' : ' for ' + plural(+$('#pa-days').value, 'day') + '?'))) return;
+    busy(btn, true, '…');
+    try { const P = await call('POST', '/api/players/' + S.open.id + '/action', { action: a, reason: why, minutes: $('#pa-min') ? +$('#pa-min').value : 60, days: $('#pa-days') ? +$('#pa-days').value : 0 });
+      toast({ warn: 'Warned', timeout: 'Timed out', ban: 'Banned' }[a]); S.pAct = null; if (P && P.id) { S.paneData.player = P; paintPane(); } else { S.paneData = null; render(); } if (S.comm.data.members) loadComm('members', true); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  } else if (act === 'noteAdd') {
+    const t = $('#note').value.trim(); if (!t) return;
+    busy(btn, true, '…'); try { S.paneData.player = await call('POST', '/api/players/' + S.open.id + '/notes', { text: t }); paintPane(); } catch (err) { busy(btn, false); toast(err.message, 'err'); }
   } else if (act === 'newCode') {
     const code = $('#nc-code').value.trim(); if (!code) return;
     busy(btn, true, 'Adding…');
-    try { const r = await call('POST', '/api/giftcodes', { code, reward: $('#nc-reward').value.trim(), hours: $('#nc-h').value ? +$('#nc-h').value : null, announce: $('#nc-ann').checked }); closeSheet(); toast(r.warning || 'Gift code ' + ((r.item && r.item.code) || code) + ' added'); }
+    try { const r = await call('POST', '/api/giftcodes', { code, reward: $('#nc-reward').value.trim(), hours: $('#nc-h').value ? +$('#nc-h').value : null, announce: $('#nc-ann').checked }); closeSheet(); toast(r.warning || 'Gift code ' + ((r.item && r.item.code) || code) + ' added'); if (S.place === 'community') loadComm('codes'); }
     catch (err) { busy(btn, false); toast(err.message, 'err'); }
   } else if (act === 'newAnn') {
     const text = $('#na-text').value.trim(); if (text.length < 2) return;
@@ -1023,6 +1436,11 @@ root.addEventListener('submit', async e => {
 });
 root.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.actChange === 'tmKind') { const E = timerCollect(); E.kind = el.value; if (E.kind === 'once') E.at = ''; else if (E.kind === 'daily' && !/^\d\d:\d\d$/.test(E.at || '')) E.at = '19:30'; $('#tm-when').innerHTML = String(timerWhenFields(E)); return; }
+  if (el.dataset.actChange === 'timerToggle') {
+    const t = Object.assign({}, (S.comm.data.posts.timers.items || []).find(x => x.id === +el.dataset.id), { enabled: el.checked });
+    call('POST', '/api/timers', t).then(() => { toast(el.checked ? 'Timed message on' : 'Timed message paused'); loadComm('posts'); }, err => { el.checked = !el.checked; toast(err.message, 'err'); }); return;
+  }
   if (el.dataset.actChange === 'canned') { const r = (S.replies || []).find(x => String(x.id) === el.value), ta = $('#' + el.dataset.target); if (r && ta) { ta.value = r.text.replace(/\{bug\}/g, '#' + (S.open ? S.open.id : '')).replace(/\{summary\}/g, S.paneData && S.paneData.bug ? S.paneData.bug.summary : ''); ta.focus(); } el.value = ''; }
 });
 root.addEventListener('toggle', e => { if (e.target.dataset && e.target.dataset.fold === 'done') S.doneOpen = e.target.open; }, true);
@@ -1058,6 +1476,7 @@ function load(place) {
   if (place === 'todo') loadTodo();
   if (place === 'bugs') loadBugs(true);
   if (place === 'ideas') loadIdeas();
+  if (place === 'community') loadComm();
 }
 function renderLogin(msg) {
   root.innerHTML = String(html`<div class="login"><div class="box"><img src="../icons/icon-192.png" alt="">
@@ -1071,7 +1490,9 @@ async function boot() {
   catch (e) { return renderLogin(e.status === 401 || e.status === 403 ? '' : e.message); }
   const h = readHash();
   if (h.place) S.place = h.place;
-  if (h.pane) S.open = h.pane;
+  if (h.tab) S.comm.tab = h.tab;
+  if (!commTabs().some(t => t[0] === S.comm.tab)) S.comm.tab = commTabs()[0][0];
+  if (h.pane) { S.open = h.pane; if (h.pane.kind === 'player' && !h.place) S.place = 'community'; }
   try { S.overview = await call('GET', '/api/overview'); } catch (e) { /* the frame works without it */ }
   render(); syncHash(); load(S.place); if (S.place !== 'todo') loadTodo(true);
   call('GET', '/api/settings').then(r => { S.settings = r.settings; }).catch(() => {});
