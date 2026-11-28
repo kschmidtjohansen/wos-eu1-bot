@@ -55,16 +55,9 @@ if [[ "$NEW" == "$DEPLOYED" ]]; then
 fi
 if [[ "$NEW" == "$FAILED" && $MANUAL == 0 ]]; then exit 0; fi   # don't retry a broken version every 5 minutes
 
-refresh_web() {
+refresh_web() {   # runs from the version just checked out, so changes to the website/dashboard layout apply at once
   [[ -d $WWW/bugs ]] || return 0              # website not on this server
-  local keep; keep="$(cat $WWW/bugs/config.js 2>/dev/null || true)"
-  cp -r $SRC/site/. $WWW/bugs/
-  [[ -n "$keep" ]] && printf '%s\n' "$keep" > $WWW/bugs/config.js
-  [[ -d $SRC/staff ]] && cp -r $SRC/staff/. $WWW/staff/      # staff app icons + manifest
-  sed 's|apiBase: "",|apiBase: "same-origin",|' $SRC/dashboard-v2.html > $WWW/staff/index.html      # the staff dashboard
-  mkdir -p $WWW/staff/classic && sed -e 's|apiBase: "",|apiBase: "same-origin",|' -e 's|href="icons/|href="../icons/|g' -e '/rel="manifest"/d' -e "s|new URL('../', location.href)|new URL('../../', location.href)|" "$SRC/dashboard.html" > $WWW/staff/classic/index.html      # old dashboard, kept one release as a fallback
-  mkdir -p $WWW/staff/v2 && printf '%s\n' '<!DOCTYPE html><meta charset="utf-8"><title>WOS EU1 staff</title><script>location.replace("../" + location.hash)</script><a href="../">The dashboard moved to /staff/</a>' > $WWW/staff/v2/index.html
-  chmod -R a+rX $WWW
+  WWW=$WWW SRC=$SRC bash $SRC/deploy/refresh-web.sh
 }
 deploy() {   # deploy <commit> [changes text]
   git -C $SRC reset -q --hard "$1" || return 1
