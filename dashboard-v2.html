@@ -8,7 +8,8 @@
 <meta name="theme-color" content="#0c121b" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png"><link rel="icon" href="../icons/icon-192.png">
+<link rel="manifest" href="manifest.json" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><link rel="icon" href="icons/icon-192.png">
 <title>WOS EU1 – Staff</title>
 <style>
 /* =====================================================================================================
@@ -500,7 +501,7 @@ details.fold>summary::-webkit-details-marker{display:none}
 /* ============================================================ setup */
 const CFG = window.WOS_DASHBOARD_CONFIG = window.WOS_DASHBOARD_CONFIG || {
   apiBase: "",            // "same-origin" when /api is on this site (the deploy script sets it), or the bot's address
-  classic: "../"          // the current dashboard (Community and More link there during phase 1)
+  classic: "classic/"     // the old dashboard, kept for one release as a fallback
 };
 const Q = new URLSearchParams(location.search);
 const root = document.getElementById('app');
@@ -838,7 +839,7 @@ async function demoApi(method, path, body) {
   let m;
   const cm = demoComm(method, p, q, body2); if (cm !== undefined) return cm;
   if (p === '/api/auth/me') return Q.get('demo') === 'mod' ? { id: '2', name: 'Sofie', avatar: '', role: 'mod' } : { id: '1', name: 'Kasper', avatar: '', role: 'admin' };
-  if (p === '/api/overview') return { bot: { name: 'WOS EU1', avatar_url: 'staff/icons/icon-192.png' }, guild: { name: 'WOS EU1' }, stats: { bugs: { total: 64, awaiting: 8, with_admins: 5, investigating: 4, fixed: 31, rejected: 16 } } };
+  if (p === '/api/overview') return { bot: { name: 'WOS EU1', avatar_url: 'icons/icon-192.png' }, guild: { name: 'WOS EU1' }, stats: { bugs: { total: 64, awaiting: 8, with_admins: 5, investigating: 4, fixed: 31, rejected: 16 } } };
   if (p === '/api/todo') return demoTodo();
   if (p === '/api/settings') { if (method === 'PUT') { if (body2.timezone === 'Mars/Base') { const e = new Error('Unknown time zone: Mars/Base'); e.status = 400; throw e; } Object.assign(DEMO.settings, body2); } return { settings: Object.assign({}, DEMO.settings) }; }
   if (p === '/api/channels') return { channels: [['Support', 'report-here', '1001'], ['Support', 'help', '1002'], ['Staff', 'bug-reports', '1003'], ['Staff', 'admin-bugs', '1004'], ['Community', 'suggestions', '1005'], ['Community', 'general', '1006'],
@@ -908,8 +909,16 @@ function syncHash() {
   if (location.hash === h) return;
   try { if (first) history.replaceState(null, '', h); else { history.pushState(null, '', h); pushedPane = !!S.open; } } catch (e) { /* sandbox */ }
 }
+const OLD_PAGES = { overview: 'todo', suggestions: 'ideas', queue: 'todo', devs: 'more/settings/data/devs', codes: 'community/codes', redeem: 'community/codes',
+  patch: 'community/posts', timers: 'community/posts', giveaways: 'community/posts', partners: 'community/posts', info: 'more/settings/posts/info',
+  players: 'community/members', warnings: 'community/members', invites: 'community/members', msglog: 'community/moderation',
+  welcome: 'more/settings/members/welcome', access: 'more/settings/members/access', rolemenus: 'more/settings/members/rolemenus', mod: 'more/settings/safety/mod',
+  insights: 'more/insights', moderators: 'more/team', status: 'more/status', log: 'more/log', panel: 'more/settings/bugs/panel', channels: 'more/settings/channels',
+  website: 'more/settings/website', translations: 'more/settings/translations', bot: 'more/settings/bot', data: 'more/settings/data/data' };
 function readHash() {
-  const h = decodeURIComponent(location.hash.slice(1)), m = h.match(/^(bug|idea|report|appeal|player)-(\w+)$/);
+  const raw0 = decodeURIComponent(location.hash.slice(1)), h = OLD_PAGES[raw0] || raw0;
+  if (h !== raw0) history.replaceState(history.state, '', '#' + h);
+  const m = h.match(/^(bug|idea|report|appeal|player)-(\w+)$/);
   if (m) return { pane: { kind: m[1], id: m[1] === 'player' ? m[2] : /^\d+$/.test(m[2]) ? +m[2] : m[2] } };
   const cm = h.match(/^community\/(\w+)$/);
   if (cm) return { place: 'community', tab: commTabs().some(t => t[0] === cm[1]) ? cm[1] : commTabs()[0][0] };
@@ -3536,10 +3545,10 @@ function load(place) {
   if (place === 'more') loadMore();
 }
 function renderLogin(msg) {
-  root.innerHTML = String(html`<div class="login"><div class="box"><img src="../icons/icon-192.png" alt="">
+  root.innerHTML = String(html`<div class="login"><div class="box"><img src="icons/icon-192.png" alt="">
     <h1 style="font-size:22px;margin:14px 0 6px">WOS EU1 staff</h1><p class="hint">${msg || 'Log in with your Discord account. Your staff role decides what you can see.'}</p>
     <a class="btn main" style="margin-top:14px" href="${S.base.replace(/\/+$/, '')}/api/auth/login?next=${encodeURIComponent(location.pathname)}">Log in with Discord</a>
-    <p class="hint" style="margin-top:18px"><a href="${CFG.classic}">Open the current dashboard</a></p></div></div>`);
+    <p class="hint" style="margin-top:18px"><a href="${CFG.classic}">Open the classic dashboard</a></p></div></div>`);
 }
 async function boot() {
   loadDone();

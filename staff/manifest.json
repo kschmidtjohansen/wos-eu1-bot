@@ -39,10 +39,10 @@
       ]
     },
     {
-      "name": "Suggestions",
+      "name": "Ideas",
       "short_name": "Ideas",
       "description": "Ideas from players",
-      "url": "./#suggestions",
+      "url": "./#ideas",
       "icons": [
         {
           "src": "icons/icon-192.png",
@@ -51,10 +51,10 @@
       ]
     },
     {
-      "name": "Reports & appeals",
-      "short_name": "Reports",
-      "description": "Reported messages, appeals and raid mode",
-      "url": "./#queue",
+      "name": "To do",
+      "short_name": "To do",
+      "description": "Everything waiting for the team",
+      "url": "./#todo",
       "icons": [
         {
           "src": "icons/icon-192.png",
@@ -64,9 +64,9 @@
     },
     {
       "name": "Gift codes",
-      "short_name": "Codes",
-      "description": "Add or check gift codes",
-      "url": "./#codes",
+      "short_name": "Gift codes",
+      "description": "Add and end gift codes",
+      "url": "./#community/codes",
       "icons": [
         {
           "src": "icons/icon-192.png",

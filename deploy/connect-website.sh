@@ -151,8 +151,9 @@ else
   ok "config.js filled in"
 fi
 [[ -d $SRC/staff ]] && cp -r "$SRC/staff/." $WWW/staff/      # staff app icons + manifest
-sed 's|apiBase: "",|apiBase: "same-origin",|' "$SRC/dashboard.html" > $WWW/staff/index.html
-mkdir -p $WWW/staff/v2 && sed 's|apiBase: "",|apiBase: "same-origin",|' "$SRC/dashboard-v2.html" > $WWW/staff/v2/index.html      # new dashboard (being built), next to the current one
+sed 's|apiBase: "",|apiBase: "same-origin",|' "$SRC/dashboard-v2.html" > $WWW/staff/index.html      # the staff dashboard
+mkdir -p $WWW/staff/classic && sed -e 's|apiBase: "",|apiBase: "same-origin",|' -e 's|href="icons/|href="../icons/|g' -e '/rel="manifest"/d' -e "s|new URL('../', location.href)|new URL('../../', location.href)|" "$SRC/dashboard.html" > $WWW/staff/classic/index.html      # old dashboard, kept one release as a fallback
+mkdir -p $WWW/staff/v2 && printf '%s\n' '<!DOCTYPE html><meta charset="utf-8"><title>WOS EU1 staff</title><script>location.replace("../" + location.hash)</script><a href="../">The dashboard moved to /staff/</a>' > $WWW/staff/v2/index.html
 grep -q 'apiBase: "same-origin"' $WWW/staff/index.html || warn "Couldn't set apiBase in the dashboard – set it by hand (website manual, troubleshooting)."
 chmod -R a+rX $WWW
 ok "Public pages → $WWW/bugs   Dashboard → $WWW/staff"
