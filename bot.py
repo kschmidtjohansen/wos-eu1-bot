@@ -4844,7 +4844,8 @@ async def cache_invites(guild=None) -> bool:
     _invite_uses.clear(); _invite_uses.update(now)
     if "VANITY_URL" in g.features:
         try:
-            _vanity_uses[0] = (await g.vanity_invite()).uses
+            vi = await g.vanity_invite()          # None when the server has the feature but no vanity link set
+            _vanity_uses[0] = vi.uses if vi else None
         except discord.HTTPException:
             pass
     if snap.get("codes") and cfg("invites_enabled"):
@@ -4918,10 +4919,11 @@ async def find_inviter(member):
             return res[1], res[0]
         if "VANITY_URL" in g.features:
             try:
-                v = (await g.vanity_invite()).uses
+                vi = await g.vanity_invite()
+                v = vi.uses if vi else None
                 old = _vanity_uses[0]
                 _vanity_uses[0] = v
-                if old is not None and v > old:
+                if old is not None and v is not None and v > old:
                     _snapshot_invites()
                     return None, "vanity"
             except discord.HTTPException:
