@@ -139,6 +139,19 @@ details.fold>summary::-webkit-details-marker{display:none}
 .report .q{display:block;color:var(--muted);font-size:12.5px;margin-top:8px}.report .q:first-child{margin-top:0}
 .actbar{display:flex;flex-wrap:wrap;gap:8px}
 .files{display:flex;flex-wrap:wrap;gap:8px}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.thumb{position:relative;display:grid;grid-template-rows:auto auto;padding:0;border:1px solid var(--line);border-radius:var(--r);background:var(--surface-2);overflow:hidden;cursor:zoom-in;text-align:left;color:var(--text)}
+.thumb img,.thumb .ph{width:100%;aspect-ratio:4/3;object-fit:cover;display:grid;place-items:center;background:var(--surface-2);color:var(--muted)}
+.thumb .ph .ic{width:30px;height:30px}.thumb.video .ph{background:#111;color:#fff}.thumb.file{cursor:pointer}
+.thumb .cap{padding:6px 8px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--surface);border-top:1px solid var(--line)}
+.thumb:hover{border-color:var(--line-2)}.thumb:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.thumb.gone{cursor:default}.thumb.gone::before{content:"Removed from the bot";display:grid;place-items:center;aspect-ratio:4/3;font-size:12.5px;color:var(--muted)}
+.viewer{position:fixed;inset:0;z-index:100;display:grid;grid-template-rows:auto 1fr;background:rgba(6,9,14,.97);color:#fff}
+.vbar{display:flex;align-items:center;gap:10px;padding:10px 14px}.vbar .hint{color:#c9d1dc}.vname{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50vw}
+.vstage{position:relative;display:grid;place-items:center;min-height:0;padding:0 56px 20px}.vstage img,.vstage video{max-width:100%;max-height:calc(100vh - 90px);object-fit:contain;border-radius:6px;background:#000}
+.vnav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:64px;border:0;border-radius:10px;background:rgba(255,255,255,.12);color:#fff;font-size:34px;cursor:pointer}
+.vnav.prev{left:8px}.vnav.next{right:8px}.vnav:hover{background:rgba(255,255,255,.22)}
+@media (max-width:700px){.thumbs{grid-template-columns:repeat(2,minmax(0,1fr))}.vstage{padding:0 8px 12px}.vnav{width:38px;height:52px;background:rgba(0,0,0,.45)}}
 .file{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);font-size:13px;cursor:pointer}
 .chat{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;padding:4px 2px}
 .msg{max-width:88%;padding:8px 12px;border-radius:12px;background:var(--surface-2);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -610,10 +623,59 @@ async function call(method, path, body) {
   return data;
 }
 async function fileUrl(kind, id, fid) {            // pictures need the login cookie, so they are fetched, not linked
-  if (S.demo) return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="#cbd2dc"/><text x="50%" y="50%" text-anchor="middle" font-family="sans-serif" fill="#5b6474">screenshot</text></svg>');
+  if (S.demo) return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="100%" height="100%" fill="#' + ['9bb7d4', 'c9b48a', '8fbf9f'][fid % 3] + '"/><text x="50%" y="50%" text-anchor="middle" font-family="sans-serif" font-size="28" fill="#1f2937">screenshot ' + fid + '</text></svg>');
   const r = await fetch(S.base.replace(/\/+$/, '') + `/api/${kind}/${id}/files/${fid}`, { credentials: 'same-origin' });
   if (!r.ok) throw new Error('That file is no longer on the bot’s computer.');
   return URL.createObjectURL(await r.blob());
+}
+/* ---- pictures and videos: thumbnails and a viewer (files are fetched once with the login cookie, then cached) */
+const MEDIA_IMG = /\.(png|jpe?g|gif|webp|bmp)$/i, MEDIA_VID = /\.(mp4|mov|webm|m4v)$/i;
+const mediaKind = f => f.kind === 'video' || MEDIA_VID.test(f.name || '') ? 'video' : f.kind === 'image' || MEDIA_IMG.test(f.name || '') ? 'image' : 'file';
+const blobCache = new Map();
+function fileBlob(kind, id, fid) {
+  const k = kind + '/' + id + '/' + fid;
+  if (!blobCache.has(k)) blobCache.set(k, fileUrl(kind, id, fid).catch(e => { blobCache.delete(k); throw e; }));
+  return blobCache.get(k);
+}
+function thumbs(kind, id, files) {
+  return html`<div class="thumbs">${files.map((f, i) => { const mk = mediaKind(f);
+    return html`<button class="thumb ${mk}" data-act="view" data-kind="${kind}" data-id="${id}" data-fid="${f.id}" data-i="${i}" data-name="${f.name}" aria-label="Open ${f.name}" title="${f.name}">
+      ${mk === 'image' ? html`<img alt="" data-blob="${kind}/${id}/${f.id}">` : html`<span class="ph">${icon(mk === 'video' ? 'play' : 'paperclip')}</span>`}
+      <span class="cap">${mk === 'video' ? 'Video · ' : ''}${f.name}</span></button>`; })}</div>`;
+}
+new MutationObserver(() => {
+  $$('img[data-blob]:not([data-busy])').forEach(img => {
+    img.dataset.busy = '1'; const [k, id, fid] = img.dataset.blob.split('/');
+    fileBlob(k, id, fid).then(u => { img.src = u; }, () => { img.closest('.thumb') && img.closest('.thumb').classList.add('gone'); img.remove(); });
+  });
+}).observe(document.body, { childList: true, subtree: true });
+function viewerList(el) {   // every picture/video next to the one clicked, so ← → can step through them
+  const box = el.closest('.thumbs, .files') || el.parentNode;
+  return [...box.querySelectorAll('[data-act=view]')].map(b => ({ kind: b.dataset.kind, id: b.dataset.id, fid: b.dataset.fid, name: b.dataset.name }));
+}
+async function openViewer(list, i) {
+  S.viewer = { list, i }; const f = list[i], mk = mediaKind(f);
+  if (mk === 'file') { closeViewer(); try { window.open(await fileBlob(f.kind, f.id, f.fid), '_blank', 'noopener'); } catch (err) { toast(err.message, 'err'); } return; }
+  let v = $('#viewer');
+  if (!v) { document.body.insertAdjacentHTML('beforeend', '<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Picture"></div>'); v = $('#viewer'); v.addEventListener('click', viewerClick); }
+  v.innerHTML = String(html`<div class="vbar"><span class="vname">${f.name}</span><span class="hint num">${list.length > 1 ? (i + 1) + ' of ' + list.length : ''}</span><div class="grow"></div>
+      <button class="btn sm" data-v="open">${icon('ext')} Full size</button><button class="btn sm" data-v="close" aria-label="Close">${icon('x')}</button></div>
+    <div class="vstage" data-v="bg">${list.length > 1 ? html`<button class="vnav prev" data-v="prev" aria-label="Previous">‹</button><button class="vnav next" data-v="next" aria-label="Next">›</button>` : ''}
+      <span class="hint">Loading…</span></div>`);
+  try {
+    const u = await fileBlob(f.kind, f.id, f.fid); if (!S.viewer || S.viewer.list[S.viewer.i] !== f) return;
+    const st = v.querySelector('.vstage'); st.querySelector('.hint').remove();
+    st.insertAdjacentHTML('beforeend', mk === 'video' && !S.demo ? `<video src="${u}" controls autoplay playsinline></video>` : `<img src="${u}" alt="${esc(f.name)}">`);
+  } catch (err) { const h = v.querySelector('.vstage .hint'); if (h) h.textContent = err.message; }
+  v.querySelector('[data-v=close]').focus();
+}
+function closeViewer() { const v = $('#viewer'); if (v) v.remove(); S.viewer = null; }
+function stepViewer(d) { const V = S.viewer; if (V && V.list.length > 1) openViewer(V.list, (V.i + d + V.list.length) % V.list.length); }
+async function viewerClick(e) {
+  const b = e.target.closest('[data-v]'); if (!b) return; const a = b.dataset.v;
+  if (a === 'close' || (a === 'bg' && e.target === b)) closeViewer();
+  else if (a === 'prev') stepViewer(-1); else if (a === 'next') stepViewer(1);
+  else if (a === 'open') { const f = S.viewer.list[S.viewer.i]; window.open(await fileBlob(f.kind, f.id, f.fid), '_blank', 'noopener'); }
 }
 /* ============================================================ demo mode (?demo, ?demo=mod) – a small fake bot */
 const DEMO = (() => {
@@ -625,7 +687,7 @@ const DEMO = (() => {
     chief_name: x.chief || 'Chief ' + (x.reporter || 'Mira'), uid: '123450000', files: x.files || [], web_chat: x.source === 'web', web_ticket: false, ticket_url: '',
     can_ticket: true, history: [{ ts: t - ago_s, action: 'submitted', actor: x.reporter || 'Mira' }], mod_url: '#', admin_url: '' }, x.extra || {});
   const bugs = [
-    bug(64, 'Horse sinks when mounted near water', 'new', 900, { area: 'City', files: [{ id: 1, name: 'horse.png', size: 120000, kind: 'image' }] }),
+    bug(64, 'Horse sinks when mounted near water', 'new', 900, { area: 'City', files: [{ id: 1, name: 'horse.png', size: 120000, kind: 'image' }, { id: 2, name: 'water-edge.jpg', size: 90000, kind: 'image' }, { id: 3, name: 'clip.mp4', size: 900000, kind: 'video' }] }),
     bug(63, 'Server crashes when opening the alliance shop', 'new', 2400, { severity: 'critical', area: 'Alliance', reporter: 'Jonas' }),
     bug(62, 'Guild bank deposit loses items', 'new', 5400, { area: 'Alliance', reporter: 'Anders', extra: { dup_suggest: 60, dup_score: 81, dup_title: 'Guild bank deposit loses items (older)' } }),
     bug(61, 'Pet stays at 0% when hatching', 'investigating', 4 * H, { area: 'Pets', reporter: 'Ida', source: 'web' }),
@@ -1176,7 +1238,7 @@ function bugPane(b, d) {
       ${d.tr ? html`<div class="tr">${d.tr.same ? 'Already in this language.' : d.tr.text}</div>` : ''}
       <div class="row" style="margin-top:8px"><button class="btn sm" data-act="translate" data-kind="bugs" data-id="${b.id}">${icon('globe')} Translate</button>
         ${b.mod_url ? html`<a class="btn sm ghost" href="${b.mod_url}" target="_blank" rel="noopener">${icon('ext')} Discord</a>` : ''}</div></section>
-    ${b.files && b.files.length ? html`<section class="sec"><h3>Files</h3><div class="files">${b.files.map(f => html`<button class="file" data-act="file" data-fid="${f.id}" data-id="${b.id}">${icon('paperclip')}${f.name}</button>`)}</div></section>` : ''}
+    ${b.files && b.files.length ? html`<section class="sec"><h3>Files · ${b.files.length}</h3>${thumbs('bugs', b.id, b.files)}</section>` : ''}
     ${chatSection('bug', b)}
     ${d.similar && d.similar.length ? html`<section class="sec"><h3>Similar bugs</h3>${d.similar.map(x => html`<div class="sim"><span class="score num">${x.score}%</span><div class="grow">
         <a href="#bug-${x.id}">#${x.id} ${x.summary}</a> <span class="tag ${(BUG_ST[x.status] || ['', ''])[1]}">${(BUG_ST[x.status] || [x.status])[0]}</span><p class="hint" style="margin:2px 0 0">${x.snippet || ''}</p></div>
@@ -1195,7 +1257,7 @@ function chatSection(kind, x) {
   }
   return html`<section class="sec"><h3>${kind === 'bug' && x.ticket_url ? 'Ticket with the player' : 'Messages with the player'}${x.ticket_url ? html` · <a href="${x.ticket_url}" target="_blank" rel="noopener">open in Discord</a>` : ''}</h3>
     <div class="chat" id="chatlog" aria-live="polite">${C && C.messages ? (C.messages.length ? C.messages.map(m => html`<div class="msg ${m.kind === 'staff' ? 'staff' : m.kind === 'system' ? 'sys' : ''}">${m.kind === 'system' ? '' : html`<span class="who">${m.author}</span>`}${m.text}
-        ${(m.files || []).length ? html`<span class="files" style="margin-top:6px">${m.files.map(f => f.id ? html`<button class="file" data-act="chatFile" data-kind="${kind}" data-id="${x.id}" data-fid="${f.id}">${icon('paperclip')}${f.name}</button>` : f.url ? html`<a class="file" href="${f.url}" target="_blank" rel="noopener">${icon('paperclip')}${f.name}</a>` : '')}</span>` : ''}</div>`) : html`<p class="hint">No messages yet.</p>`) : html`<p class="hint">Loading the conversation…</p>`}</div>
+        ${(m.files || []).length ? html`<span class="files" style="margin-top:6px">${m.files.map(f => f.id ? html`<button class="file" data-act="view" data-kind="${kind === 'bug' ? 'bugs' : 'suggestions'}" data-id="${x.id}" data-fid="${f.id}" data-name="${f.name}">${icon('paperclip')}${f.name}</button>` : f.url ? html`<a class="file" href="${f.url}" target="_blank" rel="noopener">${icon('paperclip')}${f.name}</a>` : '')}</span>` : ''}</div>`) : html`<p class="hint">No messages yet.</p>`) : html`<p class="hint">Loading the conversation…</p>`}</div>
     <form class="composer" data-act-submit="chatSend" data-kind="${kind}" data-id="${x.id}"><label class="sr" for="chatmsg">Message</label>
       <textarea class="in" id="chatmsg" maxlength="1800" placeholder="Write to the player…"></textarea>
       <div class="row"><label class="btn sm ghost" title="Add pictures">${icon('paperclip')}<input type="file" id="chatfiles" accept="image/*,video/*" multiple hidden></label>${repliesPick('chatmsg')}
@@ -3288,6 +3350,7 @@ root.addEventListener('click', async e => {
     try { const r = await call('POST', '/api/' + el.dataset.kind + '/' + el.dataset.id + '/translate', { target: S.trLang }); if (S.paneData) { S.paneData.tr = r; paintPane(); } }
     catch (err) { busy(el, false); toast(err.message, 'err'); }
   }
+  else if (act === 'view') { const L = viewerList(el); openViewer(L, Math.max(0, L.findIndex(x => x.fid === el.dataset.fid))); }
   else if (act === 'file' || act === 'chatFile') {
     try { const u = await fileUrl(act === 'file' || el.dataset.kind === 'bug' ? 'bugs' : 'suggestions', el.dataset.id, el.dataset.fid); window.open(u, '_blank', 'noopener'); } catch (err) { toast(err.message, 'err'); }
   }
@@ -3542,6 +3605,7 @@ root.addEventListener('input', e => {
   else if (el.id === 'palq') palFill(el.value);
 });
 document.addEventListener('keydown', e => {
+  if (S.viewer) { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeViewer(); } else if (e.key === 'ArrowLeft') stepViewer(-1); else if (e.key === 'ArrowRight') stepViewer(1); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); S.pal ? closeSearch() : openSearch(); return; }
   if (S.pal) {
     if (e.key === 'Escape') closeSearch();
