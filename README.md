@@ -138,6 +138,7 @@ is to proxy `/api` through your server and add the key there – tell me if you 
 - **Honeypot (Moderation → ⚙):** pick a trap channel that real players ignore. Anyone who posts there is
   soft-banned (removed, last hour of messages deleted, may rejoin) – or kicked, banned or timed out. Staff are never
   touched. The bot keeps a pinned warning in the channel, DMs the person first, alerts staff and logs a case.
+- **`/kick member reason` (mods):** removes a member from the server (they can join again with an invite). They get a DM with the reason first, and it is saved on their record. Also on the player page in the dashboard.
 - **`/purge count [member] [contains]` (mods):** deletes recent messages in a channel; copies stay in *Deleted messages*.
 - **`/lockdown lock|unlock this channel|all chat channels` (mods):** stops everyone from writing; unlocking restores each
   channel exactly as it was. Also on *Reports & appeals → Raid mode*, and optionally automatic with raid mode.

@@ -480,6 +480,7 @@ function demoComm(method, p, q, b) {
   if ((m = p.match(/^\/api\/players\/(\d+)(\/notes(?:\/(\d+))?|\/action)?$/))) {
     const P = demoPlayer(m[1]);
     if (m[2] === '/action') { if (b.action === 'ban') { P.banned = { reason: b.reason, until: b.days ? now() + b.days * 86400 : null }; P.on_server = false; } if (b.action === 'unban') P.banned = false; if (b.action === 'timeout') P.timeout_until = now() + (b.minutes || 60) * 60; if (b.action === 'untimeout') P.timeout_until = null;
+      if (b.action === 'kick') { P.on_server = false; P.cases.unshift({ id: Date.now() % 1000, kind: 'kick', reason: b.reason, moderator: 'You', ts: now(), active: true }); }
       if (b.action === 'warn') { P.warnings++; P.cases.unshift({ id: Date.now() % 1000, kind: 'warn', reason: b.reason, moderator: 'You', ts: now(), active: true }); } return P; }
     if (m[2] && m[3]) { P.notes = P.notes.filter(n => n.id !== +m[3]); return P; }
     if (m[2]) { P.notes.push({ id: Date.now() % 10000, text: b.text, author: 'You', ts: now() }); return P; }
@@ -1095,13 +1096,14 @@ function playerPane(P) {
     ${P.link ? html`<p class="hint" style="margin:8px 0 0">Game: ${P.link.chief} · UID <span class="num">${P.link.uid}</span></p>` : ''}
     ${P.invited_by ? html`<p class="hint" style="margin:4px 0 0">Invited by ${P.invited_by.name}</p>` : ''}
     ${P.staff ? html`<p class="note" style="margin-top:12px">This is a staff member.</p>` : html`<section class="sec" style="margin-top:14px"><div class="actbar">
-      ${P.on_server ? html`${act('warn', 'Warn…', '')}${P.timeout_until && P.timeout_until > now() ? act('untimeout', 'Lift timeout', '') : act('timeout', 'Timeout…', '')}` : ''}
+      ${P.on_server ? html`${act('warn', 'Warn…', '')}${P.timeout_until && P.timeout_until > now() ? act('untimeout', 'Lift timeout', '') : act('timeout', 'Timeout…', '')}${act('kick', 'Kick…', 'bad')}` : ''}
       ${isMod() ? '' : P.banned ? act('unban', 'Unban', '') : act('ban', 'Ban…', 'bad')}</div>
       ${S.pAct ? html`<form class="reason" data-act-submit="pAction" style="margin-top:10px">
         ${S.pAct === 'timeout' ? html`<select class="in" id="pa-min" style="max-width:150px" aria-label="How long">${[[10, '10 min'], [60, '1 hour'], [360, '6 hours'], [1440, '1 day'], [10080, '1 week']].map(([v, l]) => html`<option value="${v}" ${v === 60 ? 'selected' : ''}>${l}</option>`)}</select>` : ''}
         ${S.pAct === 'ban' ? html`<select class="in" id="pa-days" style="max-width:170px" aria-label="How long"><option value="0">For good</option><option value="1">1 day</option><option value="7">7 days</option><option value="30">30 days</option></select>` : ''}
         <input class="in" id="pa-why" maxlength="400" placeholder="Reason – they see it" autocomplete="off">
-        <button class="btn ${S.pAct === 'ban' ? 'bad' : 'main'}" type="submit">${{ warn: 'Warn', timeout: 'Time out', ban: 'Ban' }[S.pAct]}</button><button class="btn ghost" type="button" data-act="pActCancel">Cancel</button></form>` : ''}</section>`}
+        ${S.pAct === 'kick' ? html`<span class="hint">They are removed now and can join again with an invite.</span>` : ''}
+        <button class="btn ${['ban', 'kick'].includes(S.pAct) ? 'bad' : 'main'}" type="submit">${{ warn: 'Warn', timeout: 'Time out', kick: 'Kick', ban: 'Ban' }[S.pAct]}</button><button class="btn ghost" type="button" data-act="pActCancel">Cancel</button></form>` : ''}</section>`}
     <section class="sec"><h3>Notes from the team</h3>${(P.notes || []).map(n => html`<div class="sim"><div class="grow"><p style="margin:0">${n.text}</p><p class="hint" style="margin:2px 0 0">${n.author} · ${ago(n.ts)}</p></div>${isMod() ? '' : html`<button class="btn sm ghost" data-act="noteDel" data-id="${n.id}" aria-label="Delete note">${icon('x')}</button>`}</div>`)}
       <form class="composer" data-act-submit="noteAdd"><textarea class="in" id="note" maxlength="1000" placeholder="Add a note only staff can see" style="min-height:60px"></textarea><div class="row"><div class="grow"></div><button class="btn" type="submit">Add note</button></div></form></section>
     ${(P.cases || []).length ? html`<section class="sec"><h3>Record</h3>${P.cases.map(c => html`<div class="sim"><span class="tag ${c.kind === 'ban' ? 'bad' : c.kind === 'warn' ? 'warn' : 'ice'}">${c.kind}</span><div class="grow"><p style="margin:0">${c.reason}</p><p class="hint" style="margin:2px 0 0">${c.moderator || 'the bot'} · ${ago(c.ts)}${c.active ? '' : ' · no longer counts'}</p></div></div>`)}</section>` : ''}
@@ -1409,10 +1411,11 @@ root.addEventListener('submit', async e => {
   } else if (act === 'pAction') {
     const a = S.pAct, why = $('#pa-why').value.trim();
     if (why.length < 3) { $('#pa-why').focus(); return toast('Write a short reason first – they see it.', 'err'); }
+    if (a === 'kick' && !confirm('Kick ' + S.paneData.player.name + ' from the server?')) return;
     if (a === 'ban' && !confirm('Ban ' + S.paneData.player.name + ($('#pa-days').value === '0' ? ' for good?' : ' for ' + plural(+$('#pa-days').value, 'day') + '?'))) return;
     busy(btn, true, '…');
     try { const P = await call('POST', '/api/players/' + S.open.id + '/action', { action: a, reason: why, minutes: $('#pa-min') ? +$('#pa-min').value : 60, days: $('#pa-days') ? +$('#pa-days').value : 0 });
-      toast({ warn: 'Warned', timeout: 'Timed out', ban: 'Banned' }[a]); S.pAct = null; if (P && P.id) { S.paneData.player = P; paintPane(); } else { S.paneData = null; render(); } if (S.comm.data.members) loadComm('members', true); }
+      toast({ warn: 'Warned', timeout: 'Timed out', kick: 'Kicked', ban: 'Banned' }[a]); S.pAct = null; if (P && P.id) { S.paneData.player = P; paintPane(); } else { S.paneData = null; render(); } if (S.comm.data.members) loadComm('members', true); }
     catch (err) { busy(btn, false); toast(err.message, 'err'); }
   } else if (act === 'noteAdd') {
     const t = $('#note').value.trim(); if (!t) return;

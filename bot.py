@@ -1981,7 +1981,7 @@ class WosBot(discord.Client):
                          "ticket_send": ticket_send, "ticket_close": ticket_close,
                          "web_ticket_reply": web_ticket_reply, "web_follow_url": web_follow_url, "submit_web_idea": submit_web_idea, "honeypot_notice_refresh": honeypot_notice_refresh, "job_health": job_health, "lockdown": lockdown, "lockdown_dict": lockdown_dict, "idea_chat_view": idea_chat_view, "idea_can_write": idea_can_write, "idea_reply": idea_reply, "idea_staff_send": idea_staff_send, "idea_follow_url": idea_follow_url, "web_ticket_view": web_ticket_view, "web_can_write": web_can_write, "active_spikes": active_spikes, "spike_dismiss": spike_dismiss,
                          "make_known": make_known, "act_on_report": act_on_report, "appeal_case": appeal_case, "submit_appeal": submit_appeal,
-                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
+                         "decide_appeal": decide_appeal, "start_raid": start_raid, "lift_raid": lift_raid, "ban_user": ban_user, "kick_member": kick_member, "timeout_member": timeout_member, "check_game": check_game, "post_announcement": post_announcement, "partner_claim": partner_claim, "partner_info": partner_info, "partner_set": partner_set,
                          "partner_remove": partner_remove, "partner_test": partner_test, "send_partner_setup": send_partner_setup, "dup_dismissed": dup_dismissed, "reopen_bug": reopen_bug,
                          "run_backup": run_backup, "post_digest": post_digest,
                          "delete_bugs": delete_bugs, "delete_suggestions": delete_suggestions,
@@ -5869,6 +5869,20 @@ async def timeout_cmd(interaction: discord.Interaction, member: discord.Member, 
     await interaction.followup.send(f"🔇 {member.mention} timed out for {minutes} min – case #{c}.", ephemeral=True)
 
 
+@bot.tree.command(name="kick", description="Remove a member from the server – they can join again (moderators)", guild=_GUILD)
+@app_commands.describe(member="Who", reason="Why – the member sees this")
+@app_commands.guild_only()
+async def kick_cmd(interaction: discord.Interaction, member: discord.Member, reason: str):
+    if not is_mod(interaction.user) or is_mod(member):
+        return await interaction.response.send_message("Moderators only – and not on staff.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+    try:
+        c = await kick_member(member, reason, interaction.user.id, interaction.user.display_name)
+    except discord.HTTPException:
+        return await interaction.followup.send("I couldn't – I need the “Kick Members” permission and a role above theirs.", ephemeral=True)
+    await interaction.followup.send(f"👢 {member.display_name} kicked – case #{c}.", ephemeral=True)
+
+
 @bot.tree.command(name="ban", description="Ban a member (admins) – for good, or for a number of days", guild=_GUILD)
 @app_commands.describe(member="Who", reason="Why – the member sees this", days="Leave empty for a permanent ban. With days, the bot unbans by itself.")
 @app_commands.guild_only()
@@ -6580,6 +6594,16 @@ async def timeout_member(member, minutes: int, reason: Optional[str], mod_id, mo
     log_event("mod", f"{member.display_name} timed out for {minutes} min by {mod_name}: {reason or '–'}", mod_id, mod_name)
     await dm_t(member.id, "dm.timeout", reason=reason, minutes=minutes)
     await tell_appeal(member.id)
+    return c
+
+
+async def kick_member(member, reason: str, mod_id, mod_name: str) -> int:
+    """Remove a member from the server (they can join again with an invite). The DM goes first – after the
+    kick the bot shares no server with them and can't reach them. Raises discord.HTTPException."""
+    await dm_t(member.id, "dm.kicked", reason=reason)
+    await member.kick(reason=(reason or "")[:500] or None)
+    c = store.add_case(member.id, member.display_name, "kick", reason, mod_id, mod_name)
+    log_event("mod", f"{member.display_name} kicked by {mod_name}: {reason or '–'}", mod_id, mod_name)
     return c
 
 

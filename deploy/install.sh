@@ -271,7 +271,7 @@ else
     guilds="$(discord guilds "$TOKEN")"
     if [[ -n "$guilds" && "$guilds" != ERROR* ]]; then break; fi
     warn "The bot isn't in any server yet. Invite it with this link (open it on your phone or PC):"
-    printf '\n     %shttps://discord.com/oauth2/authorize?client_id=%s&scope=bot+applications.commands&permissions=360777509952%s\n\n' "$C" "$BOTID" "$N"
+    printf '\n     %shttps://discord.com/oauth2/authorize?client_id=%s&scope=bot+applications.commands&permissions=360777509958%s\n\n' "$C" "$BOTID" "$N"
     info "Choose your server → Authorize. Then come back here."
     pause
   done

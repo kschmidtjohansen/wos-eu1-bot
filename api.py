@@ -2359,7 +2359,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
 
     @routes.post("/api/players/{id}/action")
     async def player_action(request):
-        """warn | timeout | untimeout | ban (admins; days = temporary) | unban (admins)."""
+        """warn | timeout | untimeout | kick | ban (admins; days = temporary) | unban (admins)."""
         uid = player_id(request)
         d = await body_json(request)
         action, reason = str(d.get("action") or ""), str(d.get("reason") or "").strip()[:400]
@@ -2370,7 +2370,7 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
             raise ApiError(403, "Only admins can ban or unban.")
         if m is not None and await staff_role(uid):
             raise ApiError(400, "That's a staff member.")
-        if action in ("warn", "timeout", "ban") and len(reason) < 3:
+        if action in ("warn", "timeout", "kick", "ban") and len(reason) < 3:
             raise ApiError(400, "Write why (the member sees it).")
         try:
             if action == "warn":
@@ -2387,6 +2387,10 @@ def build_app(client: discord.Client, guild_id: int, api_key: str, origins: list
                 await m.timeout(None, reason=f"Removed by {who(request)}"[:500])
                 store.add_case(uid, m.display_name, "pardon", "Timeout removed", who_id(request), who(request))
                 store.log_event("mod", f"Timeout of {m.display_name} removed by {who(request)}", who_id(request), who(request))
+            elif action == "kick":
+                if m is None:
+                    raise ApiError(400, "That member isn't on the server.")
+                await hooks["kick_member"](m, reason, who_id(request), who(request))
             elif action == "ban":
                 days = max(0, min(365, int(d.get("days") or 0)))
                 await hooks["ban_user"](m or discord.Object(id=uid), reason, who_id(request), who(request), days)

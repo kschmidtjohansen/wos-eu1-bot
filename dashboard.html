@@ -2282,7 +2282,8 @@ function playerModal() {
       <input class="w-input" id="pa-why" maxlength="400" placeholder="Reason – the member sees it" aria-label="Reason" style="flex:1 1 100%">
       ${p.on_server ? html`<button class="w-btn danger" data-act="playerAct" data-a="warn">${icon('alert')} Warn</button>
         ${p.timeout_until ? html`<button class="w-btn" data-act="playerAct" data-a="untimeout">Remove timeout</button>` : html`<button class="w-btn danger" data-act="playerAct" data-a="timeout">${icon('clock')} Timeout</button>
-        <select class="w-select" id="pa-min" aria-label="Timeout length" style="width:auto"><option value="60">1 hour</option><option value="720">12 hours</option><option value="1440">1 day</option><option value="10080">1 week</option></select>`}` : ''}
+        <select class="w-select" id="pa-min" aria-label="Timeout length" style="width:auto"><option value="60">1 hour</option><option value="720">12 hours</option><option value="1440">1 day</option><option value="10080">1 week</option></select>`}
+        <button class="w-btn danger" data-act="playerAct" data-a="kick">Kick</button>` : ''}
       ${admin ? (p.banned ? html`<button class="w-btn primary" data-act="playerAct" data-a="unban">Unban</button>`
         : html`<button class="w-btn danger" data-act="playerAct" data-a="ban">${icon('shield')} Ban</button>
         <select class="w-select" id="pa-days" aria-label="Ban length" style="width:auto"><option value="1">1 day</option><option value="3">3 days</option><option value="7" selected>7 days</option><option value="30">30 days</option><option value="0">For good</option></select>`) : ''}</div>`}
@@ -4060,10 +4061,11 @@ root.addEventListener('click', async e => {
     else if (act === 'playerNoteDel') { busy(el, true, '…');
       try { S.player = await call('DELETE', '/api/players/' + S.player.id + '/notes/' + el.dataset.id); showPlayer(); } catch (err) { busy(el, false); toast(err.message, 'err'); } }
     else if (act === 'playerAct') { const a = el.dataset.a, why = $('#pa-why').value.trim(), keep = why;
-      if (['warn', 'timeout', 'ban'].includes(a) && why.length < 3) { $('#pa-why').focus(); return toast('Write the reason first – the member sees it.', 'err'); }
+      if (['warn', 'timeout', 'kick', 'ban'].includes(a) && why.length < 3) { $('#pa-why').focus(); return toast('Write the reason first – the member sees it.', 'err'); }
+      if (a === 'kick' && !confirm('Kick ' + S.player.name + ' from the server? They can join again with an invite.')) return;
       busy(el, true, '…');
       try { S.player = await call('POST', '/api/players/' + S.player.id + '/action', { action: a, reason: why, minutes: $('#pa-min') ? +$('#pa-min').value : 60, days: $('#pa-days') ? +$('#pa-days').value : 0 });
-        toast({ warn: 'Warned.', timeout: 'Timed out.', untimeout: 'Timeout removed.', ban: 'Banned.', unban: 'Unbanned.' }[a]); showPlayer(); }
+        toast({ warn: 'Warned.', timeout: 'Timed out.', untimeout: 'Timeout removed.', kick: 'Kicked.', ban: 'Banned.', unban: 'Unbanned.' }[a]); showPlayer(); }
       catch (err) { busy(el, false); toast(err.message, 'err'); const i = $('#pa-why'); if (i) i.value = keep; } }
     else if (act === 'msglogKind') { S.msglog.kind = el.dataset.k; loadTab('msglog'); }
     else if (act === 'msglogSearch') { S.msglog.q = $('#ml-q').value.trim(); loadTab('msglog'); }
@@ -4672,6 +4674,7 @@ function makeMock() {
         if (a === 'timeout') { P.timeout_until = now + body.minutes * 60; P.cases.unshift({ id: 6, kind: 'timeout', reason: body.reason, ts: now, minutes: body.minutes, active: false, auto: false, moderator: 'You' }); }
         if (a === 'untimeout') P.timeout_until = null;
         if (a === 'ban') { P.on_server = false; P.banned = { reason: body.reason, until: body.days ? now + body.days * 86400 : null }; P.cases.unshift({ id: 7, kind: 'ban', reason: body.reason + (body.days ? ' (for ' + body.days + ' days)' : ''), ts: now, minutes: null, active: false, auto: false, moderator: 'You' }); }
+        if (a === 'kick') { P.on_server = false; P.cases.unshift({ id: 8, kind: 'kick', reason: body.reason, ts: now, minutes: null, active: false, auto: false, moderator: 'You' }); }
         if (a === 'unban') P.banned = null; }
       return JSON.parse(JSON.stringify(P)); }
     if (p === '/api/queue' || p === '/api/raid' || p === '/api/lockdown' || p === '/api/spikes' || p.startsWith('/api/reports') || p.startsWith('/api/appeals') || p.startsWith('/api/devpage')) {
